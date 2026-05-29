@@ -46,6 +46,7 @@ export function AuthProvider({ children }) {
         console.error('Auth initialization failed:', error)
         if (mounted) {
           setAuthError(error.message || 'Failed to initialize Google auth')
+          setIsAuthReady(true)
         }
       } finally {
         if (mounted) setIsLoading(false)
