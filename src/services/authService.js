@@ -92,6 +92,89 @@ function cleanAuthHash() {
   )
 }
 
+export function getStoredSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+
+    const session = JSON.parse(raw)
+    if (session?.accessToken) {
+      accessToken = session.accessToken
+    }
+    return session
+  } catch {
+    return null
+  }
+}
+
+export function getAccessToken() {
+  return accessToken || getStoredSession()?.accessToken || null
+}
+
+export async function initializeGoogleAuth() {
+  await loadGoogleScript()
+
+  if (!tokenClient) {
+    tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: getClientId(),
+      scope: GOOGLE_SCOPES,
+      callback: () => {},
+    })
+  }
+
+  return true
+}
+
+export async function refreshAccessToken() {
+  const currentToken = getAccessToken()
+  if (currentToken) return currentToken
+
+  const session = await signInWithGoogle({ useRedirect: false })
+  return session?.accessToken || getAccessToken()
+}
+
+export async function signInWithGoogle({ useRedirect = false } = {}) {
+  await initializeGoogleAuth()
+
+  if (useRedirect) {
+    const state = createRedirectState()
+    sessionStorage.setItem(REDIRECT_STATE_KEY, state)
+
+    const params = new URLSearchParams({
+      client_id: getClientId(),
+      redirect_uri: getRedirectUri(),
+      response_type: 'token',
+      scope: GOOGLE_SCOPES,
+      include_granted_scopes: 'true',
+      prompt: 'consent',
+      state,
+    })
+
+    window.location.assign(`${GOOGLE_AUTH_URL}?${params.toString()}`)
+    return null
+  }
+
+  return new Promise((resolve, reject) => {
+    tokenClient.callback = async (response) => {
+      if (response?.error) {
+        reject(new Error(response.error))
+        return
+      }
+
+      try {
+        const token = response.access_token
+        const user = await fetchGoogleUserProfile(token)
+        persistSession(token, user)
+        resolve({ accessToken: token, user })
+      } catch (error) {
+        reject(error)
+      }
+    }
+
+    tokenClient.requestAccessToken({ prompt: 'consent' })
+  })
+}
+
 export async function completeGoogleRedirectSignIn() {
   if (!window.location.hash.includes('access_token=')) return null
 
@@ -110,5 +193,21 @@ export async function completeGoogleRedirectSignIn() {
 
   const user = await fetchGoogleUserProfile(token)
   persistSession(token, user)
-  return user
+  return { accessToken: token, user }
+}
+
+export function signOutGoogle() {
+  const token = getAccessToken()
+
+  accessToken = null
+  localStorage.removeItem(SESSION_KEY)
+  sessionStorage.removeItem(REDIRECT_STATE_KEY)
+
+  try {
+    if (token && window.google?.accounts?.oauth2?.revoke) {
+      window.google.accounts.oauth2.revoke(token, () => {})
+    }
+  } catch {
+    // ignore revoke errors
+  }
 }
