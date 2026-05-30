@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAppActions, useAppState } from '../context/appHooks'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/authContextCore'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { v4 as uuid } from 'uuid'
@@ -10,6 +10,7 @@ import Card from '../components/ui/Card'
 import { Plus, Sparkles, Zap, ArrowRight } from 'lucide-react'
 import { formatCurrencyAmount } from '../utils/currency'
 import { getTodayDateKey } from '../utils/dateTime'
+import { generateDailyInsight, getGeminiApiKey } from '../services/geminiService'
 
 export default function Home() {
   const state = useAppState()
@@ -20,6 +21,8 @@ export default function Home() {
   const currency = state.settings?.profile?.currency || 'INR'
   const today = getTodayDateKey(timezone)
   const [fabOpen, setFabOpen] = useState(false)
+  const [aiInsight, setAiInsight] = useState('')
+  const [aiInsightLoading, setAiInsightLoading] = useState(false)
   const [isCompactHero, setIsCompactHero] = useState(
     typeof window !== 'undefined' ? window.innerWidth < 920 : false
   )
@@ -80,7 +83,7 @@ export default function Home() {
     setModule('habits', { ...state.habits, dailyLogs: newLogs })
   }
 
-  function getStreak(cpId) {
+  const getStreak = useCallback((cpId) => {
     let streak = 0
 
     const logs = (state.habits?.dailyLogs || [])
@@ -93,11 +96,11 @@ export default function Home() {
     }
 
     return streak
-  }
+  }, [state.habits?.dailyLogs])
 
   const bestStreak = useMemo(
     () => Math.max(0, ...checkpoints.map(c => getStreak(c.id))),
-    [checkpoints, state.habits?.dailyLogs]
+    [checkpoints, getStreak]
   )
 
   const completedToday = todayLogs.filter(l => l.status === 'done').length
@@ -110,6 +113,43 @@ export default function Home() {
   const greetEmoji = hour < 12 ? '🌅' : hour < 17 ? '☀️' : '🌙'
 
   const displayName = profile.name || user?.name?.split(' ')[0] || 'Ravish'
+
+  const fallbackInsight = studyMins < 60
+    ? `You haven't logged much study time today yet. A short focused session right now would improve your momentum more than trying to catch up late at night.`
+    : `You've studied ${(studyMins / 60).toFixed(1)} hours today. ${
+        wasteMins > 60
+          ? `Your main drag is ${(wasteMins / 60).toFixed(1)}h of waste time, so reducing distractions will improve your total score fast.`
+          : `Your focus looks solid today - keep this rhythm and close the day with one more clean win.`
+      }`
+
+  async function handleGenerateInsight() {
+    const apiKey = getGeminiApiKey()
+    if (!apiKey) {
+      setAiInsight('Add your Gemini API key in Settings to generate a personalized daily insight.')
+      return
+    }
+
+    setAiInsightLoading(true)
+    try {
+      const insight = await generateDailyInsight({
+        apiKey,
+        summary: [
+          `Life score: ${scores.total}`,
+          `Study today: ${(studyMins / 60).toFixed(1)} hours out of ${(studyGoalMins / 60).toFixed(1)} hours goal`,
+          `Spend today: ${formatCurrencyAmount(todaySpend, currency)} out of ${formatCurrencyAmount(dailyBudget, currency)} daily budget`,
+          `Waste time today: ${(wasteMins / 60).toFixed(1)} hours`,
+          `Habits completed: ${completedToday}/${checkpoints.length}`,
+          `Steps: ${(latestHealth.steps || 0).toLocaleString()}`,
+          `Sleep: ${(Number(latestHealth.sleepHours) || 0).toFixed(1)} hours`,
+        ].join('\n'),
+      })
+      setAiInsight(insight || fallbackInsight)
+    } catch (error) {
+      setAiInsight(error.message || 'Could not generate insight right now.')
+    } finally {
+      setAiInsightLoading(false)
+    }
+  }
 
   const fabActions = [
     { icon: '💸', label: 'Add Expense', action: () => navigate('/finance') },
@@ -679,18 +719,31 @@ export default function Home() {
                   margin: 0,
                 }}
               >
-                {studyMins < 60
-                  ? `You haven't logged much study time today yet. A short focused session right now would improve your momentum more than trying to catch up late at night.`
-                  : `You've studied ${(studyMins / 60).toFixed(1)} hours today. ${
-                      wasteMins > 60
-                        ? `Your main drag is ${(wasteMins / 60).toFixed(1)}h of waste time, so reducing distractions will improve your total score fast.`
-                        : `Your focus looks solid today — keep this rhythm and close the day with one more clean win.`
-                    }`}
+                {aiInsight || fallbackInsight}
               </p>
 
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '12px 0 0' }}>
-                Add Gemini API key in Settings for deeper personalized insights.
-              </p>
+              <button
+                type="button"
+                onClick={handleGenerateInsight}
+                disabled={aiInsightLoading}
+                style={{
+                  marginTop: '14px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '9px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(129,140,248,0.22)',
+                  background: aiInsightLoading ? 'rgba(148,163,184,0.08)' : 'rgba(99,102,241,0.14)',
+                  color: '#C7D2FE',
+                  cursor: aiInsightLoading ? 'wait' : 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                }}
+              >
+                <Sparkles size={14} />
+                {aiInsightLoading ? 'Thinking...' : 'Generate with Gemini'}
+              </button>
             </Card>
 
             <Card
