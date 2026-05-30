@@ -58,6 +58,8 @@ function inferMimeType(fileName = '', fallback = '') {
   if (ext === 'png') return 'image/png'
   if (ext === 'webp') return 'image/webp'
   if (ext === 'gif') return 'image/gif'
+  if (ext === 'heic') return 'image/heic'
+  if (ext === 'heif') return 'image/heif'
   if (ext === 'pdf') return 'application/pdf'
   return ''
 }
@@ -73,6 +75,47 @@ function isPdfBill(bill = {}) {
   const name = (bill.fileName || '').toLowerCase()
   return type === 'application/pdf' || name.endsWith('.pdf')
 }
+
+function isHeicBill(bill = {}) {
+  const type = (bill.fileType || '').toLowerCase()
+  const name = (bill.fileName || '').toLowerCase()
+  return type.includes('heic') || type.includes('heif') || /\.(heic|heif)$/i.test(name)
+}
+
+async function createImageThumbnail(file, maxSize = 640) {
+  if (!file || !file.type?.startsWith('image/')) return ''
+
+  const imageUrl = URL.createObjectURL(file)
+
+  try {
+    const image = new Image()
+    image.decoding = 'async'
+
+    await new Promise((resolve, reject) => {
+      image.onload = resolve
+      image.onerror = reject
+      image.src = imageUrl
+    })
+
+    const scale = Math.min(1, maxSize / Math.max(image.naturalWidth || 1, image.naturalHeight || 1))
+    const width = Math.max(1, Math.round((image.naturalWidth || 1) * scale))
+    const height = Math.max(1, Math.round((image.naturalHeight || 1) * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return ''
+
+    ctx.drawImage(image, 0, 0, width, height)
+    return canvas.toDataURL('image/jpeg', 0.72)
+  } catch {
+    return ''
+  } finally {
+    URL.revokeObjectURL(imageUrl)
+  }
+}
+
 
 export default function Finance() {
   const state = useAppState()
@@ -338,7 +381,9 @@ export default function Finance() {
         reader.onerror = reject
         reader.readAsDataURL(file)
       })
-
+      const fileType = inferMimeType(file.name, file.type)
+      const thumbnailDataUrl = await createImageThumbnail(file)
+      
       const fallbackCategory = categories.includes('Miscellaneous')
         ? 'Miscellaneous'
         : categories[0] || 'Miscellaneous'
@@ -384,7 +429,7 @@ export default function Finance() {
       await ensureBillsFolder()
       const billsFolderId = getBillsFolderId()
 
-      const fileType = inferMimeType(file.name, file.type)
+      
       let driveFileId = null
       let driveFileUrl = null
       let driveDownloadUrl = null
@@ -413,7 +458,10 @@ export default function Finance() {
         id: uuid(),
         fileName: file.name,
         fileType,
-        base64: isImageBill({ fileName: file.name, fileType }) ? String(base64) : undefined,
+        thumbnailDataUrl,
+        base64: isImageBill({ fileName: file.name, fileType }) && !thumbnailDataUrl
+          ? String(base64)
+          : undefined,
         extractedText,
         suggestedAmount,
         suggestedCategory,
@@ -1152,6 +1200,10 @@ function BillPreview({ bill, height, contain = false }) {
       setIsLoading(false)
 
       if (!bill) return
+      if (bill?.thumbnailDataUrl) {
+        setPreviewSrc(bill.thumbnailDataUrl)
+        return
+      }
 
       if (bill?.base64) {
         setPreviewSrc(bill.base64)
@@ -1204,10 +1256,18 @@ function BillPreview({ bill, height, contain = false }) {
         }}
       >
         <div style={{ fontSize: '18px', fontWeight: 800 }}>
-          {isPdfBill(bill) ? 'PDF' : isLoading ? '...' : 'IMG'}
+          {isPdfBill(bill) ? 'PDF' : isHeicBill(bill) ? 'HEIC' : isLoading ? '...' : 'IMG'}
         </div>
         <div style={{ fontSize: '11px', fontWeight: 700 }}>
-          {isLoading ? 'Loading preview' : hasError ? 'Preview unavailable' : isPdfBill(bill) ? 'PDF receipt' : 'Receipt'}
+          {isLoading
+            ? 'Loading preview'
+            : hasError
+              ? 'Preview unavailable'
+              : isHeicBill(bill)
+                ? 'Unsupported preview'
+                : isPdfBill(bill)
+                  ? 'PDF receipt'
+                  : 'Receipt'}
         </div>
       </div>
     )
