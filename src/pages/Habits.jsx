@@ -7,7 +7,7 @@ import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import ConfirmDeleteButton from '../components/ui/ConfirmDeleteButton'
-import { useToast } from '../context/ToastContext'
+import { useToast } from '../context/toastContextCore'
 import { formatDateKey, getMonthDays, getTodayDateKey, shiftMonth, toDateKey } from '../utils/dateTime'
 
 const HABIT_ICONS = ['💪', '📚', '💧', '🧘', '🏃', '🥗', '😴', '✍️', '🎯', '🚫', '💊', '🧠', '🌿', '🛁', '📵']
