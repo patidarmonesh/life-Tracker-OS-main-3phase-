@@ -206,51 +206,100 @@ function buildClearedState() {
   }
 }
 
+function asPlainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value
+    : {}
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : []
+}
+
+function arrayOrFallback(value, fallback) {
+  return Array.isArray(value) ? value : fallback
+}
+
 function mergeWithInitialState(data = {}) {
+  const safeData = asPlainObject(data)
+  const finance = asPlainObject(safeData.finance)
+  const timeflow = asPlainObject(safeData.timeflow)
+  const study = asPlainObject(safeData.study)
+  const habits = asPlainObject(safeData.habits)
+  const health = asPlainObject(safeData.health)
+  const journal = asPlainObject(safeData.journal)
+  const settings = asPlainObject(safeData.settings)
+  const preferences = asPlainObject(settings.preferences)
+  const aiChat = asPlainObject(safeData.aiChat)
+
   return {
     ...initialState,
-    ...data,
+    ...safeData,
     finance: {
       ...initialState.finance,
-      ...(data.finance || {}),
-      bills: data.finance?.bills || [],
+      ...finance,
+      expenses: asArray(finance.expenses),
+      budgets: asPlainObject(finance.budgets),
+      categories: asArray(finance.categories),
+      bills: asArray(finance.bills),
     },
     timeflow: {
       ...initialState.timeflow,
-      ...(data.timeflow || {}),
+      ...timeflow,
+      entries: asArray(timeflow.entries),
     },
     study: {
       ...initialState.study,
-      ...(data.study || {}),
+      ...study,
+      sessions: asArray(study.sessions),
+      goals: asPlainObject(study.goals),
+      subjects: asArray(study.subjects),
     },
     habits: {
       ...initialState.habits,
-      ...(data.habits || {}),
+      ...habits,
+      checkpoints: asArray(habits.checkpoints),
+      dailyLogs: asArray(habits.dailyLogs),
     },
     health: {
       ...initialState.health,
-      ...(data.health || {}),
+      ...health,
+      imported: asPlainObject(health.imported),
+      manualLogs: asArray(health.manualLogs),
+      bodyLogs: asArray(health.bodyLogs),
+      nutrition: asArray(health.nutrition),
+      hevyWorkouts: asArray(health.hevyWorkouts),
     },
     journal: {
       ...initialState.journal,
-      ...(data.journal || {}),
+      ...journal,
+      entries: asArray(journal.entries),
     },
     settings: {
       profile: {
         ...initialState.settings.profile,
-        ...(data.settings?.profile || {}),
+        ...asPlainObject(settings.profile),
       },
       preferences: {
         ...initialState.settings.preferences,
-        ...(data.settings?.preferences || {}),
+        ...preferences,
+        expenseCategories: arrayOrFallback(
+          preferences.expenseCategories,
+          initialState.settings.preferences.expenseCategories
+        ),
+        timeCategories: arrayOrFallback(
+          preferences.timeCategories,
+          initialState.settings.preferences.timeCategories
+        ),
       },
     },
     aiChat: {
       ...initialState.aiChat,
-      ...(data.aiChat || {}),
+      ...aiChat,
+      messages: asArray(aiChat.messages),
     },
-    lastRemoteModified: data.lastRemoteModified || null,
-    remoteMetadata: data.remoteMetadata || {},
+    lastRemoteModified: safeData.lastRemoteModified || null,
+    remoteMetadata: asPlainObject(safeData.remoteMetadata),
   }
 }
 
