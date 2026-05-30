@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Cloud, CloudOff, Loader, CheckCircle, LogOut } from 'lucide-react'
 import { useAppState } from '../../context/appHooks'
-import { useAuth } from '../../context/authContextCore'
+import { useAuth } from '../../context/appContextCore'
 
 export default function TopBar({ isMobile = false }) {
   const state = useAppState()
