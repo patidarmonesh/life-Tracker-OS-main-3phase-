@@ -1,17 +1,26 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import {
+  completeGoogleRedirectSignIn,
   getStoredSession,
   initializeGoogleAuth,
   signInWithGoogle,
   signOutGoogle,
 } from '../services/authService'
-import {
-  ensureBillsFolder,
-  ensureInitialFiles,
-  initializeDrive,
-} from '../services/driveService'
 
 export const AuthContext = createContext(null)
+
+function prefersRedirectAuth() {
+  const userAgent = navigator.userAgent || ''
+  const isSmallTouchScreen =
+    window.matchMedia?.('(pointer: coarse)').matches &&
+    window.matchMedia?.('(max-width: 768px)').matches
+  const isMobileBrowser = /Android|iPhone|iPad|iPod/i.test(userAgent)
+  const isStandalonePwa =
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    window.navigator.standalone
+
+  return isMobileBrowser || isSmallTouchScreen || isStandalonePwa
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -27,21 +36,29 @@ export function AuthProvider({ children }) {
         setIsLoading(true)
         setAuthError('')
 
-        await initializeGoogleAuth()
-
-        const session = getStoredSession()
-        if (session?.user && mounted) {
-          setUser(session.user)
-          try {
-            await initializeDrive()
-            await ensureBillsFolder()
-            await ensureInitialFiles()
-          } catch (driveError) {
-            console.error('Drive init failed on boot:', driveError)
+        let redirectSession = null
+        try {
+          redirectSession = await completeGoogleRedirectSignIn()
+        } catch (redirectError) {
+          console.error('Google redirect sign-in failed:', redirectError)
+          if (mounted) {
+            setAuthError(redirectError.message || 'Google sign-in redirect failed')
           }
         }
 
+        const session = redirectSession || getStoredSession()
+        if (session?.user && mounted) {
+          setUser(session.user)
+        }
+
         if (mounted) setIsAuthReady(true)
+
+        initializeGoogleAuth().catch(googleError => {
+          console.error('Google auth script initialization failed:', googleError)
+          if (mounted && !prefersRedirectAuth()) {
+            setAuthError(error => error || googleError.message || 'Failed to initialize Google auth')
+          }
+        })
       } catch (error) {
         console.error('Auth initialization failed:', error)
         if (mounted) {
@@ -64,12 +81,8 @@ export function AuthProvider({ children }) {
       setIsLoading(true)
       setAuthError('')
 
-      const session = await signInWithGoogle()
+      const session = await signInWithGoogle({ useRedirect: prefersRedirectAuth() })
       setUser(session.user)
-
-      await initializeDrive()
-      await ensureBillsFolder()
-      await ensureInitialFiles()
 
       return session.user
     } catch (error) {
@@ -85,30 +98,3 @@ export function AuthProvider({ children }) {
     signOutGoogle()
     setUser(null)
     setAuthError('')
-    localStorage.removeItem('lifeos_drive_folder_id')
-    localStorage.removeItem('lifeos_drive_bills_folder_id')
-  }
-
-  const value = useMemo(
-    () => ({
-      user,
-      login,
-      logout,
-      isLoading,
-      isAuthReady,
-      authError,
-      isAuthenticated: !!user,
-    }),
-    [user, isLoading, isAuthReady, authError]
-  )
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used inside AuthProvider')
-  }
-  return context
-}
