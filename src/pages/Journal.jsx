@@ -1,17 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip,
-  BarChart, Bar, CartesianGrid,Cell
+  BarChart, Bar, CartesianGrid
 } from 'recharts'
-import { Plus, Search, BookOpen, Smile, Pencil } from 'lucide-react'
+import { Plus, Search, Pencil } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import ConfirmDeleteButton from '../components/ui/ConfirmDeleteButton'
-import { useToast } from '../context/ToastContext'
+import { useToast } from '../context/toastContextCore'
 import { formatDateKey, getTodayDateKey, toDateKey } from '../utils/dateTime'
 
 const MOODS = [
