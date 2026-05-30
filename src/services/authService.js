@@ -98,4 +98,17 @@ export async function completeGoogleRedirectSignIn() {
   const params = new URLSearchParams(window.location.hash.slice(1))
   const token = params.get('access_token')
   const state = params.get('state')
+  const expectedState = sessionStorage.getItem(REDIRECT_STATE_KEY)
+
+  if (!token) throw new Error('Missing access token')
+  if (expectedState && state !== expectedState) {
+    throw new Error('Invalid redirect state')
+  }
+
+  sessionStorage.removeItem(REDIRECT_STATE_KEY)
+  cleanAuthHash()
+
+  const user = await fetchGoogleUserProfile(token)
+  persistSession(token, user)
+  return user
 }
