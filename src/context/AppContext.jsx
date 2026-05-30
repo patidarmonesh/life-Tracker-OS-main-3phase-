@@ -28,6 +28,8 @@ import { useAuth } from './AuthContext'
 import { AppActionsContext, AppStateContext } from './appContextCore'
 
 const STORAGE_KEY = 'lifeos-app-state-v1'
+const MODULE_STORAGE_PREFIX = 'lifeos-module-state-v1:'
+const LOCAL_META_KEY = 'lifeos-local-meta-v1'
 const LAST_SYNC_KEY = 'lifeos-last-sync-time'
 const SYNC_INTERVAL_ACTIVE = 15000
 const SYNC_INTERVAL_HIDDEN = 45000
@@ -148,6 +150,54 @@ function sanitizeStateForStorage(appState) {
     settings: stripGeminiKeyFromSettings(appState.settings),
     finance: sanitizeModuleForPersist('finance', appState.finance),
   }
+}
+
+function getModuleStorageKey(module) {
+  return `${MODULE_STORAGE_PREFIX}${module}`
+}
+
+function saveStateToLocalStorage(appState) {
+  const sanitized = sanitizeStateForStorage(appState)
+
+  Object.keys(MODULE_FILE_MAP).forEach(module => {
+    localStorage.setItem(getModuleStorageKey(module), JSON.stringify(sanitized[module]))
+  })
+
+  localStorage.setItem(LOCAL_META_KEY, JSON.stringify({
+    lastSynced: sanitized.lastSynced || null,
+    lastRemoteModified: sanitized.lastRemoteModified || null,
+    remoteMetadata: sanitized.remoteMetadata || {},
+    isFromDrive: !!sanitized.isFromDrive,
+  }))
+}
+
+function loadStateFromLocalStorage() {
+  let hasModuleData = false
+  const moduleData = {}
+
+  Object.keys(MODULE_FILE_MAP).forEach(module => {
+    const raw = localStorage.getItem(getModuleStorageKey(module))
+    if (!raw) return
+    moduleData[module] = JSON.parse(raw)
+    hasModuleData = true
+  })
+
+  if (hasModuleData) {
+    const rawMeta = localStorage.getItem(LOCAL_META_KEY)
+    const meta = rawMeta ? JSON.parse(rawMeta) : {}
+    return mergeWithInitialState({ ...meta, ...moduleData })
+  }
+
+  const legacyRaw = localStorage.getItem(STORAGE_KEY)
+  return legacyRaw ? mergeWithInitialState(JSON.parse(legacyRaw)) : null
+}
+
+function clearLocalStorageState() {
+  localStorage.removeItem(STORAGE_KEY)
+  localStorage.removeItem(LOCAL_META_KEY)
+  Object.keys(MODULE_FILE_MAP).forEach(module => {
+    localStorage.removeItem(getModuleStorageKey(module))
+  })
 }
 
 function buildSampleState() {
@@ -310,22 +360,23 @@ function mergeWithInitialState(data = {}) {
   }
 }
 
-function driveDataToAppState(files) {
+function driveDataToAppState(files, baseState = {}) {
   return mergeWithInitialState({
-    finance: files['finance.json'],
-    timeflow: files['timeflow.json'],
-    study: files['study.json'],
-    habits: files['habits.json'],
-    health: files['health.json'],
-    journal: files['journal.json'],
-    settings: files['settings.json'],
-    aiChat: files['aiChat.json'],
+    ...baseState,
+    finance: files['finance.json'] ?? baseState.finance,
+    timeflow: files['timeflow.json'] ?? baseState.timeflow,
+    study: files['study.json'] ?? baseState.study,
+    habits: files['habits.json'] ?? baseState.habits,
+    health: files['health.json'] ?? baseState.health,
+    journal: files['journal.json'] ?? baseState.journal,
+    settings: files['settings.json'] ?? baseState.settings,
+    aiChat: files['aiChat.json'] ?? baseState.aiChat,
   })
 }
 
-function syncResultToAppState(syncResult) {
+function syncResultToAppState(syncResult, baseState = {}) {
   return {
-    ...driveDataToAppState(syncResult.files),
+    ...driveDataToAppState(syncResult.files, baseState),
     remoteMetadata: syncResult.metadata || {},
     lastRemoteModified: syncResult.latestRemoteModified || null,
   }
@@ -465,7 +516,7 @@ export function AppProvider({ children }) {
   }, [])
 
   const applyDriveSyncResult = useCallback((syncResult) => {
-    const mergedDriveState = syncResultToAppState(syncResult)
+    const mergedDriveState = syncResultToAppState(syncResult, latestStateRef.current)
     const syncTime = syncResult.latestRemoteModified || new Date().toISOString()
 
     dispatch({
@@ -507,7 +558,10 @@ export function AppProvider({ children }) {
         if (ensureFiles) {
           await ensureInitialFiles()
         }
-        const syncResult = await syncAll()
+        const syncResult = await syncAll({
+          currentMetadata: remoteMetadataRef.current,
+          forceDownload: forceApply,
+        })
         const hasChanges = hasRemoteStateChanged(syncResult.metadata, remoteMetadataRef.current)
 
         if (!forceApply && !hasChanges) {
@@ -550,14 +604,13 @@ export function AppProvider({ children }) {
 
         // Fallback to localStorage only if Drive sync failed or no token
         try {
-          const raw = localStorage.getItem(STORAGE_KEY)
-          if (raw) {
-            const localData = JSON.parse(raw)
+          const localData = loadStateFromLocalStorage()
+          if (localData) {
             if (!cancelled) {
               dispatch({
                 type: 'HYDRATE_STATE',
                 data: {
-                  ...mergeWithInitialState(localData),
+                  ...localData,
                   syncStatus: 'offline',
                   hydrated: true,
                   isFromDrive: false,
