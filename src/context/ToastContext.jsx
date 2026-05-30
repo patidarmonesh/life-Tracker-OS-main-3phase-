@@ -1,6 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-
-const ToastContext = createContext(null)
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ToastContext } from './toastContextCore'
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
@@ -114,10 +113,4 @@ function ToastContainer({ toasts, onDismiss }) {
       })}
     </div>
   )
-}
-
-export function useToast() {
-  const ctx = useContext(ToastContext)
-  if (!ctx) throw new Error('useToast must be used within ToastProvider')
-  return ctx
 }
