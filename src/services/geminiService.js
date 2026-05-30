@@ -61,7 +61,8 @@ export function saveGeminiApiKey(apiKey) {
 
 export function stripGeminiKeyFromSettings(settings) {
   if (!settings?.preferences) return settings
-  const { geminiApiKey: _removed, ...preferences } = settings.preferences
+  const preferences = { ...settings.preferences }
+  delete preferences.geminiApiKey
   return { ...settings, preferences }
 }
 
