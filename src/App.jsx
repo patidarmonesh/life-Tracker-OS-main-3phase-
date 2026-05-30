@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
-import { useAuth } from './context/authContextCore'
+import { useAuth } from 'src/context/authContextCore.js'
 import { AppProvider } from './context/AppContext'
 import { ToastProvider } from './context/ToastContext'
 import PageErrorBoundary from './components/ui/PageErrorBoundary'
