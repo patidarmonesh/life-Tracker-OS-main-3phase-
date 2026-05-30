@@ -98,3 +98,4 @@ export async function completeGoogleRedirectSignIn() {
   const params = new URLSearchParams(window.location.hash.slice(1))
   const token = params.get('access_token')
   const state = params.get('state')
+}
