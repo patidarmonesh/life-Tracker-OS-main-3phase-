@@ -118,6 +118,16 @@ const MODULE_FILE_MAP = {
   aiChat: 'aiChat.json',
 }
 
+const RECORD_COLLECTIONS_BY_MODULE = {
+  finance: ['expenses', 'bills'],
+  timeflow: ['entries'],
+  study: ['sessions'],
+  habits: ['checkpoints', 'dailyLogs'],
+  health: ['manualLogs', 'bodyLogs', 'nutrition', 'hevyWorkouts'],
+  journal: ['entries'],
+  aiChat: ['messages'],
+}
+
 function sanitizeModuleForPersist(module, data) {
   if (!data) return data
 
@@ -277,6 +287,172 @@ function arrayOrFallback(value, fallback) {
   return Array.isArray(value) ? value : fallback
 }
 
+function getRecordTime(record = {}) {
+  const value =
+    record.deletedAt ||
+    record.updatedAt ||
+    record.createdAt ||
+    record.loggedAt ||
+    record.uploadedAt ||
+    record.date ||
+    ''
+  const time = Date.parse(value)
+  return Number.isNaN(time) ? 0 : time
+}
+
+function getDeletedMap(moduleData = {}, collection) {
+  const deleted = asPlainObject(moduleData._deleted)
+  return asPlainObject(deleted[collection])
+}
+
+function mergeDeletedMaps(localMap = {}, remoteMap = {}) {
+  const merged = { ...remoteMap }
+
+  Object.entries(localMap).forEach(([id, localDeleted]) => {
+    const remoteDeleted = merged[id]
+    if (!remoteDeleted || getRecordTime(localDeleted) >= getRecordTime(remoteDeleted)) {
+      merged[id] = localDeleted
+    }
+  })
+
+  return merged
+}
+
+function mergeRecordCollections(localRecords = [], remoteRecords = [], deletedMap = {}) {
+  const byId = new Map()
+  const withoutIds = []
+
+  ;[...localRecords, ...remoteRecords].forEach(record => {
+    if (!record || typeof record !== 'object') return
+
+    if (!record.id) {
+      withoutIds.push(record)
+      return
+    }
+
+    const existing = byId.get(record.id)
+    if (!existing || getRecordTime(record) >= getRecordTime(existing)) {
+      byId.set(record.id, record)
+    }
+  })
+
+  const mergedRecords = Array.from(byId.values()).filter(record => {
+    const deleted = deletedMap[record.id]
+    return !deleted || getRecordTime(record) > getRecordTime(deleted)
+  })
+
+  return [...mergedRecords, ...withoutIds]
+}
+
+function mergeModuleRecords(module, localModule = {}, remoteModule = {}) {
+  const collections = RECORD_COLLECTIONS_BY_MODULE[module]
+  if (!collections) return remoteModule ?? localModule
+
+  const local = asPlainObject(localModule)
+  const remote = asPlainObject(remoteModule)
+  const nextDeleted = {}
+  const merged = {
+    ...local,
+    ...remote,
+  }
+
+  collections.forEach(collection => {
+    const deletedMap = mergeDeletedMaps(
+      getDeletedMap(local, collection),
+      getDeletedMap(remote, collection)
+    )
+
+    const records = mergeRecordCollections(
+      asArray(local[collection]),
+      asArray(remote[collection]),
+      deletedMap
+    )
+
+    merged[collection] = records
+
+    const activeRecordIds = new Set(records.map(record => record?.id).filter(Boolean))
+    const remainingDeleted = Object.fromEntries(
+      Object.entries(deletedMap).filter(([id]) => !activeRecordIds.has(id))
+    )
+
+    if (Object.keys(remainingDeleted).length) {
+      nextDeleted[collection] = remainingDeleted
+    }
+  })
+
+  if (Object.keys(nextDeleted).length) {
+    merged._deleted = nextDeleted
+  } else {
+    delete merged._deleted
+  }
+
+  return merged
+}
+
+function addDeletedRecords(module, previousData = {}, nextData = {}) {
+  const collections = RECORD_COLLECTIONS_BY_MODULE[module]
+  if (!collections) return nextData
+
+  const deletedAt = new Date().toISOString()
+  const nextDeleted = { ...asPlainObject(nextData._deleted) }
+  let preparedData = nextData
+  let changed = false
+
+  collections.forEach(collection => {
+    const previousRecords = asArray(previousData[collection])
+    const nextRecords = asArray(nextData[collection])
+    const nextIds = new Set(nextRecords.map(record => record?.id).filter(Boolean))
+    const collectionDeleted = { ...asPlainObject(nextDeleted[collection]) }
+
+    previousRecords.forEach(record => {
+      if (!record?.id || nextIds.has(record.id)) return
+      collectionDeleted[record.id] = { id: record.id, deletedAt }
+      changed = true
+    })
+
+    nextIds.forEach(id => {
+      if (collectionDeleted[id]) {
+        delete collectionDeleted[id]
+        preparedData = {
+          ...preparedData,
+          [collection]: asArray(preparedData[collection]).map(record =>
+            record?.id === id
+              ? { ...record, updatedAt: deletedAt }
+              : record
+          ),
+        }
+        changed = true
+      }
+    })
+
+    if (Object.keys(collectionDeleted).length) {
+      nextDeleted[collection] = collectionDeleted
+    } else {
+      delete nextDeleted[collection]
+    }
+  })
+
+  if (!changed) return nextData
+
+  if (!Object.keys(nextDeleted).length) {
+    const cleanData = { ...preparedData }
+    delete cleanData._deleted
+    return cleanData
+  }
+
+  return {
+    ...preparedData,
+    _deleted: nextDeleted,
+  }
+}
+
+function modulesAreEqual(module, a, b) {
+  return (
+    JSON.stringify(sanitizeModuleForPersist(module, a)) ===
+    JSON.stringify(sanitizeModuleForPersist(module, b))
+  )
+}
+
 function mergeWithInitialState(data = {}) {
   const safeData = asPlainObject(data)
   const finance = asPlainObject(safeData.finance)
@@ -360,25 +536,46 @@ function mergeWithInitialState(data = {}) {
   }
 }
 
-function driveDataToAppState(files, baseState = {}) {
-  return mergeWithInitialState({
+function driveDataToAppState(files = {}, baseState = {}) {
+  const data = {
     ...baseState,
-    finance: files['finance.json'] ?? baseState.finance,
-    timeflow: files['timeflow.json'] ?? baseState.timeflow,
-    study: files['study.json'] ?? baseState.study,
-    habits: files['habits.json'] ?? baseState.habits,
-    health: files['health.json'] ?? baseState.health,
-    journal: files['journal.json'] ?? baseState.journal,
-    settings: files['settings.json'] ?? baseState.settings,
-    aiChat: files['aiChat.json'] ?? baseState.aiChat,
+  }
+  const dirtyModules = []
+
+  Object.entries(MODULE_FILE_MAP).forEach(([module, fileName]) => {
+    if (!(fileName in files)) {
+      data[module] = baseState[module]
+      return
+    }
+
+    const remoteModule = files[fileName]
+    data[module] = RECORD_COLLECTIONS_BY_MODULE[module]
+      ? mergeModuleRecords(module, baseState[module], remoteModule)
+      : remoteModule
   })
+
+  const appState = mergeWithInitialState(data)
+
+  Object.entries(MODULE_FILE_MAP).forEach(([module, fileName]) => {
+    if (!(fileName in files)) return
+    if (!modulesAreEqual(module, appState[module], files[fileName])) {
+      dirtyModules.push(module)
+    }
+  })
+
+  return { appState, dirtyModules }
 }
 
 function syncResultToAppState(syncResult, baseState = {}) {
+  const { appState, dirtyModules } = driveDataToAppState(syncResult.files, baseState)
+
   return {
-    ...driveDataToAppState(syncResult.files, baseState),
-    remoteMetadata: syncResult.metadata || {},
-    lastRemoteModified: syncResult.latestRemoteModified || null,
+    appState: {
+      ...appState,
+      remoteMetadata: syncResult.metadata || {},
+      lastRemoteModified: syncResult.latestRemoteModified || null,
+    },
+    dirtyModules,
   }
 }
 
@@ -516,7 +713,10 @@ export function AppProvider({ children }) {
   }, [])
 
   const applyDriveSyncResult = useCallback((syncResult) => {
-    const mergedDriveState = syncResultToAppState(syncResult, latestStateRef.current)
+    const { appState: mergedDriveState, dirtyModules } = syncResultToAppState(
+      syncResult,
+      latestStateRef.current
+    )
     const syncTime = syncResult.latestRemoteModified || new Date().toISOString()
 
     dispatch({
@@ -533,7 +733,45 @@ export function AppProvider({ children }) {
     localFallbackPendingRef.current = false
     retryAttemptRef.current = 0
     authWarningShownRef.current = false
-  }, [])
+
+    if (dirtyModules.length) {
+      dispatch({ type: 'SET_SYNC_STATUS', status: 'syncing' })
+
+      dirtyModules.forEach(module => {
+        const fileName = MODULE_FILE_MAP[module]
+        const payload = sanitizeModuleForPersist(module, mergedDriveState[module])
+
+        autoSave(fileName, payload, 0)
+          .then(result => {
+            const repairedSyncTime = result?.modifiedTime || new Date().toISOString()
+            dispatch({
+              type: 'SET_REMOTE_METADATA',
+              fileName,
+              metadata: {
+                id: result?.id || null,
+                name: fileName,
+                modifiedTime: result?.modifiedTime || null,
+              },
+              syncStatus: navigator.onLine ? 'synced' : 'offline',
+              time: repairedSyncTime,
+            })
+            localStorage.setItem(LAST_SYNC_KEY, repairedSyncTime)
+          })
+          .catch(error => {
+            console.error(`Failed to save merged ${module} sync state:`, error)
+            if (isDriveAuthError(error)) {
+              notifyDriveAuthNeeded()
+              localFallbackPendingRef.current = true
+              return
+            }
+            dispatch({
+              type: 'SET_SYNC_STATUS',
+              status: navigator.onLine ? 'idle' : 'offline',
+            })
+          })
+      })
+    }
+  }, [isDriveAuthError, notifyDriveAuthNeeded])
 
   const performDrivePull = useCallback(
     async ({ markSyncing = true, ensureFiles = true, forceApply = false } = {}) => {
@@ -804,7 +1042,7 @@ export function AppProvider({ children }) {
 
     localSaveTimeoutRef.current = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeStateForStorage(latestStateRef.current)))
+        saveStateToLocalStorage(latestStateRef.current)
       } catch (error) {
         console.error('Failed to save app state to localStorage:', error)
       }
@@ -820,7 +1058,7 @@ export function AppProvider({ children }) {
 
   useEffect(() => () => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeStateForStorage(latestStateRef.current)))
+      saveStateToLocalStorage(latestStateRef.current)
     } catch (error) {
       console.error('Failed to save app state to localStorage:', error)
     }
@@ -865,27 +1103,33 @@ export function AppProvider({ children }) {
     }
 
     const setModule = (module, data) => {
+      const nextData = addDeletedRecords(
+        module,
+        latestStateRef.current[module],
+        data
+      )
+
       dispatch({
         type: 'SET_MODULE',
         module,
-        data,
+        data: nextData,
         syncStatus: navigator.onLine ? 'synced' : 'offline',
         time: new Date().toISOString(),
       })
-      persistModule(module, data)
+      persistModule(module, nextData)
     }
 
     const patchModule = (module, data) => {
       const currentState = latestStateRef.current
-      const nextData = {
+      const nextData = addDeletedRecords(module, currentState[module], {
         ...currentState[module],
         ...data,
-      }
+      })
 
       dispatch({
-        type: 'PATCH_MODULE',
+        type: 'SET_MODULE',
         module,
-        data,
+        data: nextData,
         syncStatus: navigator.onLine ? 'synced' : 'offline',
         time: new Date().toISOString(),
       })
@@ -929,8 +1173,8 @@ export function AppProvider({ children }) {
         console.error('Failed to delete from Google Drive:', error)
       }
 
-      localStorage.removeItem(STORAGE_KEY)
       localStorage.removeItem(LAST_SYNC_KEY)
+      clearLocalStorageState()
       clearDriveCache()
 
       if (token) {
