@@ -6,7 +6,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, ReferenceLine
 } from 'recharts'
-import { Plus, Upload, Trash2 } from 'lucide-react'
+import { Plus, Upload } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -24,6 +24,7 @@ const METRIC_CONFIG = {
 const MACRO_COLORS = {
   calories: '#F97316', protein: '#10B981', carbs: '#3B82F6', fat: '#F59E0B', fiber: '#8B5CF6'
 }
+const EMPTY_ARRAY = []
 
 export default function Health() {
   const state = useAppState()
@@ -33,7 +34,6 @@ export default function Health() {
   const [activeTab, setActiveTab] = useState('body')
   const [showLogModal, setShowLogModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
-  const [importType, setImportType] = useState(null)
   const [importStatus, setImportStatus] = useState(null)
   const [logForm, setLogForm] = useState({
     date: today, weight: '', bodyFat: '', muscleMass: '',
@@ -43,9 +43,9 @@ export default function Health() {
   const hevyRef = useRef(null)
   const appleRef = useRef(null)
 
-  const bodyLogs  = state.health?.bodyLogs  || []
-  const nutrition = state.health?.nutrition  || []
-  const hevyWorkouts = state.health?.hevyWorkouts || []
+  const bodyLogs  = state.health?.bodyLogs  || EMPTY_ARRAY
+  const nutrition = state.health?.nutrition  || EMPTY_ARRAY
+  const hevyWorkouts = state.health?.hevyWorkouts || EMPTY_ARRAY
 
   // ── Body metrics chart data (last 30 days) ─────────────────
   const metricHistoryByMetric = useMemo(() => {
@@ -157,7 +157,7 @@ export default function Health() {
         const existing = (state.health?.nutrition || []).filter(n => n.source !== 'cronometer')
         setModule('health', { ...state.health, nutrition: [...existing, ...parsed] })
         setImportStatus(`success:${parsed.length}`)
-      } catch (err) {
+      } catch {
         setImportStatus('error')
       }
     }
