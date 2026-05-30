@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useReducer,
@@ -27,6 +25,7 @@ import {
 import { stripGeminiKeyFromSettings } from '../services/geminiService'
 import { getAccessToken } from '../services/authService'
 import { useAuth } from './AuthContext'
+import { AppActionsContext, AppStateContext } from './appContextCore'
 
 const STORAGE_KEY = 'lifeos-app-state-v1'
 const LAST_SYNC_KEY = 'lifeos-last-sync-time'
@@ -127,8 +126,16 @@ function sanitizeModuleForPersist(module, data) {
   if (module === 'finance') {
     return {
       ...data,
-      bills: (data.bills || []).map(({ base64: _base64, ...bill }) => bill),
-      expenses: (data.expenses || []).map(({ billImageBase64: _img, ...expense }) => expense),
+      bills: (data.bills || []).map((bill) => {
+        const safeBill = { ...bill }
+        delete safeBill.base64
+        return safeBill
+      }),
+      expenses: (data.expenses || []).map((expense) => {
+        const safeExpense = { ...expense }
+        delete safeExpense.billImageBase64
+        return safeExpense
+      }),
     }
   }
 
@@ -416,8 +423,6 @@ function reducer(state, action) {
       return state
   }
 }
-
-const AppContext = createContext(null)
 
 export function AppProvider({ children }) {
   const { isAuthReady, isAuthenticated } = useAuth()
@@ -768,7 +773,7 @@ export function AppProvider({ children }) {
     }
   }, [])
 
-  const api = useMemo(() => {
+  const actions = useMemo(() => {
     const persistModule = (module, data) => {
       const fileName = MODULE_FILE_MAP[module]
       if (!fileName) return
@@ -818,8 +823,9 @@ export function AppProvider({ children }) {
     }
 
     const patchModule = (module, data) => {
+      const currentState = latestStateRef.current
       const nextData = {
-        ...state[module],
+        ...currentState[module],
         ...data,
       }
 
@@ -837,13 +843,14 @@ export function AppProvider({ children }) {
       dispatch({ type: 'SET_SYNC_STATUS', status, time })
 
     const setSettings = (data) => {
+      const currentSettings = latestStateRef.current.settings
       const nextSettings = {
         profile: {
-          ...state.settings.profile,
+          ...currentSettings.profile,
           ...(data.profile || {}),
         },
         preferences: {
-          ...state.settings.preferences,
+          ...currentSettings.preferences,
           ...(data.preferences || {}),
         },
       }
@@ -943,7 +950,6 @@ export function AppProvider({ children }) {
     }
 
     return {
-      state,
       setModule,
       patchModule,
       setSyncStatus,
@@ -951,9 +957,13 @@ export function AppProvider({ children }) {
       resetToSample,
       refreshFromDrive,
     }
-  }, [isDriveAuthError, notifyDriveAuthNeeded, performDrivePull, state])
+  }, [isDriveAuthError, notifyDriveAuthNeeded, performDrivePull])
 
-  return <AppContext.Provider value={api}>{children}</AppContext.Provider>
+  return (
+    <AppStateContext.Provider value={state}>
+      <AppActionsContext.Provider value={actions}>
+        {children}
+      </AppActionsContext.Provider>
+    </AppStateContext.Provider>
+  )
 }
-
-export const useApp = () => useContext(AppContext)
