@@ -538,6 +538,7 @@ export async function deleteAllFiles() {
 export function clearDriveCache() {
   localStorage.removeItem(ROOT_FOLDER_ID_KEY)
   localStorage.removeItem(BILLS_FOLDER_ID_KEY)
+  localStorage.removeItem(FILE_ID_CACHE_KEY)
 }
 
 export function getDefaultDriveFiles() {
