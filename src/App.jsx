@@ -1,21 +1,23 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { AppProvider } from './context/AppContext'
 import { ToastProvider } from './context/ToastContext'
 import PageErrorBoundary from './components/ui/PageErrorBoundary'
 import Auth from './pages/Auth'
-import Home from './pages/Home'
-import Finance from './pages/Finance'
-import TimeFlow from './pages/TimeFlow'
-import Study from './pages/Study'
-import Habits from './pages/Habits'
-import Health from './pages/Health'
-import Journal from './pages/Journal'
-import AIChat from './pages/AIChat'
-import Analytics from './pages/Analytics'
-import Settings from './pages/Settings'
 import AppShell from './components/layout/AppShell'
 import Skeleton from './components/ui/Skeleton'
+
+const Home = lazy(() => import('./pages/Home'))
+const Finance = lazy(() => import('./pages/Finance'))
+const TimeFlow = lazy(() => import('./pages/TimeFlow'))
+const Study = lazy(() => import('./pages/Study'))
+const Habits = lazy(() => import('./pages/Habits'))
+const Health = lazy(() => import('./pages/Health'))
+const Journal = lazy(() => import('./pages/Journal'))
+const AIChat = lazy(() => import('./pages/AIChat'))
+const Analytics = lazy(() => import('./pages/Analytics'))
+const Settings = lazy(() => import('./pages/Settings'))
 
 function LoadingScreen() {
   return (
@@ -68,9 +70,13 @@ function ProtectedRoute({ children }) {
 function ShellPage({ children }) {
   return (
     <ProtectedRoute>
-      <AppShell>
-        <PageErrorBoundary>{children}</PageErrorBoundary>
-      </AppShell>
+      <AppProvider>
+        <AppShell>
+          <PageErrorBoundary>
+            <Suspense fallback={<LoadingScreen />}>{children}</Suspense>
+          </PageErrorBoundary>
+        </AppShell>
+      </AppProvider>
     </ProtectedRoute>
   )
 }
@@ -103,13 +109,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppProvider>
-        <ToastProvider>
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </ToastProvider>
-      </AppProvider>
+      <ToastProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   )
 }
