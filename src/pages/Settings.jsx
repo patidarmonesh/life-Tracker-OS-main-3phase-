@@ -7,7 +7,7 @@ import { useAppActions, useAppState } from '../context/appHooks'
 import Card from '../components/ui/Card'
 import { saveGeminiApiKey, testGeminiApiKey, getGeminiApiKey } from '../services/geminiService'
 import Button from '../components/ui/Button'
-import { useToast } from '../context/ToastContext'
+import { useToast } from '../context/toastContextCore'
 
 const AVATARS = ['🧠', '🚀', '💻', '📚', '🎯', '🔥', '⚡', '🌙', '🏋️', '🎵', '🪴', '🧩']
 const DEFAULT_EXPENSE_CATEGORIES = [
