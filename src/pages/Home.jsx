@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAppActions, useAppState } from '../context/appHooks'
-import { useAuth } from '../context/authContextCore'
+import { useAuth } from '../context/appContextCore'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { v4 as uuid } from 'uuid'
