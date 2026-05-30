@@ -711,7 +711,7 @@ export default function Finance() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
                 {[...monthExpenses]
-                  .sort((a, b) =>   String(b.date || '').localeCompare(String(a.date || '')) ||   String(b.time || '').localeCompare(String(a.time || '')) )
+                  .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time))
                   .map(e => (
                     <ExpenseRow key={e.id} expense={e} onDelete={handleDelete} onEdit={startEdit} showDate defaultCurrency={currencyCode} />
                   ))}
