@@ -6,8 +6,7 @@ import {
   signInWithGoogle,
   signOutGoogle,
 } from '../services/authService'
-
-export const AuthContext = createContext(null)
+import { AuthContext } from './authContextCore'
 
 function prefersRedirectAuth() {
   const userAgent = navigator.userAgent || ''
@@ -98,3 +97,22 @@ export function AuthProvider({ children }) {
     signOutGoogle()
     setUser(null)
     setAuthError('')
+    localStorage.removeItem('lifeos_drive_folder_id')
+    localStorage.removeItem('lifeos_drive_bills_folder_id')
+  }
+
+  const value = useMemo(
+    () => ({
+      user,
+      login,
+      logout,
+      isLoading,
+      isAuthReady,
+      authError,
+      isAuthenticated: !!user,
+    }),
+    [user, isLoading, isAuthReady, authError]
+  )
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
