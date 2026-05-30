@@ -1,13 +1,11 @@
 import { useMemo, useState } from 'react'
-import { subDays, startOfMonth, startOfYear, format } from 'date-fns'
+import { subDays, format } from 'date-fns'
 import {
   ResponsiveContainer,
   LineChart,
   Line,
   BarChart,
   Bar,
-  AreaChart,
-  Area,
   XAxis,
   YAxis,
   Tooltip,
@@ -24,6 +22,8 @@ import { useAppState } from '../context/appHooks'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import { formatCurrencyAmount, getCurrencySymbol, normalizeCurrency } from '../utils/currency'
+
+const EMPTY_ARRAY = []
 
 function pearsonCorrelation(xs, ys) {
   if (!xs.length || xs.length !== ys.length) return null
@@ -42,14 +42,6 @@ function pearsonCorrelation(xs, ys) {
 function normalizeScore(value, max) {
   if (!max) return 0
   return Math.max(0, Math.min(100, Math.round((value / max) * 100)))
-}
-
-function getRangeStart(range) {
-  const now = new Date()
-  if (range === 'weekly') return subDays(now, 6)
-  if (range === 'monthly') return startOfMonth(now)
-  if (range === 'yearly') return startOfYear(now)
-  return subDays(now, 29)
 }
 
 function downloadCSV(filename, rows) {
@@ -84,19 +76,16 @@ export default function Analytics() {
   const currencyCode = normalizeCurrency(state.settings?.profile?.currency)
   const currencySymbol = getCurrencySymbol(currencyCode)
 
-  const expenses = state.finance?.expenses || []
-  const studySessions = state.study?.sessions || []
-  const timeEntries = state.timeflow?.entries || []
-  const checkpoints = state.habits?.checkpoints || []
-  const habitLogs = state.habits?.dailyLogs || []
-  const bodyLogs = state.health?.manualLogs || []
-  const journalEntries = state.journal?.entries || []
+  const expenses = state.finance?.expenses || EMPTY_ARRAY
+  const studySessions = state.study?.sessions || EMPTY_ARRAY
+  const timeEntries = state.timeflow?.entries || EMPTY_ARRAY
+  const checkpoints = state.habits?.checkpoints || EMPTY_ARRAY
+  const habitLogs = state.habits?.dailyLogs || EMPTY_ARRAY
+  const bodyLogs = state.health?.manualLogs || EMPTY_ARRAY
+  const journalEntries = state.journal?.entries || EMPTY_ARRAY
 
   const analytics = useMemo(() => {
     const now = new Date()
-    const monthStart = startOfMonth(now)
-    const yearStart = startOfYear(now)
-
     const dayCount = range === 'weekly' ? 7 : range === 'yearly' ? 12 : 30
 
     const days = Array.from({ length: dayCount }, (_, i) => {
