@@ -24,7 +24,7 @@ import {
 } from '../services/driveService'
 import { stripGeminiKeyFromSettings } from '../services/geminiService'
 import { getAccessToken } from '../services/authService'
-import { useAuth } from './authContextCore'
+import { useAuth } from './appContextCore'
 import { AppActionsContext, AppStateContext } from './appContextCore'
 import { useToast } from './toastContextCore'
 
