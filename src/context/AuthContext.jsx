@@ -6,7 +6,7 @@ import {
   signInWithGoogle,
   signOutGoogle,
 } from '../services/authService'
-import { AuthContext } from './authContextCore'
+import { AuthContext } from './appContextCore'
 
 function prefersRedirectAuth() {
   const userAgent = navigator.userAgent || ''
