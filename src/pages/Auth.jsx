@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { useAuth } from '../context/authContextCore'
+import { useAuth } from '../context/appContextCore'
 
 export default function Auth() {
   const { login, user, isLoading, isAuthReady, authError } = useAuth()
