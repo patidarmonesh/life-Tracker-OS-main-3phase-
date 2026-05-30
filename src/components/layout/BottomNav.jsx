@@ -39,10 +39,7 @@ export default function BottomNav() {
   const isMoreActive = morePaths.has(location.pathname)
 
   useEffect(() => {
-    setDrawerOpen(false)
-  }, [location.pathname])
 
-  useEffect(() => {
     if (!drawerOpen) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
