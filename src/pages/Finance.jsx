@@ -8,7 +8,7 @@ import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import ConfirmDeleteButton from '../components/ui/ConfirmDeleteButton'
-import { useToast } from '../context/ToastContext'
+import { useToast } from '../context/toastContextCore'
 import { extractBillWithGemini, getGeminiApiKey } from '../services/geminiService'
 import {
   ensureBillsFolder,
@@ -19,29 +19,6 @@ import {
 } from '../services/driveService'
 import { formatCurrencyAmount, getCurrencySymbol, normalizeCurrency } from '../utils/currency'
 import { getTodayDateKey } from '../utils/dateTime'
-
-// --- HEIC (iPhone) support ---
-function isHeic(file) {
-  const name = (file.name || '').toLowerCase()
-  return (
-    file.type === 'image/heic' ||
-    file.type === 'image/heif' ||
-    name.endsWith('.heic') ||
-    name.endsWith('.heif')
-  )
-}
-
-async function normalizeImageFile(file) {
-  if (!isHeic(file)) return file
-  const { default: heic2any } = await import('heic2any') // lazy — only loads on HEIC
-  const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 })
-  const jpegBlob = Array.isArray(converted) ? converted[0] : converted
-  return new File(
-    [jpegBlob],
-    (file.name || 'bill').replace(/\.(heic|heif)$/i, '.jpg'),
-    { type: 'image/jpeg' }
-  )
-}
 
 const CATEGORY_COLORS = {
   'Food & Drinks': '#F97316',
@@ -72,6 +49,30 @@ const CATEGORY_EMOJI = {
 }
 
 const PAYMENT_METHODS = ['UPI', 'Cash', 'Card', 'Net Banking', 'Other']
+const EMPTY_ARRAY = []
+
+function inferMimeType(fileName = '', fallback = '') {
+  if (fallback) return fallback
+  const ext = fileName.split('.').pop()?.toLowerCase()
+  if (['jpg', 'jpeg'].includes(ext)) return 'image/jpeg'
+  if (ext === 'png') return 'image/png'
+  if (ext === 'webp') return 'image/webp'
+  if (ext === 'gif') return 'image/gif'
+  if (ext === 'pdf') return 'application/pdf'
+  return ''
+}
+
+function isImageBill(bill = {}) {
+  const type = (bill.fileType || '').toLowerCase()
+  const name = (bill.fileName || '').toLowerCase()
+  return type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(name)
+}
+
+function isPdfBill(bill = {}) {
+  const type = (bill.fileType || '').toLowerCase()
+  const name = (bill.fileName || '').toLowerCase()
+  return type === 'application/pdf' || name.endsWith('.pdf')
+}
 
 export default function Finance() {
   const state = useAppState()
@@ -100,8 +101,8 @@ export default function Finance() {
     subcategory: '',
   })
 
-  const expenses = state.finance?.expenses || []
-  const bills = state.finance?.bills || []
+  const expenses = state.finance?.expenses || EMPTY_ARRAY
+  const bills = state.finance?.bills || EMPTY_ARRAY
 
   const monthlyBudget = state.settings?.preferences?.monthlyBudget || 8000
   const dailyBudget = Math.max(1, Math.round(monthlyBudget / 30))
@@ -118,6 +119,7 @@ export default function Finance() {
     donutData,
     dailyData,
     monthlyData,
+    monthExpenses,
   } = useMemo(() => {
     const now = new Date()
     const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
@@ -131,6 +133,7 @@ export default function Finance() {
     })
     const monthlyBucketByKey = new Map(monthlyBuckets.map(bucket => [bucket.key, bucket]))
     const todaysExpenses = []
+    const currentMonthExpenses = []
     let todaysTotal = 0
     let currentMonthTotal = 0
 
@@ -146,6 +149,7 @@ export default function Finance() {
       }
 
       if (date >= monthStart && date <= monthEnd) {
+        currentMonthExpenses.push(expense)
         currentMonthTotal += amount
         totalsByCategory[expense.category] = (totalsByCategory[expense.category] || 0) + amount
       }
@@ -169,6 +173,7 @@ export default function Finance() {
         return { day: format(d, 'd'), total: totalsByDate.get(key) || 0 }
       }),
       monthlyData: monthlyBuckets.map(({ month, total }) => ({ month, total })),
+      monthExpenses: currentMonthExpenses,
     }
   }, [expenses, today])
 
@@ -320,27 +325,19 @@ export default function Finance() {
     })
   }
 
- async function handleBillUpload(e) {
-    const rawFile = e.target.files?.[0]
-    if (!rawFile) return
-    setUploadingBill(true)
-    try {
-      let file
-      try {
-        file = await normalizeImageFile(rawFile)
-      } catch (convErr) {
-        console.error('HEIC conversion failed:', convErr)
-        showToast?.('Could not read this image. Try saving it as JPG.', 'error')
-        file = rawFile // fall back so the receipt isn't lost
-      }
+  async function handleBillUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
 
+    setUploadingBill(true)
+
+    try {
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = () => resolve(reader.result)
         reader.onerror = reject
         reader.readAsDataURL(file)
       })
-
 
       const fallbackCategory = categories.includes('Miscellaneous')
         ? 'Miscellaneous'
@@ -387,6 +384,7 @@ export default function Finance() {
       await ensureBillsFolder()
       const billsFolderId = getBillsFolderId()
 
+      const fileType = inferMimeType(file.name, file.type)
       let driveFileId = null
       let driveFileUrl = null
       let driveDownloadUrl = null
@@ -397,7 +395,7 @@ export default function Finance() {
 
         const uploaded = await uploadBase64FileToDrive({
           fileName: file.name,
-          mimeType: file.type || 'application/octet-stream',
+          mimeType: fileType || 'application/octet-stream',
           base64Data,
           parentFolderId: billsFolderId,
         })
@@ -414,7 +412,8 @@ export default function Finance() {
       const newBill = {
         id: uuid(),
         fileName: file.name,
-        fileType: file.type,
+        fileType,
+        base64: isImageBill({ fileName: file.name, fileType }) ? String(base64) : undefined,
         extractedText,
         suggestedAmount,
         suggestedCategory,
@@ -769,7 +768,7 @@ export default function Finance() {
                   </>
                 )}
               </div>
-              <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif,application/pdf" style={{ display: 'none' }} onChange={handleBillUpload} />
+              <input ref={fileInputRef} type="file" accept="image/*,application/pdf" style={{ display: 'none' }} onChange={handleBillUpload} />
             </Card>
 
             {bills.length === 0 ? (
@@ -1141,6 +1140,7 @@ function ExpenseRow({ expense: e, onDelete, onEdit, showDate = false, defaultCur
 function BillPreview({ bill, height, contain = false }) {
   const [previewSrc, setPreviewSrc] = useState('')
   const [hasError, setHasError] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     let objectUrl = null
@@ -1148,16 +1148,28 @@ function BillPreview({ bill, height, contain = false }) {
 
     async function loadPreview() {
       setHasError(false)
+      setPreviewSrc('')
+      setIsLoading(false)
+
+      if (!bill) return
+
       if (bill?.base64) {
         setPreviewSrc(bill.base64)
         return
       }
       if (bill?.driveFileId) {
+        setIsLoading(true)
         try {
           objectUrl = await fetchDriveFileAsObjectUrl(bill.driveFileId)
           if (!cancelled) setPreviewSrc(objectUrl)
         } catch {
-          if (!cancelled) setHasError(true)
+          if (!cancelled) {
+            const fallbackUrl = bill?.driveDownloadUrl || bill?.driveFileUrl || ''
+            setPreviewSrc(fallbackUrl)
+            setHasError(!fallbackUrl)
+          }
+        } finally {
+          if (!cancelled) setIsLoading(false)
         }
         return
       }
@@ -1170,9 +1182,9 @@ function BillPreview({ bill, height, contain = false }) {
       cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [bill?.id, bill?.driveFileId, bill?.base64, bill?.driveDownloadUrl, bill?.driveFileUrl])
+  }, [bill])
 
-  const isImage = bill?.fileType?.startsWith('image') && previewSrc && !hasError
+  const isImage = isImageBill(bill) && previewSrc && !hasError
 
   if (!isImage) {
     return (
@@ -1183,13 +1195,20 @@ function BillPreview({ bill, height, contain = false }) {
           background: 'var(--bg-secondary)',
           borderRadius: '8px',
           display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '32px',
           marginBottom: '8px',
+          color: 'var(--text-muted)',
         }}
       >
-        📄
+        <div style={{ fontSize: '18px', fontWeight: 800 }}>
+          {isPdfBill(bill) ? 'PDF' : isLoading ? '...' : 'IMG'}
+        </div>
+        <div style={{ fontSize: '11px', fontWeight: 700 }}>
+          {isLoading ? 'Loading preview' : hasError ? 'Preview unavailable' : isPdfBill(bill) ? 'PDF receipt' : 'Receipt'}
+        </div>
       </div>
     )
   }
