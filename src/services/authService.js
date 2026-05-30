@@ -1,5 +1,8 @@
 const GOOGLE_SCRIPT_ID = 'google-identity-services'
 const SESSION_KEY = 'lifeos_google_session'
+const REDIRECT_STATE_KEY = 'lifeos_google_redirect_state'
+const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
+const GOOGLE_SCRIPT_TIMEOUT = 8000
 
 const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
@@ -41,6 +44,12 @@ function loadGoogleScript() {
     script.onload = () => resolve(window.google)
     script.onerror = reject
     document.body.appendChild(script)
+
+    window.setTimeout(() => {
+      if (!window.google?.accounts?.oauth2) {
+        reject(new Error('Google auth script timed out'))
+      }
+    }, GOOGLE_SCRIPT_TIMEOUT)
   })
 }
 
@@ -66,109 +75,26 @@ function persistSession(token, user) {
   localStorage.setItem(SESSION_KEY, JSON.stringify({ accessToken: token, user }))
 }
 
-export async function initializeGoogleAuth() {
-  const google = await loadGoogleScript()
-  const clientId = getClientId()
-
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: clientId,
-    scope: GOOGLE_SCOPES,
-    callback: () => {},
-  })
-
-  return true
+function getRedirectUri() {
+  return `${window.location.origin}${window.location.pathname}`
 }
 
-export function signInWithGoogle() {
-  return new Promise((resolve, reject) => {
-    if (!window.google?.accounts?.oauth2 || !tokenClient) {
-      reject(new Error('Google auth not initialized'))
-      return
-    }
-
-    tokenClient.callback = async tokenResponse => {
-      try {
-        if (tokenResponse.error) {
-          reject(new Error(tokenResponse.error))
-          return
-        }
-
-        const token = tokenResponse.access_token
-        if (!token) {
-          reject(new Error('No access token received'))
-          return
-        }
-
-        const user = await fetchGoogleUserProfile(token)
-        persistSession(token, user)
-        resolve({ accessToken: token, user })
-      } catch (error) {
-        reject(error)
-      }
-    }
-
-    tokenClient.requestAccessToken({ prompt: 'consent' })
-  })
+function createRedirectState() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID()
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-export function refreshAccessToken() {
-  return new Promise((resolve, reject) => {
-    if (!window.google?.accounts?.oauth2 || !tokenClient) {
-      reject(new Error('Google auth not initialized'))
-      return
-    }
-
-    tokenClient.callback = async tokenResponse => {
-      try {
-        if (tokenResponse.error) {
-          reject(new Error(tokenResponse.error))
-          return
-        }
-
-        const token = tokenResponse.access_token
-        if (!token) {
-          reject(new Error('No access token received'))
-          return
-        }
-
-        const session = getStoredSession()
-        const user = session?.user || (await fetchGoogleUserProfile(token))
-        persistSession(token, user)
-        resolve(token)
-      } catch (error) {
-        reject(error)
-      }
-    }
-
-    tokenClient.requestAccessToken({ prompt: '' })
-  })
+function cleanAuthHash() {
+  window.history.replaceState(
+    null,
+    document.title,
+    `${window.location.pathname}${window.location.search}`
+  )
 }
 
-export function getStoredSession() {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    accessToken = parsed.accessToken || null
-    return parsed
-  } catch {
-    return null
-  }
-}
+export async function completeGoogleRedirectSignIn() {
+  if (!window.location.hash.includes('access_token=')) return null
 
-export function getAccessToken() {
-  if (accessToken) return accessToken
-  return getStoredSession()?.accessToken || null
-}
-
-export function signOutGoogle() {
-  const session = getStoredSession()
-  const token = session?.accessToken || accessToken
-
-  if (token && window.google?.accounts?.oauth2) {
-    window.google.accounts.oauth2.revoke(token, () => {})
-  }
-
-  accessToken = null
-  localStorage.removeItem(SESSION_KEY)
-}
+  const params = new URLSearchParams(window.location.hash.slice(1))
+  const token = params.get('access_token')
+  const state = params.get('state')
