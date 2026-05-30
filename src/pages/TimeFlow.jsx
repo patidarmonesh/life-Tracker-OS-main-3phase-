@@ -3,12 +3,12 @@ import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis } from 'recharts'
-import { Plus, Sparkles, Pencil } from 'lucide-react'
+import { Plus, Pencil } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import ConfirmDeleteButton from '../components/ui/ConfirmDeleteButton'
-import { useToast } from '../context/ToastContext'
+import { useToast } from '../context/toastContextCore'
 import { getGeminiApiKey } from '../services/geminiService'
 import { formatDateKey, getTodayDateKey, toDateKey } from '../utils/dateTime'
 
@@ -28,6 +28,7 @@ const CATEGORY_COLORS = {
 }
 
 const WASTE_CATEGORIES = ['Social Media', 'Waste Time', 'Entertainment']
+const EMPTY_ARRAY = []
 
 export default function TimeFlow() {
   const state = useAppState()
@@ -52,7 +53,7 @@ export default function TimeFlow() {
     mood: 3, productivityScore: 3, isWaste: false, notes: '',
   })
 
-  const allEntries = state.timeflow.entries || []
+  const allEntries = state.timeflow.entries || EMPTY_ARRAY
   const dayEntries = useMemo(
     () => allEntries
       .filter(e => e.date === selectedDate)
@@ -61,7 +62,7 @@ export default function TimeFlow() {
   )
 
   // ── Calculations ──────────────────────────────────────────
-  const { productiveMins, wasteMins, sleepMins, loggedMins, unloggedMins } = useMemo(() => {
+  const { productiveMins, wasteMins, sleepMins, unloggedMins } = useMemo(() => {
     let productive = 0
     let waste = 0
     let sleep = 0
