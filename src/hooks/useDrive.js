@@ -1,7 +1,8 @@
-import { useApp } from '../context/AppContext'
+import { useAppActions, useAppState } from '../context/appHooks'
 
 export function useDrive() {
-  const { state, refreshFromDrive } = useApp()
+  const state = useAppState()
+  const { refreshFromDrive } = useAppActions()
 
   return {
     syncStatus: state.syncStatus,
