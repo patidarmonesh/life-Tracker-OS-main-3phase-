@@ -8,7 +8,7 @@ import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import ConfirmDeleteButton from '../components/ui/ConfirmDeleteButton'
-import { useToast } from '../context/ToastContext'
+import { useToast } from '../context/toastContextCore'
 import { formatDateKey, getTodayDateKey, toDateKey } from '../utils/dateTime'
 
 const SUBJECTS = [
@@ -24,6 +24,7 @@ const SUBJECT_COLORS = {
 }
 
 const FOCUS_TYPES = ['Deep Focus', 'Active Recall', 'Problem Solving', 'Reading', 'Revision', 'Lecture', 'Other']
+const EMPTY_ARRAY = []
 
 export default function Study() {
   const state = useAppState()
@@ -48,7 +49,7 @@ export default function Study() {
     rating: 3, pagesRead: 0, problemsSolved: 0, understood: true,
   })
 
-  const sessions = state.study?.sessions || []
+  const sessions = state.study?.sessions || EMPTY_ARRAY
 
   // ── Calculations ──────────────────────────────────────────
   const {
