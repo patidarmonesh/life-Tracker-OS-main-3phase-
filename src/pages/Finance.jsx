@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, subMonths } from 'date-fns'
 import { v4 as uuid } from 'uuid'
@@ -88,41 +88,66 @@ export default function Finance() {
 
   const geminiApiKey = getGeminiApiKey()
 
-  const todayExpenses = expenses.filter(e => e.date === today)
-  const todayTotal = todayExpenses.reduce((a, e) => a + Number(e.amount || 0), 0)
+  const {
+    todayExpenses,
+    todayTotal,
+    monthTotal,
+    donutData,
+    dailyData,
+    monthlyData,
+  } = useMemo(() => {
+    const now = new Date()
+    const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
+    const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
+    const totalsByDate = new Map()
+    const totalsByCategory = {}
+    const monthlyBuckets = Array.from({ length: 6 }, (_, i) => {
+      const date = subMonths(now, 5 - i)
+      const key = format(date, 'yyyy-MM')
+      return { key, month: format(date, 'MMM'), total: 0 }
+    })
+    const monthlyBucketByKey = new Map(monthlyBuckets.map(bucket => [bucket.key, bucket]))
+    const todaysExpenses = []
+    let todaysTotal = 0
+    let currentMonthTotal = 0
 
-  const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
-  const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd')
-  const monthExpenses = expenses.filter(e => e.date >= monthStart && e.date <= monthEnd)
-  const monthTotal = monthExpenses.reduce((a, e) => a + Number(e.amount || 0), 0)
+    expenses.forEach(expense => {
+      const amount = Number(expense.amount || 0)
+      const date = expense.date || ''
 
-  const catTotals = {}
-  monthExpenses.forEach(e => {
-    catTotals[e.category] = (catTotals[e.category] || 0) + Number(e.amount || 0)
-  })
+      totalsByDate.set(date, (totalsByDate.get(date) || 0) + amount)
 
-  const donutData = Object.entries(catTotals)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
+      if (date === today) {
+        todaysExpenses.push(expense)
+        todaysTotal += amount
+      }
 
-  const days = eachDayOfInterval({ start: startOfMonth(new Date()), end: new Date() })
-  const dailyData = days.map(d => {
-    const key = format(d, 'yyyy-MM-dd')
-    const total = expenses
-      .filter(e => e.date === key)
-      .reduce((a, e) => a + Number(e.amount || 0), 0)
-    return { day: format(d, 'd'), total }
-  })
+      if (date >= monthStart && date <= monthEnd) {
+        currentMonthTotal += amount
+        totalsByCategory[expense.category] = (totalsByCategory[expense.category] || 0) + amount
+      }
 
-  const monthlyData = Array.from({ length: 6 }, (_, i) => {
-    const m = subMonths(new Date(), 5 - i)
-    const ms = format(startOfMonth(m), 'yyyy-MM-dd')
-    const me = format(endOfMonth(m), 'yyyy-MM-dd')
-    const total = expenses
-      .filter(e => e.date >= ms && e.date <= me)
-      .reduce((a, e) => a + Number(e.amount || 0), 0)
-    return { month: format(m, 'MMM'), total }
-  })
+      const monthKey = date.slice(0, 7)
+      const bucket = monthlyBucketByKey.get(monthKey)
+      if (bucket) bucket.total += amount
+    })
+
+    const days = eachDayOfInterval({ start: startOfMonth(now), end: now })
+
+    return {
+      todayExpenses: todaysExpenses,
+      todayTotal: todaysTotal,
+      monthTotal: currentMonthTotal,
+      donutData: Object.entries(totalsByCategory)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value),
+      dailyData: days.map(d => {
+        const key = format(d, 'yyyy-MM-dd')
+        return { day: format(d, 'd'), total: totalsByDate.get(key) || 0 }
+      }),
+      monthlyData: monthlyBuckets.map(({ month, total }) => ({ month, total })),
+    }
+  }, [expenses, today])
 
   const pct = Math.min(100, (todayTotal / dailyBudget) * 100)
   const monthPct = Math.min(100, (monthTotal / monthlyBudget) * 100)

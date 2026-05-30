@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { format, subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
@@ -48,20 +48,30 @@ export default function Health() {
   const hevyWorkouts = state.health?.hevyWorkouts || []
 
   // ── Body metrics chart data (last 30 days) ─────────────────
+  const metricHistoryByMetric = useMemo(() => {
+    const sortedBodyLogs = [...bodyLogs].sort((a, b) => a.date.localeCompare(b.date))
+    return Object.fromEntries(
+      Object.keys(METRIC_CONFIG).map(metric => [
+        metric,
+        sortedBodyLogs
+          .filter(l => l[metric] != null)
+          .slice(-30)
+          .map(l => ({ date: format(new Date(l.date + 'T00:00:00'), 'MMM d'), value: l[metric] })),
+      ])
+    )
+  }, [bodyLogs])
+
   function getMetricHistory(metric) {
-    return [...bodyLogs]
-      .filter(l => l[metric] != null)
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(-30)
-      .map(l => ({ date: format(new Date(l.date + 'T00:00:00'), 'MMM d'), value: l[metric] }))
+    return metricHistoryByMetric[metric] || []
   }
 
-  const latestLog = bodyLogs.length
-    ? [...bodyLogs].sort((a, b) => b.date.localeCompare(a.date))[0]
-    : null
+  const latestLog = useMemo(
+    () => bodyLogs.length ? [...bodyLogs].sort((a, b) => b.date.localeCompare(a.date))[0] : null,
+    [bodyLogs]
+  )
 
   // ── Nutrition chart data (last 14 days) ─────────────────────
-  const last14Nutrition = Array.from({ length: 14 }, (_, i) => {
+  const last14Nutrition = useMemo(() => Array.from({ length: 14 }, (_, i) => {
     const d = toDateKey(subDays(new Date(), 13 - i), timezone)
     const entry = nutrition.find(n => n.date === d)
     return {
@@ -71,14 +81,24 @@ export default function Health() {
       carbs:    entry?.carbs    || 0,
       fat:      entry?.fat      || 0,
     }
-  })
+  }), [nutrition, timezone])
 
-  const avgNutrition = nutrition.length ? {
+  const avgNutrition = useMemo(() => nutrition.length ? {
     calories: Math.round(nutrition.reduce((a, n) => a + (n.calories || 0), 0) / nutrition.length),
     protein:  Math.round(nutrition.reduce((a, n) => a + (n.protein  || 0), 0) / nutrition.length),
     carbs:    Math.round(nutrition.reduce((a, n) => a + (n.carbs    || 0), 0) / nutrition.length),
     fat:      Math.round(nutrition.reduce((a, n) => a + (n.fat      || 0), 0) / nutrition.length),
-  } : null
+  } : null, [nutrition])
+
+  const hevyVolumeData = useMemo(() => Array.from({ length: 14 }, (_, i) => {
+    const d = format(subDays(new Date(), 13 - i), 'yyyy-MM-dd')
+    const workout = hevyWorkouts.find(w => w.date === d)
+    const volume = workout?.exercises?.reduce(
+      (a, ex) => a + ex.sets.reduce((s, set) => s + (set.reps * set.weight), 0),
+      0
+    ) || 0
+    return { day: format(new Date(d + 'T00:00:00'), 'MMM d'), volume: Math.round(volume) }
+  }), [hevyWorkouts])
 
   // ── Save body log ──────────────────────────────────────────
   function saveBodyLog() {
@@ -522,12 +542,7 @@ export default function Health() {
                 <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '14px' }}>Workout Volume (last 14 days)</h3>
                 <ResponsiveContainer width="100%" height={180}>
                   <BarChart
-                    data={Array.from({ length: 14 }, (_, i) => {
-                      const d = format(subDays(new Date(), 13 - i), 'yyyy-MM-dd')
-                      const w = hevyWorkouts.find(w => w.date === d)
-                      const vol = w?.exercises?.reduce((a, ex) => a + ex.sets.reduce((s, set) => s + (set.reps * set.weight), 0), 0) || 0
-                      return { day: format(new Date(d + 'T00:00:00'), 'MMM d'), volume: Math.round(vol) }
-                    })}
+                    data={hevyVolumeData}
                     margin={{ top: 0, right: 0, bottom: 0, left: -10 }}
                   >
                     <XAxis dataKey="day" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} interval={2} />

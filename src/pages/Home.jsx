@@ -30,7 +30,7 @@ export default function Home() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  const scores = calcLifeScore(state)
+  const scores = useMemo(() => calcLifeScore(state), [state])
   const preferences = state.settings?.preferences || {}
   const profile = state.settings?.profile || {}
 

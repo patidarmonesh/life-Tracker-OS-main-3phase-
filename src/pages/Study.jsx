@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
@@ -51,29 +51,49 @@ export default function Study() {
   const sessions = state.study?.sessions || []
 
   // ── Calculations ──────────────────────────────────────────
-  const todaySessions = sessions.filter(s => s.date === today)
-  const todayMins = todaySessions.reduce((a, s) => a + s.durationMinutes, 0)
+  const {
+    todaySessions,
+    todayMins,
+    last7Days,
+    totalHoursThisWeek,
+    subjectTotals,
+    streak,
+  } = useMemo(() => {
+    const sessionsByDate = new Map()
+    const totalsBySubject = {}
 
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const d = toDateKey(subDays(new Date(), 6 - i), timezone)
-    const mins = sessions.filter(s => s.date === d).reduce((a, s) => a + s.durationMinutes, 0)
-    return { day: formatDateKey(d, timezone, { weekday: 'short' }), mins, hours: +(mins / 60).toFixed(1) }
-  })
+    sessions.forEach(session => {
+      const dateSessions = sessionsByDate.get(session.date) || []
+      dateSessions.push(session)
+      sessionsByDate.set(session.date, dateSessions)
+      totalsBySubject[session.subject] =
+        (totalsBySubject[session.subject] || 0) + (Number(session.durationMinutes) || 0)
+    })
 
-  const totalHoursThisWeek = +(last7Days.reduce((a, d) => a + d.hours, 0)).toFixed(1)
+    const todaysSessions = sessionsByDate.get(today) || []
+    const todaysMins = todaysSessions.reduce((a, s) => a + (Number(s.durationMinutes) || 0), 0)
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const date = toDateKey(subDays(new Date(), 6 - i), timezone)
+      const mins = (sessionsByDate.get(date) || []).reduce((a, s) => a + (Number(s.durationMinutes) || 0), 0)
+      return { day: formatDateKey(date, timezone, { weekday: 'short' }), mins, hours: +(mins / 60).toFixed(1) }
+    })
 
-  const subjectTotals = {}
-  sessions.forEach(s => { subjectTotals[s.subject] = (subjectTotals[s.subject] || 0) + s.durationMinutes })
-
-  const streak = (() => {
     let s = 0
     for (let i = 0; i < 30; i++) {
       const d = toDateKey(subDays(new Date(), i), timezone)
-      if (sessions.some(e => e.date === d)) s++
+      if (sessionsByDate.has(d)) s++
       else break
     }
-    return s
-  })()
+
+    return {
+      todaySessions: todaysSessions,
+      todayMins: todaysMins,
+      last7Days: days,
+      totalHoursThisWeek: +(days.reduce((a, d) => a + d.hours, 0)).toFixed(1),
+      subjectTotals: totalsBySubject,
+      streak: s,
+    }
+  }, [sessions, timezone, today])
 
   const dailyGoalMins = (state.settings?.goals?.dailyStudyHours || 6) * 60
   const goalPct = Math.min(100, (todayMins / dailyGoalMins) * 100)

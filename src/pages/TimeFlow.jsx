@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
@@ -53,30 +53,54 @@ export default function TimeFlow() {
   })
 
   const allEntries = state.timeflow.entries || []
-  const dayEntries = allEntries
-    .filter(e => e.date === selectedDate)
-    .sort((a, b) => a.start.localeCompare(b.start))
+  const dayEntries = useMemo(
+    () => allEntries
+      .filter(e => e.date === selectedDate)
+      .sort((a, b) => (a.start || '').localeCompare(b.start || '')),
+    [allEntries, selectedDate]
+  )
 
   // ── Calculations ──────────────────────────────────────────
-  const productiveMins = dayEntries.filter(e => !e.isWaste && e.category !== 'Sleep' && e.category !== 'Meals').reduce((a, e) => a + e.durationMinutes, 0)
-  const wasteMins = dayEntries.filter(e => e.isWaste || WASTE_CATEGORIES.includes(e.category)).reduce((a, e) => a + e.durationMinutes, 0)
-  const sleepMins = dayEntries.filter(e => e.category === 'Sleep').reduce((a, e) => a + e.durationMinutes, 0)
-  const loggedMins = dayEntries.reduce((a, e) => a + e.durationMinutes, 0)
-  const unloggedMins = Math.max(0, 1440 - loggedMins)
+  const { productiveMins, wasteMins, sleepMins, loggedMins, unloggedMins } = useMemo(() => {
+    let productive = 0
+    let waste = 0
+    let sleep = 0
+    let logged = 0
+
+    dayEntries.forEach(entry => {
+      const mins = Number(entry.durationMinutes) || 0
+      logged += mins
+      if (entry.category === 'Sleep') sleep += mins
+      if (!entry.isWaste && entry.category !== 'Sleep' && entry.category !== 'Meals') productive += mins
+      if (entry.isWaste || WASTE_CATEGORIES.includes(entry.category)) waste += mins
+    })
+
+    return {
+      productiveMins: productive,
+      wasteMins: waste,
+      sleepMins: sleep,
+      loggedMins: logged,
+      unloggedMins: Math.max(0, 1440 - logged),
+    }
+  }, [dayEntries])
 
   // Donut data
-  const catTotals = {}
-  dayEntries.forEach(e => { catTotals[e.category] = (catTotals[e.category] || 0) + e.durationMinutes })
-  const donutData = Object.entries(catTotals).map(([name, value]) => ({ name, value }))
+  const donutData = useMemo(() => {
+    const catTotals = {}
+    dayEntries.forEach(e => {
+      catTotals[e.category] = (catTotals[e.category] || 0) + (Number(e.durationMinutes) || 0)
+    })
+    return Object.entries(catTotals).map(([name, value]) => ({ name, value }))
+  }, [dayEntries])
 
   // Weekly data (last 7 days)
-  const weeklyData = Array.from({ length: 7 }, (_, i) => {
+  const weeklyData = useMemo(() => Array.from({ length: 7 }, (_, i) => {
     const d = toDateKey(subDays(new Date(), 6 - i), timezone)
     const entries = allEntries.filter(e => e.date === d)
-    const prod = entries.filter(e => !e.isWaste && e.category !== 'Sleep' && e.category !== 'Meals').reduce((a, e) => a + e.durationMinutes, 0)
-    const waste = entries.filter(e => e.isWaste || WASTE_CATEGORIES.includes(e.category)).reduce((a, e) => a + e.durationMinutes, 0)
+    const prod = entries.filter(e => !e.isWaste && e.category !== 'Sleep' && e.category !== 'Meals').reduce((a, e) => a + (Number(e.durationMinutes) || 0), 0)
+    const waste = entries.filter(e => e.isWaste || WASTE_CATEGORIES.includes(e.category)).reduce((a, e) => a + (Number(e.durationMinutes) || 0), 0)
     return { day: formatDateKey(d, timezone, { weekday: 'short' }), productive: +(prod / 60).toFixed(1), waste: +(waste / 60).toFixed(1) }
-  })
+  }), [allEntries, timezone])
 
   function resetForm() {
     setForm({
