@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useApp } from '../context/AppContext'
+import { useAppActions, useAppState } from '../context/appHooks'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
@@ -12,7 +12,8 @@ import { formatCurrencyAmount } from '../utils/currency'
 import { getTodayDateKey } from '../utils/dateTime'
 
 export default function Home() {
-  const { state, setModule } = useApp()
+  const state = useAppState()
+  const { setModule } = useAppActions()
   const { user } = useAuth()
   const navigate = useNavigate()
   const timezone = state.settings?.profile?.timezone

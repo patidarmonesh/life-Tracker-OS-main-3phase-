@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useApp } from '../context/AppContext'
+import { useAppActions, useAppState } from '../context/appHooks'
 import { format, subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { Plus, Check, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
@@ -15,7 +15,8 @@ const HABIT_COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#EC4899', '#8B5CF6', '#F
 const CATEGORIES = ['Health', 'Fitness', 'Study', 'Mindfulness', 'Nutrition', 'Sleep', 'Social', 'Other']
 
 export default function Habits() {
-  const { state, setModule } = useApp()
+  const state = useAppState()
+  const { setModule } = useAppActions()
   const { showToast } = useToast()
   const timezone = state.settings?.profile?.timezone
   const today = getTodayDateKey(timezone)

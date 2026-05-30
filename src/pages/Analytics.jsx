@@ -20,7 +20,7 @@ import {
   ReferenceLine,
 } from 'recharts'
 import { Download } from 'lucide-react'
-import { useApp } from '../context/AppContext'
+import { useAppState } from '../context/appHooks'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import { formatCurrencyAmount, getCurrencySymbol, normalizeCurrency } from '../utils/currency'
@@ -79,7 +79,7 @@ function downloadCSV(filename, rows) {
 }
 
 export default function Analytics() {
-  const { state } = useApp()
+  const state = useAppState()
   const [range, setRange] = useState('monthly')
   const currencyCode = normalizeCurrency(state.settings?.profile?.currency)
   const currencySymbol = getCurrencySymbol(currencyCode)

@@ -3,7 +3,7 @@ import {
   User, Target, KeyRound, Bell, Palette, Database,
   Info, Upload, Download, Trash2, Plus, X, Check
 } from 'lucide-react'
-import { useApp } from '../context/AppContext'
+import { useAppActions, useAppState } from '../context/appHooks'
 import Card from '../components/ui/Card'
 import { saveGeminiApiKey, testGeminiApiKey, getGeminiApiKey } from '../services/geminiService'
 import Button from '../components/ui/Button'
@@ -25,7 +25,8 @@ const DEFAULT_TIME_CATEGORIES = [
 ]
 
 export default function Settings() {
-  const { state, setModule, patchModule, resetToSample, refreshFromDrive } = useApp()
+  const state = useAppState()
+  const { setModule, patchModule, resetToSample, refreshFromDrive } = useAppActions()
   const { showToast } = useToast()
   const fileRef = useRef(null)
   const [newExpenseCategory, setNewExpenseCategory] = useState('')

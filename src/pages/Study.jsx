@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useApp } from '../context/AppContext'
+import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
@@ -26,7 +26,8 @@ const SUBJECT_COLORS = {
 const FOCUS_TYPES = ['Deep Focus', 'Active Recall', 'Problem Solving', 'Reading', 'Revision', 'Lecture', 'Other']
 
 export default function Study() {
-  const { state, setModule } = useApp()
+  const state = useAppState()
+  const { setModule } = useAppActions()
   const { showToast } = useToast()
   const timezone = state.settings?.profile?.timezone
   const today = getTodayDateKey(timezone)

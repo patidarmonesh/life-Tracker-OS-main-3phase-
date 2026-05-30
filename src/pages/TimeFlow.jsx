@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useApp } from '../context/AppContext'
+import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis } from 'recharts'
@@ -30,7 +30,8 @@ const CATEGORY_COLORS = {
 const WASTE_CATEGORIES = ['Social Media', 'Waste Time', 'Entertainment']
 
 export default function TimeFlow() {
-  const { state, setModule } = useApp()
+  const state = useAppState()
+  const { setModule } = useAppActions()
   const { showToast } = useToast()
   const timezone = state.settings?.profile?.timezone
   const today = getTodayDateKey(timezone)

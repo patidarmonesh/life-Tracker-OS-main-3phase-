@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useApp } from '../context/AppContext'
+import { useAppActions, useAppState } from '../context/appHooks'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, subMonths } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
@@ -51,7 +51,8 @@ const CATEGORY_EMOJI = {
 const PAYMENT_METHODS = ['UPI', 'Cash', 'Card', 'Net Banking', 'Other']
 
 export default function Finance() {
-  const { state, setModule } = useApp()
+  const state = useAppState()
+  const { setModule } = useAppActions()
   const { showToast } = useToast()
   const timezone = state.settings?.profile?.timezone
   const currencyCode = normalizeCurrency(state.settings?.profile?.currency)

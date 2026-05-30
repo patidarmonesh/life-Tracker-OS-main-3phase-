@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { useApp } from '../context/AppContext'
+import { useAppActions, useAppState } from '../context/appHooks'
 import { format, subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import {
@@ -26,7 +26,8 @@ const MACRO_COLORS = {
 }
 
 export default function Health() {
-  const { state, setModule } = useApp()
+  const state = useAppState()
+  const { setModule } = useAppActions()
   const timezone = state.settings?.profile?.timezone
   const today = getTodayDateKey(timezone)
   const [activeTab, setActiveTab] = useState('body')

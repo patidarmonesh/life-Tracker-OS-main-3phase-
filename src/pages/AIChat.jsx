@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { format, subDays } from 'date-fns'
 import { Send, Sparkles, Bot, User, Trash2 } from 'lucide-react'
-import { useApp } from '../context/AppContext'
+import { useAppActions, useAppState } from '../context/appHooks'
 import { getGeminiApiKey } from '../services/geminiService'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -193,7 +193,8 @@ const STARTERS = [
 ]
 
 export default function AIChat() {
-  const { state, patchModule } = useApp()
+  const state = useAppState()
+  const { patchModule } = useAppActions()
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
 
