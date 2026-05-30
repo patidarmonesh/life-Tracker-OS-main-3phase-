@@ -20,6 +20,29 @@ import {
 import { formatCurrencyAmount, getCurrencySymbol, normalizeCurrency } from '../utils/currency'
 import { getTodayDateKey } from '../utils/dateTime'
 
+// --- HEIC (iPhone) support ---
+function isHeic(file) {
+  const name = (file.name || '').toLowerCase()
+  return (
+    file.type === 'image/heic' ||
+    file.type === 'image/heif' ||
+    name.endsWith('.heic') ||
+    name.endsWith('.heif')
+  )
+}
+
+async function normalizeImageFile(file) {
+  if (!isHeic(file)) return file
+  const { default: heic2any } = await import('heic2any') // lazy — only loads on HEIC
+  const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 })
+  const jpegBlob = Array.isArray(converted) ? converted[0] : converted
+  return new File(
+    [jpegBlob],
+    (file.name || 'bill').replace(/\.(heic|heif)$/i, '.jpg'),
+    { type: 'image/jpeg' }
+  )
+}
+
 const CATEGORY_COLORS = {
   'Food & Drinks': '#F97316',
   'Groceries': '#10B981',
@@ -297,19 +320,27 @@ export default function Finance() {
     })
   }
 
-  async function handleBillUpload(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+ async function handleBillUpload(e) {
+    const rawFile = e.target.files?.[0]
+    if (!rawFile) return
     setUploadingBill(true)
-
     try {
+      let file
+      try {
+        file = await normalizeImageFile(rawFile)
+      } catch (convErr) {
+        console.error('HEIC conversion failed:', convErr)
+        showToast?.('Could not read this image. Try saving it as JPG.', 'error')
+        file = rawFile // fall back so the receipt isn't lost
+      }
+
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = () => resolve(reader.result)
         reader.onerror = reject
         reader.readAsDataURL(file)
       })
+
 
       const fallbackCategory = categories.includes('Miscellaneous')
         ? 'Miscellaneous'
@@ -738,7 +769,7 @@ export default function Finance() {
                   </>
                 )}
               </div>
-              <input ref={fileInputRef} type="file" accept="image/*,application/pdf" style={{ display: 'none' }} onChange={handleBillUpload} />
+              <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif,application/pdf" style={{ display: 'none' }} onChange={handleBillUpload} />
             </Card>
 
             {bills.length === 0 ? (
