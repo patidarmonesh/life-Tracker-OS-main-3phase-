@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
@@ -11,6 +12,7 @@ import ConfirmDeleteButton from '../components/ui/ConfirmDeleteButton'
 import EmptyState from '../components/ui/EmptyState'
 import { useToast } from '../context/toastContextCore'
 import { formatDateKey, getTodayDateKey, toDateKey } from '../utils/dateTime'
+import { useSoundscape } from '../hooks/useSoundscape'
 
 const SUBJECTS = [
   'Mathematics', 'Physics', 'CS Theory', 'Machine Learning', 'Deep Learning',
@@ -31,8 +33,15 @@ export default function Study() {
   const state = useAppState()
   const { setModule } = useAppActions()
   const { showToast } = useToast()
+  const location = useLocation()
+  const soundscape = useSoundscape()
+
   const timezone = state.settings?.profile?.timezone
   const today = getTodayDateKey(timezone)
+
+  const redirectDate = location.state?.selectedDate
+  const [selectedDate, setSelectedDate] = useState(redirectDate || today)
+
   const subjects = state.study?.subjects?.length ? state.study.subjects : SUBJECTS
   const defaultSubject = subjects[0] || 'Other'
   const [activeTab, setActiveTab] = useState('log')
@@ -46,9 +55,14 @@ export default function Study() {
   const [timerFocusType, setTimerFocusType] = useState('Deep Focus')
   const [form, setForm] = useState({
     subject: defaultSubject, topic: '', focusType: 'Deep Focus',
-    durationMinutes: 60, date: today, notes: '',
+    durationMinutes: 60, date: selectedDate, notes: '',
     rating: 3, pagesRead: 0, problemsSolved: 0, understood: true,
   })
+
+  // Synchronize form date when selectedDate changes
+  useEffect(() => {
+    setForm(f => ({ ...f, date: selectedDate }))
+  }, [selectedDate])
 
   const sessions = state.study?.sessions || EMPTY_ARRAY
 
@@ -72,7 +86,7 @@ export default function Study() {
         (totalsBySubject[session.subject] || 0) + (Number(session.durationMinutes) || 0)
     })
 
-    const todaysSessions = sessionsByDate.get(today) || []
+    const todaysSessions = sessionsByDate.get(selectedDate) || []
     const todaysMins = todaysSessions.reduce((a, s) => a + (Number(s.durationMinutes) || 0), 0)
     const days = Array.from({ length: 7 }, (_, i) => {
       const date = toDateKey(subDays(new Date(), 6 - i), timezone)
@@ -95,7 +109,7 @@ export default function Study() {
       subjectTotals: totalsBySubject,
       streak: s,
     }
-  }, [sessions, timezone, today])
+  }, [sessions, timezone, selectedDate])
 
   const dailyGoalMins = (state.settings?.goals?.dailyStudyHours || 6) * 60
   const goalPct = Math.min(100, (todayMins / dailyGoalMins) * 100)
@@ -299,6 +313,42 @@ export default function Study() {
 
         {/* ══ TODAY / LOG TAB ════════════════════════════════ */}
         {activeTab === 'log' && <>
+          {/* Inline Date Selector */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '10px',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                color: 'var(--text-primary)',
+                fontSize: '13px',
+                fontFamily: 'DM Sans, sans-serif',
+                outline: 'none',
+              }}
+            />
+            {selectedDate !== today && (
+              <button
+                onClick={() => setSelectedDate(today)}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border)',
+                  background: 'rgba(99,102,241,0.12)',
+                  color: '#B9C2FF',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                Reset to Today
+              </button>
+            )}
+          </div>
 
           {/* Today goal progress */}
           <Card>
@@ -337,7 +387,7 @@ export default function Study() {
           {/* Today sessions */}
           <Card>
             <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '12px' }}>
-              Today's Sessions
+              Session Logs
             </h3>
             {todaySessions.length === 0 ? (
               <EmptyState
@@ -555,6 +605,69 @@ export default function Study() {
               {Math.floor(timerSeconds / 60)} min logged for <strong>{timerSubject}</strong>
             </div>
           )}
+
+          {/* Ambient Soundscapes Widget */}
+          <div style={{
+            width: '100%',
+            marginTop: '16px',
+            padding: '14px',
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px dashed var(--border)',
+            borderRadius: '12px',
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '10px',
+            }}>
+              <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                🎧 Ambient Focus Sounds
+              </span>
+              <button
+                onClick={soundscape.togglePlay}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: soundscape.isPlaying ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.06)',
+                  color: soundscape.isPlaying ? '#10B981' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  fontFamily: 'DM Sans, sans-serif',
+                }}
+              >
+                {soundscape.isPlaying ? '⏹ Stop' : '▶ Play'}
+              </button>
+            </div>
+            
+            {soundscape.isPlaying && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px', animation: 'fadeSlideIn 0.2s ease' }}>
+                {[
+                  { key: 'brown', label: '🌋 Waterfall / Wind' },
+                  { key: 'rain', label: '🌧️ Focus Rain' },
+                  { key: 'beats', label: '🧠 Binaural Beats (6Hz)' },
+                ].map(({ key, label }) => (
+                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', width: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={soundscape.volumes[key]}
+                      onChange={e => soundscape.adjustVolume(key, e.target.value)}
+                      style={{ flex: 1, height: '4px', cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-muted)', width: '30px', textAlign: 'right' }}>
+                      {Math.round(soundscape.volumes[key] * 100)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </Modal>
 

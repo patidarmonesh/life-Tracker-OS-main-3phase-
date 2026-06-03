@@ -1,14 +1,17 @@
 
 
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { format, subDays } from 'date-fns'
-import { Send, Sparkles, Bot, User, Trash2, Sun, Zap } from 'lucide-react'
+import { Send, Sparkles, Bot, User, Trash2, Sun, Zap, Volume2 } from 'lucide-react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { getGeminiApiKey } from '../services/geminiService'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import { getCurrencySymbol, normalizeCurrency } from '../utils/currency'
+import { playSuccessSound, playNoticeChime, playSubtleClick, playWarningBeep } from '../hooks/useAudio'
+import { hapticSuccess, hapticMedium, hapticWarning } from '../hooks/useHaptic'
+import { useToast } from '../context/toastContextCore'
 
 /* ── tone definitions ─────────────────────────────────────────────── */
 
@@ -225,15 +228,19 @@ function isDataQuestion(text) {
   const q = text.trim().toLowerCase()
   return (
     q.includes('?') ||
-    /how much|average|when|which|what|who|best|worst|trend|compare|spend|study|sleep|habit|waste|steps|mood|journal|time|briefing|plan|morning|today/i.test(q)
+    /how much|average|when|which|what|who|best|worst|trend|compare|spend|study|sleep|habit|waste|steps|mood|journal|time|briefing|plan|morning|today|log|add|track|delete|record|remove|spent|toggle|workout|gym|calories|protein|food|weight/i.test(q)
   )
 }
 
-function buildGeminiPrompt(question, summary, tone, scoreWeights, trend7Days) {
+function buildGeminiPrompt(question, summary, tone, scoreWeights, trend7Days, categories) {
   const tonePrompt = TONE_SYSTEM_PROMPTS[tone] || TONE_SYSTEM_PROMPTS.balanced
 
   const weightsBlock = scoreWeights
     ? `\nUSER'S CUSTOM SCORE WEIGHTS:\n${JSON.stringify(scoreWeights, null, 2)}`
+    : ''
+
+  const categoriesBlock = categories
+    ? `\nAPP CATEGORIES:\n${JSON.stringify(categories, null, 2)}`
     : ''
 
   return `
@@ -251,7 +258,26 @@ Core rules (apply to ALL tones):
 - If the user just greets or says something non-question, reply briefly and friendly.
 - Always pair criticism with one concrete next step.
 - Be honest about behavior and data, never about the person's worth.
+
+APP-CONTROL TOOL CALLS (CRITICAL ACTION RULE):
+If the user commands you to log, add, track, delete, or record a task or metric, you MUST respond conversationally and ALSO append a valid JSON action block enclosed in "<action>" and "</action>" tags at the end of your response.
+Supported actions are:
+1. Add Expense:
+   <action>{"action": "add_expense", "amount": number, "description": "string", "category": "Food & Drinks" | "Groceries" | "Transport" | "Gym & Fitness" | "Study & Education" | "Shopping" | "Bills & Utilities" | "Entertainment" | "Subscriptions" | "Personal Care" | "Miscellaneous", "paymentMethod": "UPI" | "Cash" | "Card" | "Net Banking", "date": "YYYY-MM-DD"}</action>
+2. Log Study Session:
+   <action>{"action": "add_study", "subject": "string", "topic": "string", "durationMinutes": number, "date": "YYYY-MM-DD"}</action>
+3. Log Time Flow Activity:
+   <action>{"action": "add_timeflow", "activity": "string", "durationMinutes": number, "category": "string", "isWaste": boolean, "date": "YYYY-MM-DD"}</action>
+4. Log Health Metrics:
+   <action>{"action": "log_health", "steps": number, "sleepHours": number, "weight": number, "date": "YYYY-MM-DD"}</action>
+5. Add Journal Entry:
+   <action>{"action": "add_journal", "title": "string", "content": "string", "mood": number(1-5), "date": "YYYY-MM-DD"}</action>
+6. Toggle Checkpoint/Habit:
+   <action>{"action": "toggle_habit", "title": "string" (matching habit name), "status": "done" | "undone", "date": "YYYY-MM-DD"}</action>
+
+Always use today's date (${format(new Date(), 'yyyy-MM-dd')}) if no specific date is mentioned in their request.
 ${weightsBlock}
+${categoriesBlock}
 
 LAST 7 DAYS TREND (day-by-day):
 ${JSON.stringify(trend7Days, null, 2)}
@@ -265,7 +291,7 @@ ${question}
 }
 
 
-async function askGemini(question, summary, tone, scoreWeights, trend7Days) {
+async function askGemini(question, summary, tone, scoreWeights, trend7Days, categories) {
   const apiKey = getGeminiApiKey()
 
   if (!apiKey) return null
@@ -282,7 +308,7 @@ async function askGemini(question, summary, tone, scoreWeights, trend7Days) {
         contents: [
           {
             role: 'user',
-            parts: [{ text: buildGeminiPrompt(question, summary, tone, scoreWeights, trend7Days) }],
+            parts: [{ text: buildGeminiPrompt(question, summary, tone, scoreWeights, trend7Days, categories) }],
           },
         ],
         generationConfig: {
@@ -305,6 +331,290 @@ async function askGemini(question, summary, tone, scoreWeights, trend7Days) {
   return text || null
 }
 
+function executeAIAction(action, state, setModule, patchModule, showToast) {
+  if (!action || !action.action) return false
+
+  try {
+    const today = format(new Date(), 'yyyy-MM-dd')
+    const date = action.date || today
+
+    if (action.action === 'add_expense') {
+      const amount = Number(action.amount)
+      if (isNaN(amount) || amount <= 0) return false
+
+      const newExpense = {
+        id: crypto.randomUUID(),
+        amount,
+        currency: state.settings?.profile?.currency || 'INR',
+        category: action.category || 'Other',
+        subcategory: action.subcategory || '',
+        description: action.description || 'Logged via AI Chat',
+        date,
+        time: format(new Date(), 'HH:mm'),
+        paymentMethod: action.paymentMethod || 'UPI',
+        isImpulsive: !!action.isImpulsive,
+        account: action.account || 'Cash',
+        isRecurring: false,
+        tags: action.tags || [],
+        billDriveFileId: null,
+        billOCRText: null,
+        createdAt: new Date().toISOString()
+      }
+
+      const currentExpenses = state.finance?.expenses || []
+      setModule('finance', {
+        ...state.finance,
+        expenses: [newExpense, ...currentExpenses]
+      })
+
+      showToast(`✅ Logged ${state.settings?.profile?.currency || 'INR'} ${amount} for ${newExpense.description}`, 'success')
+      playSuccessSound()
+      hapticSuccess()
+      return true
+    }
+
+    if (action.action === 'add_study') {
+      const durationMinutes = Number(action.durationMinutes)
+      if (isNaN(durationMinutes) || durationMinutes <= 0) return false
+
+      const newSession = {
+        id: crypto.randomUUID(),
+        date,
+        subject: action.subject || 'Other',
+        topic: action.topic || 'Logged via AI Chat',
+        focusType: 'Deep Focus',
+        durationMinutes,
+        notes: action.notes || '',
+        rating: action.rating || 3,
+        pagesRead: Number(action.pagesRead) || 0,
+        problemsSolved: Number(action.problemsSolved) || 0,
+        source: 'manual',
+        createdAt: new Date().toISOString(),
+      }
+
+      const sessions = state.study?.sessions || []
+      setModule('study', { ...state.study, sessions: [newSession, ...sessions] })
+
+      showToast(`✅ Logged ${(durationMinutes / 60).toFixed(1)}h study: ${newSession.subject}`, 'success')
+      playSuccessSound()
+      hapticSuccess()
+      return true
+    }
+
+    if (action.action === 'add_timeflow') {
+      const durationMinutes = Number(action.durationMinutes)
+      if (isNaN(durationMinutes) || durationMinutes <= 0) return false
+
+      const activity = action.activity || action.category || 'Activity'
+      const category = action.category || 'Other'
+      const start = action.start || '12:00'
+      const [sh, sm] = start.split(':').map(Number)
+      let eh = sh + Math.floor((sm + durationMinutes) / 60)
+      let em = (sm + durationMinutes) % 60
+      const end = `${String(eh % 24).padStart(2, '0')}:${String(em).padStart(2, '0')}`
+
+      const payload = {
+        date,
+        start,
+        end,
+        durationMinutes,
+        name: activity,
+        category,
+        productivityScore: action.productivityScore || 3,
+        mood: action.mood || 3,
+        isWaste: !!action.isWaste,
+        isBadHabit: !!action.isWaste,
+        notes: action.notes || '',
+        tags: action.tags || [],
+        source: 'manual',
+        updatedAt: new Date().toISOString(),
+        studySessionId: null
+      }
+
+      // Sync to Study
+      if (category === 'Study') {
+        const studySubjects = state.study?.subjects?.length 
+          ? state.study.subjects 
+          : ['Mathematics', 'Physics', 'CS Theory', 'Machine Learning', 'Deep Learning', 'DSA', 'Research Paper', 'Project Work', 'GATE Prep', 'Other']
+        
+        const cleanName = activity.replace(/^(?:study|studied|learning|learnt|read):\s*/i, '').trim()
+        const matchedSubject = studySubjects.find(s => cleanName.toLowerCase().includes(s.toLowerCase()))
+        
+        const sessionSubject = matchedSubject || studySubjects[0] || 'Other'
+        const sessionTopic = matchedSubject ? cleanName.replace(new RegExp(matchedSubject, 'i'), '').replace(/^[\s—\-•:]+/, '').trim() : cleanName
+
+        const studySessions = state.study?.sessions || []
+        const studySessionId = crypto.randomUUID()
+        const newSession = {
+          id: studySessionId,
+          date,
+          subject: sessionSubject,
+          topic: sessionTopic || 'Logged via TimeFlow',
+          focusType: 'Deep Focus',
+          durationMinutes,
+          notes: action.notes || '',
+          rating: payload.productivityScore,
+          source: 'timeflow-sync',
+          createdAt: new Date().toISOString(),
+        }
+        payload.studySessionId = studySessionId
+        setModule('study', { ...state.study, sessions: [newSession, ...studySessions] })
+      }
+
+      const allEntries = state.timeflow?.entries || []
+      const newEntry = { id: crypto.randomUUID(), ...payload, createdAt: new Date().toISOString() }
+      setModule('timeflow', { ...state.timeflow, entries: [...allEntries, newEntry] })
+
+      showToast(`✅ Logged ${(durationMinutes / 60).toFixed(1)}h activity: ${activity}`, 'success')
+      playSuccessSound()
+      hapticSuccess()
+      return true
+    }
+
+    if (action.action === 'log_health') {
+      const bodyLogs = state.health?.bodyLogs || []
+      const existing = bodyLogs.find(l => l.date === date)
+      
+      const updateData = {}
+      if (action.steps !== undefined && action.steps !== null) updateData.steps = Number(action.steps)
+      if (action.sleepHours !== undefined && action.sleepHours !== null) updateData.sleepHours = Number(action.sleepHours)
+      if (action.weight !== undefined && action.weight !== null) updateData.weight = Number(action.weight)
+
+      if (Object.keys(updateData).length === 0) return false
+
+      let updatedLogs
+      if (existing) {
+        updatedLogs = bodyLogs.map(l =>
+          l.date === date ? { ...l, ...updateData, updatedAt: new Date().toISOString() } : l
+        )
+      } else {
+        const newLog = {
+          id: crypto.randomUUID(),
+          date,
+          ...updateData,
+          source: 'manual',
+          createdAt: new Date().toISOString()
+        }
+        updatedLogs = [...bodyLogs, newLog]
+      }
+
+      patchModule('health', { bodyLogs: updatedLogs })
+      
+      const loggedDetails = []
+      if (updateData.steps !== undefined) loggedDetails.push(`${updateData.steps.toLocaleString()} steps`)
+      if (updateData.sleepHours !== undefined) loggedDetails.push(`${updateData.sleepHours}h sleep`)
+      if (updateData.weight !== undefined) loggedDetails.push(`${updateData.weight}kg`)
+      
+      showToast(`✅ Logged: ${loggedDetails.join(', ')}`, 'success')
+      playSuccessSound()
+      hapticSuccess()
+      return true
+    }
+
+    if (action.action === 'add_journal') {
+      const payload = {
+        title: action.title || 'Untitled Entry',
+        content: action.content || '',
+        mood: Number(action.mood) || 3,
+        energy: Number(action.energy) || 3,
+        gratitude: action.gratitude || '',
+        tags: action.tags || [],
+        updatedAt: new Date().toISOString(),
+      }
+
+      const newEntry = {
+        id: crypto.randomUUID(),
+        ...payload,
+        createdAt: new Date().toISOString(),
+        date
+      }
+
+      const entries = state.journal?.entries || []
+      setModule('journal', {
+        ...state.journal,
+        entries: [newEntry, ...entries],
+      })
+
+      showToast('✅ Saved journal entry ✓', 'success')
+      playSuccessSound()
+      hapticSuccess()
+      return true
+    }
+
+    if (action.action === 'toggle_habit') {
+      const title = action.title
+      if (!title) return false
+
+      const checkpoints = state.habits?.checkpoints || []
+      const habit = checkpoints.find(h => {
+        const name = (h.title || h.name || '').toLowerCase()
+        return name.includes(title.toLowerCase())
+      })
+
+      if (!habit) {
+        showToast(`❌ Habit "${title}" not found`, 'error')
+        playWarningBeep()
+        hapticWarning()
+        return false
+      }
+
+      const habitId = habit.id
+      const dailyLogs = state.habits?.dailyLogs || []
+      const existingIndex = dailyLogs.findIndex(log => log.checkpointId === habitId && log.date === date)
+      let nextLogs
+
+      if (existingIndex >= 0) {
+        const existing = dailyLogs[existingIndex]
+        if (action.status === 'undone' || (action.status === undefined && existing.status === 'done')) {
+          nextLogs = dailyLogs.filter((_, idx) => idx !== existingIndex)
+        } else {
+          nextLogs = dailyLogs.map((log, idx) =>
+            idx === existingIndex
+              ? { ...log, status: 'done', loggedAt: new Date().toISOString() }
+              : log
+          )
+        }
+      } else {
+        if (action.status === 'undone') {
+          nextLogs = dailyLogs
+        } else {
+          nextLogs = [
+            ...dailyLogs,
+            {
+              id: crypto.randomUUID(),
+              checkpointId: habitId,
+              date,
+              status: 'done',
+              value: null,
+              note: '',
+              loggedAt: new Date().toISOString(),
+            },
+          ]
+        }
+      }
+
+      setModule('habits', {
+        ...state.habits,
+        dailyLogs: nextLogs,
+      })
+
+      const isDone = nextLogs.some(log => log.checkpointId === habitId && log.date === date && log.status === 'done')
+      showToast(`✅ ${isDone ? 'Completed' : 'Reset'} habit: ${habit.title || habit.name}`, 'success')
+      playSuccessSound()
+      hapticSuccess()
+      return true
+    }
+
+    return false
+  } catch (err) {
+    console.error('Error executing AI action:', err)
+    showToast(`❌ Action error: ${err.message}`, 'error')
+    playWarningBeep()
+    hapticWarning()
+    return false
+  }
+}
+
 const STARTERS = [
   'How much did I spend last month?',
   'How much waste time did I log?',
@@ -317,7 +627,8 @@ const STARTERS = [
 
 export default function AIChat() {
   const state = useAppState()
-  const { patchModule } = useAppActions()
+  const { patchModule, setModule } = useAppActions()
+  const { showToast } = useToast()
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -384,14 +695,37 @@ export default function AIChat() {
     setLoading(true)
     patchModule('aiChat', { messages: [...currentMessages, userMsg] })
 
+    const categories = {
+      expense: state.settings?.preferences?.expenseCategories || [],
+      time: state.settings?.preferences?.timeCategories || [],
+      study: state.study?.subjects || []
+    }
+
     try {
-      const reply = await askGemini(question, summary, coachTone, scoreWeights, trend7Days)
+      const reply = await askGemini(question, summary, coachTone, scoreWeights, trend7Days, categories)
+
+      let cleanReply = reply || ''
+      let actionObj = null
+
+      const actionMatch = cleanReply.match(/<action>([\s\S]*?)<\/action>/)
+      if (actionMatch) {
+        try {
+          actionObj = JSON.parse(actionMatch[1].trim())
+          cleanReply = cleanReply.replace(/<action>[\s\S]*?<\/action>/g, '').trim()
+        } catch (e) {
+          console.error('Failed to parse AI action JSON:', e)
+        }
+      }
+
+      if (actionObj) {
+        executeAIAction(actionObj, state, setModule, patchModule, showToast)
+      }
 
       const aiMsg = {
         id: crypto.randomUUID(),
         role: 'assistant',
         content:
-          reply ||
+          cleanReply ||
           `Here is your 30-day snapshot: ${currencySymbol}${summary.finance.totalSpend} spent, ${summary.study.totalHours} study hours, ${summary.timeflow.productiveHours} productive hours, ${summary.timeflow.wasteHours} waste hours, ${summary.habits.completionRate}% habit completion, average sleep ${summary.health.avgSleep ?? 'N/A'} hours, and average journal rating ${summary.journal.avgMood ?? 'N/A'}/5.`,
         createdAt: new Date().toISOString(),
       }

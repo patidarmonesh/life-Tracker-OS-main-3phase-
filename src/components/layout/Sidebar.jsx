@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import {
   Home, BarChart2, Clock, BookOpen, CheckSquare,
   Heart, FileText, Bot, PieChart, Settings, Target, Microscope, CalendarDays,
-  PanelLeftClose, PanelLeft,
+  PanelLeftClose, PanelLeft, Trophy,
 } from 'lucide-react'
 
 const navSections = [
@@ -17,11 +17,13 @@ const navSections = [
       { to: '/habits', icon: CheckSquare, label: 'Habits', color: 'var(--habit-color)' },
       { to: '/health', icon: Heart, label: 'Health', color: 'var(--health-color)' },
       { to: '/journal', icon: FileText, label: 'Journal', color: 'var(--journal-color)' },
+      { to: '/wisdom', icon: BookOpen, label: 'Wisdom Log', color: 'var(--accent-indigo)' },
     ],
   },
   {
     label: 'Tools',
     items: [
+      { to: '/rpg', icon: Trophy, label: 'Life RPG', color: '#EC4899' },
       { to: '/ai', icon: Bot, label: 'AI Chat', color: 'var(--accent-purple)' },
       { to: '/analytics', icon: PieChart, label: 'Analytics', color: 'var(--accent-cyan)' },
       { to: '/calendar', icon: CalendarDays, label: 'Calendar', color: 'var(--accent-emerald)' },

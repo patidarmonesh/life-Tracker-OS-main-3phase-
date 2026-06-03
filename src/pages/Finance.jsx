@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, subMonths } from 'date-fns'
 import { v4 as uuid } from 'uuid'
@@ -123,10 +124,16 @@ export default function Finance() {
   const state = useAppState()
   const { setModule } = useAppActions()
   const { showToast } = useToast()
+  const location = useLocation()
+
   const timezone = state.settings?.profile?.timezone
   const currencyCode = normalizeCurrency(state.settings?.profile?.currency)
   const currencySymbol = getCurrencySymbol(currencyCode)
   const today = getTodayDateKey(timezone)
+
+  const redirectDate = location.state?.selectedDate
+  const [selectedDate, setSelectedDate] = useState(redirectDate || today)
+
   const [activeTab, setActiveTab] = useState('today')
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEntry, setEditingEntry] = useState(null)
@@ -146,7 +153,7 @@ export default function Finance() {
     amount: '',
     category: 'Food & Drinks',
     description: '',
-    date: today,
+    date: selectedDate,
     time: format(new Date(), 'HH:mm'),
     paymentMethod: 'UPI',
     isImpulsive: false,
@@ -154,6 +161,11 @@ export default function Finance() {
     account: accounts[0] || 'Cash',
     tags: [],
   })
+
+  // Synchronize form date when selectedDate changes
+  useEffect(() => {
+    setForm(f => ({ ...f, date: selectedDate }))
+  }, [selectedDate])
 
   const expenses = state.finance?.expenses || EMPTY_ARRAY
   const bills = state.finance?.bills || EMPTY_ARRAY
@@ -201,7 +213,7 @@ export default function Finance() {
 
       totalsByDate.set(date, (totalsByDate.get(date) || 0) + amount)
 
-      if (date === today) {
+      if (date === selectedDate) {
         todaysExpenses.push(expense)
         todaysTotal += amount
       }
@@ -226,8 +238,8 @@ export default function Finance() {
       todayTotal: todaysTotal,
       monthTotal: currentMonthTotal,
       donutData: Object.entries(totalsByCategory)
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value),
+          .map(([name, value]) => ({ name, value }))
+          .sort((a, b) => b.value - a.value),
       dailyData: days.map(d => {
         const key = format(d, 'yyyy-MM-dd')
         return { day: format(d, 'd'), total: totalsByDate.get(key) || 0 }
@@ -235,10 +247,10 @@ export default function Finance() {
       monthlyData: monthlyBuckets.map(({ month, total }) => ({ month, total })),
       monthExpenses: currentMonthExpenses,
       accountTotals: Object.entries(totalsByAccount)
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value),
+          .map(([name, value]) => ({ name, value }))
+          .sort((a, b) => b.value - a.value),
     }
-  }, [expenses, today])
+  }, [expenses, selectedDate])
 
   const pct = Math.min(100, (todayTotal / dailyBudget) * 100)
   const monthPct = Math.min(100, (monthTotal / monthlyBudget) * 100)
@@ -248,7 +260,7 @@ export default function Finance() {
       amount: '',
       category: 'Food & Drinks',
       description: '',
-      date: today,
+      date: selectedDate,
       time: format(new Date(), 'HH:mm'),
       paymentMethod: 'UPI',
       isImpulsive: false,
@@ -636,6 +648,43 @@ export default function Finance() {
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {activeTab === 'today' && (
           <>
+            {/* Inline Date Selector for Back Dates */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  fontFamily: 'DM Sans, sans-serif',
+                  outline: 'none',
+                }}
+              />
+              {selectedDate !== today && (
+                <button
+                  onClick={() => setSelectedDate(today)}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border)',
+                    background: 'rgba(99,102,241,0.12)',
+                    color: '#B9C2FF',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  Reset to Today
+                </button>
+              )}
+            </div>
+
             <Card>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '14px' }}>
                 <div>

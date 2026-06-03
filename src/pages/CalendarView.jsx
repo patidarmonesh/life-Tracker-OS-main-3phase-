@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, subMonths, addMonths, isSameDay, isToday } from 'date-fns'
 import { useAppState } from '../context/appHooks'
+import { useNavigate } from 'react-router-dom'
 import Card from '../components/ui/Card'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { getTodayDateKey, formatDateKey } from '../utils/dateTime'
@@ -25,6 +26,7 @@ const MODULE_EMOJIS = {
 
 export default function CalendarView() {
   const state = useAppState()
+  const navigate = useNavigate()
   const timezone = state.settings?.profile?.timezone
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(null)
@@ -59,12 +61,15 @@ export default function CalendarView() {
 
     // Habits
     const checkpoints = state.habits?.checkpoints || []
-    const habitLogs = state.habits?.logs || {}
-    Object.entries(habitLogs).forEach(([dateKey, dayLog]) => {
-      const doneCount = Object.values(dayLog).filter(v => v === 'done').length
-      if (doneCount > 0) {
-        addEvent(dateKey, 'habit', `${doneCount}/${checkpoints.length} habits`, `${Math.round(doneCount / Math.max(1, checkpoints.length) * 100)}%`)
+    const dailyLogs = state.habits?.dailyLogs || []
+    const habitLogsByDate = {}
+    dailyLogs.forEach(log => {
+      if (log.status === 'done') {
+        habitLogsByDate[log.date] = (habitLogsByDate[log.date] || 0) + 1
       }
+    })
+    Object.entries(habitLogsByDate).forEach(([dateKey, doneCount]) => {
+      addEvent(dateKey, 'habit', `${doneCount}/${checkpoints.length} habits`, `${Math.round(doneCount / Math.max(1, checkpoints.length) * 100)}%`)
     })
 
     // Journal
@@ -104,6 +109,21 @@ export default function CalendarView() {
   }, [currentMonth, eventsByDate])
 
   const selectedEvents = selectedDate ? (eventsByDate[format(selectedDate, 'yyyy-MM-dd')] || []) : []
+
+  function handleEventClick(type, dateStr) {
+    const routeMap = {
+      expense: '/finance',
+      study: '/study',
+      timeflow: '/timeflow',
+      habit: '/habits',
+      journal: '/journal',
+      health: '/health',
+    }
+    const route = routeMap[type]
+    if (route) {
+      navigate(route, { state: { selectedDate: dateStr } })
+    }
+  }
 
   return (
     <div className="page-enter" style={{ maxWidth: '900px', margin: '0 auto', padding: '20px 24px' }}>
@@ -245,15 +265,32 @@ export default function CalendarView() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {selectedEvents.map((event, i) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                  padding: '10px 12px', borderRadius: '10px',
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border)',
-                }}>
+                <div
+                  key={i}
+                  onClick={() => handleEventClick(event.type, format(selectedDate, 'yyyy-MM-dd'))}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
+                    cursor: 'pointer',
+                    transition: 'transform 0.15s ease, background-color 0.15s ease',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'scale(1.008)'
+                    e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'scale(1)'
+                    e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'
+                  }}
+                >
                   <span style={{ fontSize: '18px' }}>{MODULE_EMOJIS[event.type]}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                       {event.title}
                     </div>
                     {event.detail && (
@@ -267,6 +304,7 @@ export default function CalendarView() {
                     fontWeight: 700, textTransform: 'uppercase',
                     background: `${MODULE_COLORS[event.type]}22`,
                     color: MODULE_COLORS[event.type],
+                    flexShrink: 0,
                   }}>
                     {event.type}
                   </div>

@@ -44,8 +44,11 @@ const initialState = {
   timeflow: { entries: [] },
   study: { sessions: [], goals: {}, subjects: [] },
   habits: { checkpoints: [], dailyLogs: [] },
-  health: { imported: {}, manualLogs: [] },
+  health: { imported: {}, manualLogs: [], energyLogs: [] },
   journal: { entries: [] },
+  wisdom: { entries: [
+    { id: 'default_1', text: 'Vichar vritti se aate h isle hamesha socha karo', source: 'Bhagavad Gita', isFloating: true, createdAt: new Date().toISOString() }
+  ] },
   settings: {
     profile: {
       name: 'Ravish',
@@ -115,6 +118,7 @@ const MODULE_FILE_MAP = {
   habits: 'habits.json',
   health: 'health.json',
   journal: 'journal.json',
+  wisdom: 'wisdom.json',
   settings: 'settings.json',
   aiChat: 'aiChat.json',
 }
@@ -124,8 +128,9 @@ const RECORD_COLLECTIONS_BY_MODULE = {
   timeflow: ['entries'],
   study: ['sessions'],
   habits: ['checkpoints', 'dailyLogs'],
-  health: ['manualLogs', 'bodyLogs', 'nutrition', 'hevyWorkouts'],
+  health: ['manualLogs', 'bodyLogs', 'nutrition', 'hevyWorkouts', 'energyLogs'],
   journal: ['entries'],
+  wisdom: ['entries'],
   aiChat: ['messages'],
 }
 
@@ -459,6 +464,7 @@ function mergeWithInitialState(data = {}) {
   const habits = asPlainObject(safeData.habits)
   const health = asPlainObject(safeData.health)
   const journal = asPlainObject(safeData.journal)
+  const wisdom = asPlainObject(safeData.wisdom)
   const settings = asPlainObject(safeData.settings)
   const preferences = asPlainObject(settings.preferences)
   const aiChat = asPlainObject(safeData.aiChat)
@@ -500,11 +506,17 @@ function mergeWithInitialState(data = {}) {
       bodyLogs: asArray(health.bodyLogs),
       nutrition: asArray(health.nutrition),
       hevyWorkouts: asArray(health.hevyWorkouts),
+      energyLogs: asArray(health.energyLogs),
     },
     journal: {
       ...initialState.journal,
       ...journal,
       entries: asArray(journal.entries),
+    },
+    wisdom: {
+      ...initialState.wisdom,
+      ...wisdom,
+      entries: asArray(wisdom.entries),
     },
     settings: {
       profile: {

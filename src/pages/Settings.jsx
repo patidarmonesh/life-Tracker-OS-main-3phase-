@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   User, Target, KeyRound, Bell, Palette, Database,
-  Info, Upload, Download, Trash2, Plus, X, Check, Wallet, HardDriveDownload, AlertTriangle
+  Info, Upload, Download, Trash2, Plus, X, Check, Wallet, HardDriveDownload, AlertTriangle, Volume2
 } from 'lucide-react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import Card from '../components/ui/Card'
@@ -9,6 +9,8 @@ import { saveGeminiApiKey, testGeminiApiKey, getGeminiApiKey } from '../services
 import Button from '../components/ui/Button'
 import { useToast } from '../context/toastContextCore'
 import { getCurrencySymbol, normalizeCurrency } from '../utils/currency'
+import { playSuccessSound, playWarningBeep, playNoticeChime, playSubtleClick } from '../hooks/useAudio'
+import { hapticSuccess, hapticWarning, hapticMedium, hapticLight } from '../hooks/useHaptic'
 
 const AVATARS = ['🧠', '🚀', '💻', '📚', '🎯', '🔥', '⚡', '🌙', '🏋️', '🎵', '🪴', '🧩']
 const DEFAULT_EXPENSE_CATEGORIES = [
@@ -63,6 +65,8 @@ export default function Settings() {
     weightGoal: 72,
     theme: 'dark',
     notificationsEnabled: true,
+    soundEnabled: true,
+    hapticsEnabled: true,
     dailyCheckinReminder: '21:00',
     budgetAlertAt: 80,
     streakRiskWarning: true,
@@ -195,10 +199,10 @@ export default function Settings() {
   }
 
   const VALID_MODULE_KEYS = new Set([
-    'finance', 'timeflow', 'study', 'habits', 'health', 'journal', 'settings', 'aiChat',
+    'finance', 'timeflow', 'study', 'habits', 'health', 'journal', 'wisdom', 'settings', 'aiChat',
   ])
 
-  const EXPECTED_KEYS = ['finance', 'study', 'timeflow', 'habits', 'health', 'journal', 'settings']
+  const EXPECTED_KEYS = ['finance', 'study', 'timeflow', 'habits', 'health', 'journal', 'wisdom', 'settings']
 
   function importBackup(e) {
     const file = e.target.files?.[0]
@@ -248,6 +252,7 @@ export default function Settings() {
       habits: { checkpoints: [], dailyLogs: [] },
       health: { bodyLogs: [], nutrition: [], hevyWorkouts: [], manualWorkouts: [] },
       journal: { entries: [] },
+      wisdom: { entries: [] },
       aiChat: { messages: [] },
     }
     if (emptyMap[moduleKey]) setModule(moduleKey, emptyMap[moduleKey])
@@ -310,6 +315,7 @@ export default function Settings() {
     habitsCount: state.habits?.checkpoints?.length || 0,
     healthLogs: (state.health?.bodyLogs?.length || 0) + (state.health?.manualWorkouts?.length || 0),
     journalEntries: state.journal?.entries?.length || 0,
+    wisdomCount: state.wisdom?.entries?.length || 0,
   }), [state])
 
   return (
@@ -682,6 +688,54 @@ export default function Settings() {
         </Card>
 
         <Card>
+          {sectionTitle(<Volume2 size={18} />, 'Sound & Haptic Feedback', 'Toggle synthesized wave audio and physical tap vibrations.')}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div>
+              <label style={labelStyle}>Sound FX</label>
+              <button
+                onClick={() => updatePref('soundEnabled', preferences.soundEnabled !== false ? false : true)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border)',
+                  background: preferences.soundEnabled !== false ? 'rgba(16,185,129,0.12)' : 'var(--bg-secondary)',
+                  color: preferences.soundEnabled !== false ? '#10B981' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontWeight: '700',
+                }}
+              >
+                {preferences.soundEnabled !== false ? 'Enabled 🔊' : 'Disabled 🔇'}
+              </button>
+            </div>
+            <div>
+              <label style={labelStyle}>Haptic Feedback</label>
+              <button
+                onClick={() => updatePref('hapticsEnabled', preferences.hapticsEnabled !== false ? false : true)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border)',
+                  background: preferences.hapticsEnabled !== false ? 'rgba(16,185,129,0.12)' : 'var(--bg-secondary)',
+                  color: preferences.hapticsEnabled !== false ? '#10B981' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontWeight: '700',
+                }}
+              >
+                {preferences.hapticsEnabled !== false ? 'Enabled 📳' : 'Disabled 🔇'}
+              </button>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap' }}>
+            <Button variant="secondary" onClick={() => { playSuccessSound(); hapticSuccess(); }}>Test Success</Button>
+            <Button variant="secondary" onClick={() => { playWarningBeep(); hapticWarning(); }}>Test Warning</Button>
+            <Button variant="secondary" onClick={() => { playNoticeChime(); hapticMedium(); }}>Test Notice</Button>
+            <Button variant="secondary" onClick={() => { playSubtleClick(); hapticLight(); }}>Test Tick</Button>
+          </div>
+        </Card>
+
+        <Card>
           {sectionTitle(<Database size={18} />, 'Data Management', 'Export, import, clear module data, or wipe the app with explicit confirmation.')}
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
             <Button onClick={exportAllData}>
@@ -704,6 +758,7 @@ export default function Settings() {
               ['habits', `Habits (${stat.habitsCount})`],
               ['health', `Health (${stat.healthLogs})`],
               ['journal', `Journal (${stat.journalEntries})`],
+              ['wisdom', `Wisdom (${stat.wisdomCount})`],
             ].map(([key, label]) => (
               <button
                 key={key}
@@ -814,7 +869,7 @@ export default function Settings() {
                 try {
                   const text = await file.text()
                   const data = JSON.parse(text)
-                  const MODULES = ['finance', 'study', 'timeflow', 'habits', 'health', 'journal', 'settings']
+                  const MODULES = ['finance', 'study', 'timeflow', 'habits', 'health', 'journal', 'wisdom', 'settings']
                   const validModules = MODULES.filter(m => data[m])
                   if (validModules.length === 0) {
                     showToast('Invalid backup file — no recognized modules found.', 'error')

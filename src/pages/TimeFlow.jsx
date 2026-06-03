@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
@@ -236,13 +237,17 @@ export default function TimeFlow() {
   const state = useAppState()
   const { setModule } = useAppActions()
   const { showToast } = useToast()
+  const location = useLocation()
+
   const timezone = state.settings?.profile?.timezone
   const today = getTodayDateKey(timezone)
   const categories = state.settings?.preferences?.timeCategories?.length
     ? state.settings.preferences.timeCategories
     : Object.keys(CATEGORY_COLORS)
   const defaultCategory = categories[0] || 'Study'
-  const [selectedDate, setSelectedDate] = useState(today)
+
+  const redirectDate = location.state?.selectedDate
+  const [selectedDate, setSelectedDate] = useState(redirectDate || today)
   const [activeTab, setActiveTab] = useState('day')
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEntry, setEditingEntry] = useState(null)
@@ -357,6 +362,63 @@ export default function TimeFlow() {
       tags: entryData.tags || [],
       source: editingEntry?.source || 'manual',
       updatedAt: new Date().toISOString(),
+      studySessionId: editingEntry?.studySessionId || null,
+    }
+
+    // Sync to Study module
+    if (payload.category === 'Study') {
+      const studySubjects = state.study?.subjects?.length 
+        ? state.study.subjects 
+        : ['Mathematics', 'Physics', 'CS Theory', 'Machine Learning', 'Deep Learning', 'DSA', 'Research Paper', 'Project Work', 'GATE Prep', 'Other']
+      
+      const cleanName = payload.name.replace(/^(?:study|studied|learning|learnt|read):\s*/i, '').trim()
+      const matchedSubject = studySubjects.find(s => cleanName.toLowerCase().includes(s.toLowerCase()))
+      
+      const sessionSubject = matchedSubject || studySubjects[0] || 'Other'
+      const sessionTopic = matchedSubject ? cleanName.replace(new RegExp(matchedSubject, 'i'), '').replace(/^[\s—\-•:]+/, '').trim() : cleanName
+
+      const studySessions = state.study?.sessions || []
+      
+      if (editingEntry && editingEntry.studySessionId) {
+        // Edit existing study session
+        const updatedSessions = studySessions.map(s => 
+          s.id === editingEntry.studySessionId 
+            ? {
+                ...s,
+                date: payload.date,
+                subject: sessionSubject,
+                topic: sessionTopic || s.topic || 'Logged via TimeFlow',
+                durationMinutes: payload.durationMinutes,
+                rating: payload.productivityScore,
+                notes: payload.notes || s.notes,
+                updatedAt: new Date().toISOString(),
+              }
+            : s
+        )
+        setModule('study', { ...state.study, sessions: updatedSessions })
+      } else {
+        // Create new linked study session
+        const studySessionId = uuid()
+        const newSession = {
+          id: studySessionId,
+          date: payload.date,
+          subject: sessionSubject,
+          topic: sessionTopic || 'Logged via TimeFlow',
+          focusType: 'Deep Focus',
+          durationMinutes: payload.durationMinutes,
+          notes: payload.notes || '',
+          rating: payload.productivityScore,
+          source: 'timeflow-sync',
+          createdAt: new Date().toISOString(),
+        }
+        payload.studySessionId = studySessionId
+        setModule('study', { ...state.study, sessions: [newSession, ...studySessions] })
+      }
+    } else if (editingEntry && editingEntry.category === 'Study' && editingEntry.studySessionId) {
+      // If it was study but category changed, delete study session
+      const studySessions = state.study?.sessions || []
+      setModule('study', { ...state.study, sessions: studySessions.filter(s => s.id !== editingEntry.studySessionId) })
+      payload.studySessionId = null
     }
 
     if (editingEntry) {
@@ -378,9 +440,21 @@ export default function TimeFlow() {
     const removed = allEntries.find(e => e.id === id)
     if (!removed) return
     const prev = allEntries
+    const prevStudy = state.study?.sessions || []
+
     setModule('timeflow', { ...state.timeflow, entries: allEntries.filter(e => e.id !== id) })
+    
+    if (removed.category === 'Study' && removed.studySessionId) {
+      setModule('study', { ...state.study, sessions: prevStudy.filter(s => s.id !== removed.studySessionId) })
+    }
+
     showToast('Entry deleted', 'warning', {
-      undo: () => setModule('timeflow', { ...state.timeflow, entries: prev }),
+      undo: () => {
+        setModule('timeflow', { ...state.timeflow, entries: prev })
+        if (removed.category === 'Study' && removed.studySessionId) {
+          setModule('study', { ...state.study, sessions: prevStudy })
+        }
+      },
     })
   }
 

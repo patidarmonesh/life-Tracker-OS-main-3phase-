@@ -6,11 +6,14 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, ReferenceLine
 } from 'recharts'
-import { Plus, Upload, Dumbbell, Utensils, Activity, Trash2, X } from 'lucide-react'
+import { Plus, Upload, Dumbbell, Utensils, Activity, Trash2, X, Zap } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import { formatDateKey, getTodayDateKey, toDateKey } from '../utils/dateTime'
+import { useToast } from '../context/toastContextCore'
+import { playSuccessSound, playSubtleClick } from '../hooks/useAudio'
+import { hapticSuccess, hapticLight } from '../hooks/useHaptic'
 
 /* ─── constants ────────────────────────────────────────────── */
 const METRIC_CONFIG = {
@@ -66,8 +69,61 @@ function formatExSets(exercise) {
 export default function Health() {
   const state = useAppState()
   const { setModule } = useAppActions()
+  const { showToast } = useToast()
   const timezone = state.settings?.profile?.timezone
   const today = getTodayDateKey(timezone)
+
+  const [energyLevel, setEnergyLevel] = useState(3)
+  const [energyNotes, setEnergyNotes] = useState('')
+
+  const energyLogs = state.health?.energyLogs || []
+
+  function handleLogEnergy() {
+    const newLog = {
+      id: uuid(),
+      date: today,
+      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      level: Number(energyLevel),
+      notes: energyNotes.trim(),
+      createdAt: new Date().toISOString()
+    }
+    const updatedLogs = [newLog, ...energyLogs]
+    setModule('health', {
+      ...state.health,
+      energyLogs: updatedLogs
+    })
+    setEnergyNotes('')
+    showToast('Logged energy level! ⚡', 'success')
+    playSuccessSound()
+    hapticSuccess()
+  }
+
+  const chartData = useMemo(() => {
+    const hourlyData = {}
+    for (let h = 0; h < 24; h++) {
+      hourlyData[h] = { count: 0, sum: 0 }
+    }
+
+    energyLogs.forEach(log => {
+      const timeStr = log.time || ''
+      const hourPart = parseInt(timeStr.split(':')[0])
+      if (!isNaN(hourPart) && hourPart >= 0 && hourPart < 24) {
+        hourlyData[hourPart].sum += Number(log.level)
+        hourlyData[hourPart].count += 1
+      }
+    })
+
+    const result = []
+    for (let h = 0; h < 24; h++) {
+      if (hourlyData[h].count > 0) {
+        result.push({
+          hour: `${String(h).padStart(2, '0')}:00`,
+          avgLevel: parseFloat((hourlyData[h].sum / hourlyData[h].count).toFixed(1)),
+        })
+      }
+    }
+    return result.sort((a, b) => a.hour.localeCompare(b.hour))
+  }, [energyLogs])
 
   // goals from settings
   const prefs = state.settings?.preferences || {}
@@ -485,9 +541,9 @@ export default function Health() {
 
       {/* ── Tabs ────────────────────────────────────────────── */}
       <div style={{ display:'flex', gap:'2px', padding:'16px 24px 0', borderBottom:'1px solid var(--border)', overflowX:'auto' }}>
-        {['today','body','nutrition','workouts','overview'].map(tab=>(
+        {['today','body','nutrition','workouts','energy','overview'].map(tab=>(
           <button key={tab} onClick={()=>setActiveTab(tab)} style={tabStyle(activeTab===tab)}>
-            {tab==='today'?'⚡ Today':tab==='body'?'⚖️ Body':tab==='nutrition'?'🥗 Nutrition':tab==='workouts'?'🏋️ Workouts':'📊 Overview'}
+            {tab==='today'?'⚡ Today':tab==='body'?'⚖️ Body':tab==='nutrition'?'🥗 Nutrition':tab==='workouts'?'🏋️ Workouts':tab==='energy'?'🔋 Energy Rhythm':'📊 Overview'}
           </button>
         ))}
       </div>
@@ -955,7 +1011,163 @@ export default function Health() {
           </Card>
         </>}
 
+        {/* ══════ ENERGY TAB ═════════════════════════════════ */}
+        {activeTab === 'energy' && <>
+          {/* Energy quick log card */}
+          <Card style={{ padding: '16px' }}>
+            <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              🔋 Log Current Energy
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                {[1, 2, 3, 4, 5].map((lvl) => {
+                  const colors = {
+                    1: { bg: 'rgba(59, 130, 246, 0.1)', text: '#3B82F6', emoji: '😴', desc: 'Exhausted' },
+                    2: { bg: 'rgba(99, 102, 241, 0.1)', text: '#6366F1', emoji: '📉', desc: 'Low' },
+                    3: { bg: 'rgba(245, 158, 11, 0.1)', text: '#F59E0B', emoji: '😐', desc: 'Moderate' },
+                    4: { bg: 'rgba(234, 179, 8, 0.1)', text: '#EAB308', emoji: '📈', desc: 'High' },
+                    5: { bg: 'rgba(239, 68, 68, 0.1)', text: '#EF4444', emoji: '⚡', desc: 'Peak' },
+                  }
+                  const c = colors[lvl]
+                  const isSelected = Number(energyLevel) === lvl
+                  return (
+                    <button
+                      key={lvl}
+                      onClick={() => { setEnergyLevel(lvl); playSubtleClick(); hapticLight(); }}
+                      style={{
+                        flex: '1 1 70px',
+                        padding: '10px 4px',
+                        borderRadius: '12px',
+                        border: isSelected ? `2px solid ${c.text}` : '1px solid var(--border)',
+                        background: isSelected ? c.bg : 'var(--bg-secondary)',
+                        color: isSelected ? c.text : 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <span style={{ fontSize: '20px' }}>{c.emoji}</span>
+                      <span style={{ fontSize: '11px', fontWeight: '700' }}>{c.desc}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              <div>
+                <label style={labelStyle}>Context / Notes</label>
+                <input
+                  style={inputStyle}
+                  placeholder="e.g. Just woke up, Post-lunch slump, Studying DSA..."
+                  value={energyNotes}
+                  onChange={(e) => setEnergyNotes(e.target.value)}
+                />
+              </div>
+              <Button onClick={handleLogEnergy} disabled={!energyLevel}>
+                <Plus size={15} /> Log Energy
+              </Button>
+            </div>
+          </Card>
+
+          {/* Energy Flow Rhythm Chart */}
+          <Card>
+            <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '4px' }}>
+              Energy Flow Rhythm
+            </h3>
+            <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+              Fluctuations by hour of day. Use this to schedule deep focus study blocks when your energy peaks!
+            </p>
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={chartData} margin={{ top: 10, right: 15, bottom: 5, left: -25 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="hour" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`Level ${v} / 5`, 'Average Energy']} />
+                  <Line type="monotone" dataKey="avgLevel" stroke="#F59E0B" strokeWidth={3} dot={{ fill: '#F59E0B', r: 4 }} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                🔋 Log energy levels throughout the day to build your productivity rhythm chart.
+              </div>
+            )}
+          </Card>
+
+          {/* History List */}
+          <Card>
+            <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '12px' }}>
+              Energy Log History
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
+              {energyLogs.map((log) => {
+                const colors = {
+                  1: { emoji: '😴', desc: 'Exhausted', color: '#3B82F6' },
+                  2: { emoji: '📉', desc: 'Low Energy', color: '#6366F1' },
+                  3: { emoji: '😐', desc: 'Moderate', color: '#F59E0B' },
+                  4: { emoji: '📈', desc: 'High Energy', color: '#EAB308' },
+                  5: { emoji: '⚡', desc: 'Peak Performance', color: '#EF4444' },
+                }
+                const meta = colors[log.level] || { emoji: '🔋', desc: 'Energy', color: '#F59E0B' }
+                return (
+                  <div
+                    key={log.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 12px',
+                      background: 'var(--bg-secondary)',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border)',
+                      fontSize: '13px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '20px' }}>{meta.emoji}</span>
+                      <div>
+                        <div style={{ fontWeight: '700', color: meta.color }}>
+                          {meta.desc} (Level {log.level})
+                        </div>
+                        {log.notes && <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{log.notes}</div>}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)', fontSize: '11px' }}>
+                      <div>{log.date} {log.time}</div>
+                      <button
+                        onClick={() => {
+                          const prev = energyLogs
+                          setModule('health', { ...state.health, energyLogs: energyLogs.filter((l) => l.id !== log.id) })
+                          showToast('Energy log deleted', 'warning', {
+                            undo: () => setModule('health', { ...state.health, energyLogs: prev })
+                          })
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--text-muted)',
+                          padding: '4px',
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              {energyLogs.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                  No energy logs recorded yet.
+                </div>
+              )}
+            </div>
+          </Card>
+        </>}
+
       </div>
+
 
       {/* ═══════════════ MODALS ══════════════════════════════ */}
 

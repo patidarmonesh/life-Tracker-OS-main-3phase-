@@ -9,11 +9,24 @@
 
 const supportsVibration = typeof navigator !== 'undefined' && 'vibrate' in navigator
 
+function isHapticsEnabled() {
+  try {
+    const rawMeta = localStorage.getItem('lifeos-module-state-v1:settings')
+    if (rawMeta) {
+      const parsed = JSON.parse(rawMeta)
+      return parsed.preferences?.hapticsEnabled !== false
+    }
+  } catch (e) {
+    // Ignore
+  }
+  return true
+}
+
 /**
  * Light tap feedback — 10ms vibration.
  */
 export function hapticLight() {
-  if (supportsVibration) {
+  if (supportsVibration && isHapticsEnabled()) {
     try { navigator.vibrate(10) } catch { /* silently ignore */ }
   }
 }
@@ -22,7 +35,7 @@ export function hapticLight() {
  * Medium tap feedback — 20ms vibration.
  */
 export function hapticMedium() {
-  if (supportsVibration) {
+  if (supportsVibration && isHapticsEnabled()) {
     try { navigator.vibrate(20) } catch { /* silently ignore */ }
   }
 }
@@ -31,7 +44,7 @@ export function hapticMedium() {
  * Success pattern — two short pulses.
  */
 export function hapticSuccess() {
-  if (supportsVibration) {
+  if (supportsVibration && isHapticsEnabled()) {
     try { navigator.vibrate([15, 50, 15]) } catch { /* silently ignore */ }
   }
 }
@@ -40,10 +53,11 @@ export function hapticSuccess() {
  * Warning/error pattern — one longer pulse.
  */
 export function hapticWarning() {
-  if (supportsVibration) {
+  if (supportsVibration && isHapticsEnabled()) {
     try { navigator.vibrate(40) } catch { /* silently ignore */ }
   }
 }
 
 // Default export for simple usage: haptic()
 export const haptic = hapticLight
+

@@ -10,6 +10,9 @@ import Auth from './pages/Auth'
 import AppShell from './components/layout/AppShell'
 import Skeleton from './components/ui/Skeleton'
 
+import { useLocation } from 'react-router-dom'
+import { HomeSkeleton, FinanceSkeleton, AnalyticsSkeleton, GeneralSkeleton } from './components/ui/Skeleton'
+
 const Home = lazy(() => import('./pages/Home'))
 const Finance = lazy(() => import('./pages/Finance'))
 const TimeFlow = lazy(() => import('./pages/TimeFlow'))
@@ -23,6 +26,8 @@ const Settings = lazy(() => import('./pages/Settings'))
 const ScoringStudio = lazy(() => import('./pages/ScoringStudio'))
 const AnalysisBuilder = lazy(() => import('./pages/AnalysisBuilder'))
 const CalendarView = lazy(() => import('./pages/CalendarView'))
+const RPG = lazy(() => import('./pages/RPG'))
+const Wisdom = lazy(() => import('./pages/Wisdom'))
 
 function LoadingScreen() {
   return (
@@ -73,12 +78,27 @@ function ProtectedRoute({ children }) {
 }
 
 function ShellPage({ children }) {
+  const location = useLocation()
+
+  const skeletonFallback = (() => {
+    switch (location.pathname) {
+      case '/':
+        return <HomeSkeleton />
+      case '/finance':
+        return <FinanceSkeleton />
+      case '/analytics':
+        return <AnalyticsSkeleton />
+      default:
+        return <GeneralSkeleton />
+    }
+  })()
+
   return (
     <ProtectedRoute>
       <AppProvider>
         <AppShell>
           <PageErrorBoundary>
-            <Suspense fallback={<LoadingScreen />}>{children}</Suspense>
+            <Suspense fallback={skeletonFallback}>{children}</Suspense>
           </PageErrorBoundary>
         </AppShell>
       </AppProvider>
@@ -110,6 +130,8 @@ function AppRoutes() {
       <Route path="/analysis-builder" element={<ShellPage><AnalysisBuilder /></ShellPage>} />
       <Route path="/scoring" element={<ShellPage><ScoringStudio /></ShellPage>} />
       <Route path="/calendar" element={<ShellPage><CalendarView /></ShellPage>} />
+      <Route path="/rpg" element={<ShellPage><RPG /></ShellPage>} />
+      <Route path="/wisdom" element={<ShellPage><Wisdom /></ShellPage>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

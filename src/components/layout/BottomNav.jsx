@@ -16,6 +16,7 @@ import {
   Microscope,
   CalendarDays,
   X,
+  Trophy,
 } from 'lucide-react'
 
 const primaryTabs = [
@@ -26,6 +27,7 @@ const primaryTabs = [
 ]
 
 const moreTabs = [
+  { to: '/rpg', icon: Trophy, label: 'Life RPG', color: '#EC4899' },
   { to: '/habits', icon: CheckSquare, label: 'Habits', color: 'var(--habit-color)' },
   { to: '/health', icon: Heart, label: 'Health', color: 'var(--health-color)' },
   { to: '/journal', icon: FileText, label: 'Journal', color: 'var(--journal-color)' },
@@ -34,6 +36,7 @@ const moreTabs = [
   { to: '/calendar', icon: CalendarDays, label: 'Calendar', color: 'var(--accent-emerald)' },
   { to: '/analysis-builder', icon: Microscope, label: 'Analysis', color: 'var(--accent-purple)' },
   { to: '/scoring', icon: Target, label: 'Scoring', color: 'var(--accent-amber)' },
+  { to: '/wisdom', icon: BookOpen, label: 'Wisdom', color: 'var(--accent-indigo)' },
   { to: '/settings', icon: Settings, label: 'Settings', color: 'var(--text-secondary)' },
 ]
 

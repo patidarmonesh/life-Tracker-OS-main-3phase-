@@ -34,6 +34,8 @@ export default function Home() {
   const [showConfetti, setShowConfetti] = useState(false)
   const [showWeeklySummary, setShowWeeklySummary] = useState(false)
   const confettiTimeoutRef = useRef(null)
+  const [energyLevel, setEnergyLevel] = useState(3)
+  const [energyNotes, setEnergyNotes] = useState('')
   const [isCompactHero, setIsCompactHero] = useState(
     typeof window !== 'undefined' ? window.innerWidth < 920 : false
   )
@@ -180,6 +182,24 @@ export default function Home() {
     } finally {
       setAiInsightLoading(false)
     }
+  }
+
+  function handleLogEnergy() {
+    const newLog = {
+      id: uuid(),
+      date: today,
+      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      level: Number(energyLevel),
+      notes: energyNotes.trim(),
+      createdAt: new Date().toISOString()
+    }
+    const updatedLogs = [newLog, ...(state.health?.energyLogs || [])]
+    setModule('health', {
+      ...state.health,
+      energyLogs: updatedLogs
+    })
+    setEnergyNotes('')
+    showToast('Logged energy level! ⚡', 'success')
   }
 
   const fabActions = [
@@ -564,6 +584,105 @@ export default function Home() {
 
         {/* Natural Language Quick Log */}
         <NLInput state={state} setModule={setModule} patchModule={patchModule} showToast={showToast} />
+
+        {/* Quick Energy Check-in Widget */}
+        <Card
+          style={{
+            padding: '16px',
+            borderRadius: '20px',
+            background: 'rgba(15,23,42,0.48)',
+            border: '1px solid rgba(148,163,184,0.10)',
+            boxShadow: '0 10px 30px rgba(2,6,23,0.16)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: '14px', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Zap size={15} color="#EAB308" /> How is your energy level right now?
+            </h3>
+            <span
+              style={{ fontSize: '11px', color: 'var(--accent-indigo)', cursor: 'pointer', fontWeight: 700 }}
+              onClick={() => navigate('/health')}
+            >
+              View Rhythm 📊
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap' }}>
+            {[1, 2, 3, 4, 5].map((lvl) => {
+              const config = {
+                1: { emoji: '😴', label: 'Exhausted', color: '#3B82F6' },
+                2: { emoji: '📉', label: 'Tired', color: '#6366F1' },
+                3: { emoji: '😐', label: 'Moderate', color: '#F59E0B' },
+                4: { emoji: '📈', label: 'High', color: '#EAB308' },
+                5: { emoji: '⚡', label: 'Peak', color: '#EF4444' }
+              }
+              const isSel = energyLevel === lvl
+              const conf = config[lvl]
+              return (
+                <button
+                  key={lvl}
+                  type="button"
+                  onClick={() => setEnergyLevel(lvl)}
+                  style={{
+                    flex: '1 1 70px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    padding: '8px 4px',
+                    borderRadius: '12px',
+                    border: isSel ? `2px solid ${conf.color}` : '1px solid rgba(148,163,184,0.1)',
+                    background: isSel ? `${conf.color}15` : 'rgba(30,41,59,0.4)',
+                    color: isSel ? conf.color : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <span style={{ fontSize: '18px' }}>{conf.emoji}</span>
+                  <span style={{ fontSize: '10px', fontWeight: 700 }}>{conf.label}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: '10px',
+                background: 'rgba(30,41,59,0.3)',
+                border: '1px solid rgba(148,163,184,0.1)',
+                color: 'var(--text-primary)',
+                fontSize: '13px',
+                outline: 'none',
+              }}
+              placeholder="What are you doing? (e.g. studying, post-meal, workout)"
+              value={energyNotes}
+              onChange={(e) => setEnergyNotes(e.target.value)}
+            />
+            <button
+              onClick={handleLogEnergy}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '10px',
+                background: 'var(--accent-indigo)',
+                color: '#fff',
+                fontSize: '13px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              Log
+            </button>
+          </div>
+        </Card>
 
         {/* Smart Reminders */}
         <SmartReminders state={state} />
