@@ -6,6 +6,7 @@ import KeyboardShortcuts from '../ui/KeyboardShortcuts'
 import ScrollToTop from '../ui/ScrollToTop'
 import CommandPalette from '../ui/CommandPalette'
 import PWAInstallPrompt from '../ui/PWAInstallPrompt'
+import ReconnectBanner from '../ui/ReconnectBanner'
 import { useAppState, useAppActions } from '../../context/appHooks'
 import { useNavigate } from 'react-router-dom'
 import { Sparkles, Plus, DollarSign, Clock, CheckSquare, Brain, X, Droplet, Mic, MicOff } from 'lucide-react'
@@ -823,6 +824,7 @@ export default function AppShell({ children }) {
         overscrollBehavior: 'contain',
       }}>
         <TopBar isMobile />
+        <ReconnectBanner />
         {renderFloatingWisdom()}
         <main style={{
           flex: 1,
@@ -852,6 +854,7 @@ export default function AppShell({ children }) {
       <Sidebar />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <TopBar isMobile={false} />
+        <ReconnectBanner />
         {renderFloatingWisdom()}
         <main style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
           <div className="page-enter">
