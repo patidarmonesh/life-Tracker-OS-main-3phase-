@@ -10,14 +10,21 @@ const BILLS_FOLDER_ID_KEY = 'lifeos_drive_bills_folder_id'
 const FILE_ID_CACHE_KEY = 'lifeos_drive_file_ids'
 
 const DEFAULT_FILES = {
-  'finance.json': { expenses: [], budgets: {}, categories: [], bills: [] },
-  'timeflow.json': { entries: [] },
-  'study.json': { sessions: [], goals: {}, subjects: [] },
-  'habits.json': { checkpoints: [], dailyLogs: [] },
-  'health.json': { imported: {}, manualLogs: [] },
-  'journal.json': { entries: [] },
-  'settings.json': { profile: {}, preferences: {} },
-  'aiChat.json': { messages: [] },
+  'finance.json':     { expenses: [], budgets: {}, categories: [], bills: [], savingsGoals: [] },
+  'timeflow.json':    { entries: [] },
+  'study.json':       { sessions: [], goals: {}, subjects: [], flashcards: [] },
+  'habits.json':      { checkpoints: [], dailyLogs: [] },
+  'health.json':      { imported: {}, manualLogs: [], energyLogs: [], waterLogs: [] },
+  'journal.json':     { entries: [] },
+  'wisdom.json':      { entries: [] },
+  'goals.json':       { entries: [] },
+  'decisions.json':   { entries: [] },
+  'crm.json':         { contacts: [] },
+  'secondBrain.json': { notes: [] },
+  'readings.json':    { books: [] },
+  'meditations.json': { sessions: [] },
+  'settings.json':    { profile: {}, preferences: {} },
+  'aiChat.json':      { messages: [] },
 }
 
 const debounceMap = new Map()
