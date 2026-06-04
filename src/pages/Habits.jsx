@@ -9,6 +9,8 @@ import Modal from '../components/ui/Modal'
 import ConfirmDeleteButton from '../components/ui/ConfirmDeleteButton'
 import { useToast } from '../context/toastContextCore'
 import { formatDateKey, getMonthDays, getTodayDateKey, shiftMonth, toDateKey } from '../utils/dateTime'
+import { playSuccessSound, playWarningBeep } from '../hooks/useAudio'
+import { hapticSuccess, hapticLight } from '../hooks/useHaptic'
 
 const HABIT_ICONS = ['💪', '📚', '💧', '🧘', '🏃', '🥗', '😴', '✍️', '🎯', '🚫', '💊', '🧠', '🌿', '🛁', '📵']
 const HABIT_COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#EC4899', '#8B5CF6', '#F97316', '#06B6D4', '#EF4444', '#6366F1', '#84CC16']
@@ -40,6 +42,7 @@ export default function Habits() {
   function toggleHabit(habitId, date) {
     const existingIndex = dailyLogs.findIndex(log => log.checkpointId === habitId && log.date === date)
     let nextLogs
+    let isCompleting = false
 
     if (existingIndex >= 0) {
       const existing = dailyLogs[existingIndex]
@@ -51,6 +54,7 @@ export default function Habits() {
             ? { ...log, status: 'done', loggedAt: new Date().toISOString() }
             : log
         )
+        isCompleting = true
       }
     } else {
       nextLogs = [
@@ -65,6 +69,7 @@ export default function Habits() {
           loggedAt: new Date().toISOString(),
         },
       ]
+      isCompleting = true
     }
 
     setModule('habits', {
@@ -72,6 +77,14 @@ export default function Habits() {
       checkpoints: habits,
       dailyLogs: nextLogs,
     })
+
+    if (isCompleting) {
+      playSuccessSound()
+      hapticSuccess()
+    } else {
+      playWarningBeep()
+      hapticLight()
+    }
   }
 
   function closeModal() {
@@ -177,6 +190,67 @@ export default function Habits() {
   const todayDone = habits.filter(h => isCompleted(h.id, selectedDate)).length
   const todayPct = habits.length > 0 ? Math.round((todayDone / habits.length) * 100) : 0
 
+  const aiPredictions = useMemo(() => {
+    if (!habits.length || !dailyLogs.length) return []
+    const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+    const predictions = []
+
+    habits.forEach(habit => {
+      const logs = dailyLogs.filter(log => log.checkpointId === habit.id)
+      if (logs.length < 5) return
+
+      const weekdayStats = {
+        0: { done: 0, total: 0 },
+        1: { done: 0, total: 0 },
+        2: { done: 0, total: 0 },
+        3: { done: 0, total: 0 },
+        4: { done: 0, total: 0 },
+        5: { done: 0, total: 0 },
+        6: { done: 0, total: 0 },
+      }
+
+      for (let i = 0; i < 30; i++) {
+        const dateObj = subDays(new Date(), i)
+        const dateKey = toDateKey(dateObj, timezone)
+        const dayOfWeek = dateObj.getDay()
+        
+        const isDone = logs.some(l => l.date === dateKey && l.status === 'done')
+        weekdayStats[dayOfWeek].total += 1
+        if (isDone) weekdayStats[dayOfWeek].done += 1
+      }
+
+      let weakestDay = -1
+      let lowestRate = 1.0
+
+      Object.entries(weekdayStats).forEach(([day, stat]) => {
+        if (stat.total >= 3) {
+          const rate = stat.done / stat.total
+          if (rate < 0.5 && rate < lowestRate) {
+            lowestRate = rate
+            weakestDay = parseInt(day)
+          }
+        }
+      })
+
+      if (weakestDay !== -1) {
+        const todayDayOfWeek = new Date().getDay()
+        if (todayDayOfWeek === weakestDay || (todayDayOfWeek + 1) % 7 === weakestDay) {
+          predictions.push({
+            habitId: habit.id,
+            habitTitle: getHabitTitle(habit),
+            icon: habit.icon || '🎯',
+            color: habit.color || '#10B981',
+            weakDayName: weekdayNames[weakestDay],
+            failureRisk: Math.round((1 - lowestRate) * 100),
+            isToday: todayDayOfWeek === weakestDay,
+          })
+        }
+      }
+    })
+
+    return predictions
+  }, [habits, dailyLogs, timezone])
+
   const tabStyle = (active, color = '#10B981') => ({
     padding: '8px 18px', borderRadius: '8px 8px 0 0', border: 'none', cursor: 'pointer',
     background: active ? 'var(--bg-card)' : 'transparent',
@@ -232,6 +306,29 @@ export default function Habits() {
               <div style={{ height: '100%', width: `${todayPct}%`, background: todayPct === 100 ? '#10B981' : '#F59E0B', borderRadius: '4px', transition: 'width 0.6s ease' }} />
             </div>
           </Card>
+
+          {/* AI Streak Guardian Predictor */}
+          {aiPredictions.length > 0 && (
+            <Card style={{ padding: '14px', background: 'linear-gradient(135deg, rgba(239,68,68,0.03) 0%, rgba(245,158,11,0.03) 100%)', border: '1px dashed rgba(239,68,68,0.3)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '16px' }}>🛡️</span>
+                <span style={{ fontSize: '12px', fontWeight: '800', color: '#F87171', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AI Streak Guardian Warnings</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {aiPredictions.map(pred => (
+                  <div key={pred.habitId} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '12px' }}>
+                    <span style={{ fontSize: '16px' }}>{pred.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontWeight: '700', color: 'var(--text-primary)' }}>{pred.habitTitle}</span> is at <strong style={{ color: '#F87171' }}>{pred.failureRisk}% risk</strong> of failing {pred.isToday ? 'today' : 'tomorrow'} ({pred.weakDayName}).
+                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        💡 Pro-tip: Historically, you miss this habit on {pred.weakDayName}s. Do it first thing in the morning!
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {habits.map(habit => {

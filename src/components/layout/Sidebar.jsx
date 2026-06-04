@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import {
   Home, BarChart2, Clock, BookOpen, CheckSquare,
   Heart, FileText, Bot, PieChart, Settings, Target, Microscope, CalendarDays,
-  PanelLeftClose, PanelLeft, Trophy,
+  PanelLeftClose, PanelLeft, Trophy, Brain, Users, Book, Wind, HelpCircle
 } from 'lucide-react'
 
 const navSections = [
@@ -18,6 +18,7 @@ const navSections = [
       { to: '/health', icon: Heart, label: 'Health', color: 'var(--health-color)' },
       { to: '/journal', icon: FileText, label: 'Journal', color: 'var(--journal-color)' },
       { to: '/wisdom', icon: BookOpen, label: 'Wisdom Log', color: 'var(--accent-indigo)' },
+      { to: '/goals', icon: Target, label: 'Goals & OKRs', color: 'var(--accent-indigo)' },
     ],
   },
   {
@@ -29,6 +30,12 @@ const navSections = [
       { to: '/calendar', icon: CalendarDays, label: 'Calendar', color: 'var(--accent-emerald)' },
       { to: '/analysis-builder', icon: Microscope, label: 'Analysis Builder', color: 'var(--accent-purple)' },
       { to: '/scoring', icon: Target, label: 'Scoring Studio', color: 'var(--accent-amber)' },
+      { to: '/decisions', icon: HelpCircle, label: 'Decision Journal', color: 'var(--accent-amber)' },
+      { to: '/crm', icon: Users, label: 'Relations CRM', color: '#10B981' },
+      { to: '/brain', icon: Brain, label: 'Second Brain', color: 'var(--accent-purple)' },
+      { to: '/readings', icon: Book, label: 'Reading Tracker', color: 'var(--accent-indigo)' },
+      { to: '/meditations', icon: Wind, label: 'Meditation', color: 'var(--accent-cyan)' },
+      { to: '/wrapped', icon: Sparkles, label: 'Year in Review', color: '#FCD34D' },
     ],
   },
   {

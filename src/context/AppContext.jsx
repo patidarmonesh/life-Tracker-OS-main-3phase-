@@ -40,15 +40,23 @@ const MAX_LOCAL_RETRY_ATTEMPTS = 6
 const MAX_RETRY_DELAY = 120000
 
 const initialState = {
-  finance: { expenses: [], budgets: {}, categories: [], bills: [] },
+  finance: { expenses: [], budgets: {}, categories: [], bills: [], savingsGoals: [] },
   timeflow: { entries: [] },
-  study: { sessions: [], goals: {}, subjects: [] },
+  study: { sessions: [], goals: {}, subjects: [], flashcards: [] },
   habits: { checkpoints: [], dailyLogs: [] },
-  health: { imported: {}, manualLogs: [], energyLogs: [] },
+  health: { imported: {}, manualLogs: [], energyLogs: [], waterLogs: [] },
   journal: { entries: [] },
   wisdom: { entries: [
     { id: 'default_1', text: 'Vichar vritti se aate h isle hamesha socha karo', source: 'Bhagavad Gita', isFloating: true, createdAt: new Date().toISOString() }
   ] },
+  goals: { entries: [
+    { id: 'sample_goal_1', title: 'Build a high-performance Life OS', description: 'Implement next-level productivity features and study trackers', timeframe: 'Year', category: 'Career', milestones: [{ id: 'm1', text: 'Define roadmap', isCompleted: true }, { id: 'm2', text: 'Write code & tests', isCompleted: false }], linkedHabits: [], linkedSubjects: [], createdAt: new Date().toISOString(), targetDate: '2026-12-31' }
+  ] },
+  decisions: { entries: [] },
+  crm: { contacts: [] },
+  secondBrain: { notes: [] },
+  readings: { books: [] },
+  meditations: { sessions: [] },
   settings: {
     profile: {
       name: 'Ravish',
@@ -119,18 +127,30 @@ const MODULE_FILE_MAP = {
   health: 'health.json',
   journal: 'journal.json',
   wisdom: 'wisdom.json',
+  goals: 'goals.json',
+  decisions: 'decisions.json',
+  crm: 'crm.json',
+  secondBrain: 'secondBrain.json',
+  readings: 'readings.json',
+  meditations: 'meditations.json',
   settings: 'settings.json',
   aiChat: 'aiChat.json',
 }
 
 const RECORD_COLLECTIONS_BY_MODULE = {
-  finance: ['expenses', 'bills'],
+  finance: ['expenses', 'bills', 'savingsGoals'],
   timeflow: ['entries'],
-  study: ['sessions'],
+  study: ['sessions', 'flashcards'],
   habits: ['checkpoints', 'dailyLogs'],
-  health: ['manualLogs', 'bodyLogs', 'nutrition', 'hevyWorkouts', 'energyLogs'],
+  health: ['manualLogs', 'bodyLogs', 'nutrition', 'hevyWorkouts', 'energyLogs', 'waterLogs'],
   journal: ['entries'],
   wisdom: ['entries'],
+  goals: ['entries'],
+  decisions: ['entries'],
+  crm: ['contacts'],
+  secondBrain: ['notes'],
+  readings: ['books'],
+  meditations: ['sessions'],
   aiChat: ['messages'],
 }
 
@@ -465,6 +485,12 @@ function mergeWithInitialState(data = {}) {
   const health = asPlainObject(safeData.health)
   const journal = asPlainObject(safeData.journal)
   const wisdom = asPlainObject(safeData.wisdom)
+  const goals = asPlainObject(safeData.goals)
+  const decisions = asPlainObject(safeData.decisions)
+  const crm = asPlainObject(safeData.crm)
+  const secondBrain = asPlainObject(safeData.secondBrain)
+  const readings = asPlainObject(safeData.readings)
+  const meditations = asPlainObject(safeData.meditations)
   const settings = asPlainObject(safeData.settings)
   const preferences = asPlainObject(settings.preferences)
   const aiChat = asPlainObject(safeData.aiChat)
@@ -479,6 +505,7 @@ function mergeWithInitialState(data = {}) {
       budgets: asPlainObject(finance.budgets),
       categories: asArray(finance.categories),
       bills: asArray(finance.bills),
+      savingsGoals: asArray(finance.savingsGoals),
     },
     timeflow: {
       ...initialState.timeflow,
@@ -491,6 +518,7 @@ function mergeWithInitialState(data = {}) {
       sessions: asArray(study.sessions),
       goals: asPlainObject(study.goals),
       subjects: asArray(study.subjects),
+      flashcards: asArray(study.flashcards),
     },
     habits: {
       ...initialState.habits,
@@ -507,6 +535,7 @@ function mergeWithInitialState(data = {}) {
       nutrition: asArray(health.nutrition),
       hevyWorkouts: asArray(health.hevyWorkouts),
       energyLogs: asArray(health.energyLogs),
+      waterLogs: asArray(health.waterLogs),
     },
     journal: {
       ...initialState.journal,
@@ -517,6 +546,36 @@ function mergeWithInitialState(data = {}) {
       ...initialState.wisdom,
       ...wisdom,
       entries: asArray(wisdom.entries),
+    },
+    goals: {
+      ...initialState.goals,
+      ...goals,
+      entries: asArray(goals.entries),
+    },
+    decisions: {
+      ...initialState.decisions,
+      ...decisions,
+      entries: asArray(decisions.entries),
+    },
+    crm: {
+      ...initialState.crm,
+      ...crm,
+      contacts: asArray(crm.contacts),
+    },
+    secondBrain: {
+      ...initialState.secondBrain,
+      ...secondBrain,
+      notes: asArray(secondBrain.notes),
+    },
+    readings: {
+      ...initialState.readings,
+      ...readings,
+      books: asArray(readings.books),
+    },
+    meditations: {
+      ...initialState.meditations,
+      ...meditations,
+      sessions: asArray(meditations.sessions),
     },
     settings: {
       profile: {
@@ -545,6 +604,7 @@ function mergeWithInitialState(data = {}) {
     remoteMetadata: asPlainObject(safeData.remoteMetadata),
   }
 }
+
 
 function driveDataToAppState(files = {}, baseState = {}, { mergeLocalRecords = true } = {}) {
   const data = {

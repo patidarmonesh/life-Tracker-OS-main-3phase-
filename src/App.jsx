@@ -28,6 +28,14 @@ const AnalysisBuilder = lazy(() => import('./pages/AnalysisBuilder'))
 const CalendarView = lazy(() => import('./pages/CalendarView'))
 const RPG = lazy(() => import('./pages/RPG'))
 const Wisdom = lazy(() => import('./pages/Wisdom'))
+const Goals = lazy(() => import('./pages/Goals'))
+const DecisionJournal = lazy(() => import('./pages/DecisionJournal'))
+const RelationshipCRM = lazy(() => import('./pages/RelationshipCRM'))
+const SecondBrain = lazy(() => import('./pages/SecondBrain'))
+const ReadingTracker = lazy(() => import('./pages/ReadingTracker'))
+const Meditation = lazy(() => import('./pages/Meditation'))
+const YearInReview = lazy(() => import('./pages/YearInReview'))
+
 
 function LoadingScreen() {
   return (
@@ -132,6 +140,13 @@ function AppRoutes() {
       <Route path="/calendar" element={<ShellPage><CalendarView /></ShellPage>} />
       <Route path="/rpg" element={<ShellPage><RPG /></ShellPage>} />
       <Route path="/wisdom" element={<ShellPage><Wisdom /></ShellPage>} />
+      <Route path="/goals" element={<ShellPage><Goals /></ShellPage>} />
+      <Route path="/decisions" element={<ShellPage><DecisionJournal /></ShellPage>} />
+      <Route path="/crm" element={<ShellPage><RelationshipCRM /></ShellPage>} />
+      <Route path="/brain" element={<ShellPage><SecondBrain /></ShellPage>} />
+      <Route path="/readings" element={<ShellPage><ReadingTracker /></ShellPage>} />
+      <Route path="/meditations" element={<ShellPage><Meditation /></ShellPage>} />
+      <Route path="/wrapped" element={<ShellPage><YearInReview /></ShellPage>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

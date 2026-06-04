@@ -15,6 +15,10 @@ import TagInput from '../components/ui/TagInput'
 import EmptyState from '../components/ui/EmptyState'
 import { useToast } from '../context/toastContextCore'
 import { formatDateKey, getTodayDateKey, toDateKey } from '../utils/dateTime'
+import { playSuccessSound, playWarningBeep } from '../hooks/useAudio'
+import { hapticSuccess, hapticLight } from '../hooks/useHaptic'
+import { getGeminiApiKey, analyzeJournalSentimentWithAI } from '../services/geminiService'
+import { Sparkles, Brain } from 'lucide-react'
 
 const MOODS = [
   { value: 1, emoji: '😞', label: 'Very Low', color: '#EF4444' },
@@ -43,6 +47,7 @@ export default function Journal() {
   const [showNewModal, setShowNewModal] = useState(false)
   const [editingEntry, setEditingEntry] = useState(null)
   const [search, setSearch] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
   const [selectedPrompt, setSelectedPrompt] = useState(PROMPTS[0])
   const [form, setForm] = useState({
     date: today,
@@ -52,6 +57,8 @@ export default function Journal() {
     energy: 3,
     gratitude: '',
     tags: [],
+    aiSentiment: '',
+    aiRecommendation: '',
   })
 
   const entries = state.journal?.entries || []
@@ -114,6 +121,8 @@ export default function Journal() {
       energy: 3,
       gratitude: '',
       tags: [],
+      aiSentiment: '',
+      aiRecommendation: '',
     })
   }
 
@@ -133,6 +142,8 @@ export default function Journal() {
       energy: entry.energy ?? 3,
       gratitude: entry.gratitude || '',
       tags: entry.tags || [],
+      aiSentiment: entry.aiSentiment || '',
+      aiRecommendation: entry.aiRecommendation || '',
     })
     setShowNewModal(true)
   }
@@ -148,6 +159,8 @@ export default function Journal() {
       energy: Number(form.energy),
       gratitude: form.gratitude.trim(),
       tags: form.tags,
+      aiSentiment: form.aiSentiment,
+      aiRecommendation: form.aiRecommendation,
       updatedAt: new Date().toISOString(),
     }
 
@@ -157,6 +170,8 @@ export default function Journal() {
         entries: entries.map(e => (e.id === editingEntry.id ? { ...e, ...payload } : e)),
       })
       showToast('Entry updated ✓', 'success')
+      playSuccessSound()
+      hapticSuccess()
     } else {
       const newEntry = {
         id: uuid(),
@@ -168,6 +183,8 @@ export default function Journal() {
         entries: [newEntry, ...entries],
       })
       showToast('Entry saved ✓', 'success')
+      playSuccessSound()
+      hapticSuccess()
     }
 
     closeModal()
@@ -182,6 +199,48 @@ export default function Journal() {
     showToast('Entry deleted', 'warning', {
       undo: () => setModule('journal', { ...state.journal, entries: prev }),
     })
+    playWarningBeep()
+    hapticLight()
+  }
+
+  async function runAISentimentAnalysis() {
+    if (!form.content.trim()) {
+      showToast('Please write some content first!', 'warning')
+      return
+    }
+
+    const apiKey = getGeminiApiKey()
+    if (!apiKey) {
+      showToast('Add your Gemini API key in Settings to use the AI Journal Analyst!', 'error')
+      return
+    }
+
+    setAiLoading(true)
+    try {
+      showToast('Analyzing journal sentiment & emotion... 🧘', 'info')
+      const result = await analyzeJournalSentimentWithAI({
+        apiKey,
+        content: form.content,
+      })
+
+      if (result) {
+        setForm(f => ({
+          ...f,
+          aiSentiment: result.sentiment || 'Neutral',
+          aiRecommendation: result.healthCheckRecommendation || '',
+          tags: Array.from(new Set([...f.tags, ...(result.recurringThemes || [])])),
+        }))
+        showToast('Sentiment analyzed successfully! ✨', 'success')
+        playSuccessSound()
+        hapticSuccess()
+      } else {
+        showToast('Could not parse response. Try again.', 'error')
+      }
+    } catch (e) {
+      showToast(e.message || 'AI analysis failed', 'error')
+    } finally {
+      setAiLoading(false)
+    }
   }
 
   const inputStyle = {
@@ -303,6 +362,15 @@ export default function Journal() {
                     <div style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.7', marginTop: '12px', whiteSpace: 'pre-wrap' }}>
                       {entry.content}
                     </div>
+
+                    {entry.aiSentiment && (
+                      <div style={{ marginTop: '10px', fontSize: '12px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.15)' }}>
+                        <div style={{ color: 'var(--accent-indigo)', fontWeight: '700', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Brain size={11} /> AI Sentiment: {entry.aiSentiment}
+                        </div>
+                        {entry.aiRecommendation && <p style={{ margin: '4px 0 0', color: 'var(--text-muted)' }}>{entry.aiRecommendation}</p>}
+                      </div>
+                    )}
 
                     {entry.gratitude && (
                       <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
@@ -542,9 +610,28 @@ export default function Journal() {
             />
           </div>
 
-          <Button onClick={saveEntry} disabled={!form.content.trim()}>
-            {editingEntry ? 'Update Entry' : 'Save Entry'}
-          </Button>
+          {form.aiSentiment && (
+            <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)', fontSize: '12px' }}>
+              <strong>🎭 AI Analyzed Sentiment:</strong> {form.aiSentiment}
+              {form.aiRecommendation && <p style={{ margin: '2px 0 0', color: 'var(--text-muted)' }}>{form.aiRecommendation}</p>}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={runAISentimentAnalysis}
+              disabled={aiLoading || !form.content.trim()}
+              style={{ flex: 1, borderColor: 'rgba(99,102,241,0.3)', color: '#C7D2FE' }}
+            >
+              <Sparkles size={14} className={aiLoading ? 'animate-pulse' : ''} />
+              {aiLoading ? 'Analyzing...' : 'Analyze Sentiment with AI'}
+            </Button>
+            <Button onClick={saveEntry} disabled={!form.content.trim()} style={{ flex: 1 }}>
+              {editingEntry ? 'Update Entry' : 'Save Entry'}
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>

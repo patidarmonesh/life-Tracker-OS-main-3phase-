@@ -4,7 +4,7 @@ import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Plus, Pencil, Timer } from 'lucide-react'
+import { Plus, Pencil, Timer, CheckSquare, Sparkles, BookOpen, Award, AlertCircle, Calendar } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -13,6 +13,9 @@ import EmptyState from '../components/ui/EmptyState'
 import { useToast } from '../context/toastContextCore'
 import { formatDateKey, getTodayDateKey, toDateKey } from '../utils/dateTime'
 import { useSoundscape } from '../hooks/useSoundscape'
+import { playSuccessSound, playSubtleClick, playWarningBeep } from '../hooks/useAudio'
+import { hapticSuccess, hapticLight } from '../hooks/useHaptic'
+import { getGeminiApiKey, generateStudyPlanWithAI } from '../services/geminiService'
 
 const SUBJECTS = [
   'Mathematics', 'Physics', 'CS Theory', 'Machine Learning', 'Deep Learning',
@@ -151,11 +154,15 @@ export default function Study() {
   function startTimer() {
     setTimerRunning(true)
     timerRef.current = setInterval(() => setTimerSeconds(s => s + 1), 1000)
+    playSubtleClick()
+    hapticLight()
   }
 
   function pauseTimer() {
     setTimerRunning(false)
     clearInterval(timerRef.current)
+    playSubtleClick()
+    hapticLight()
   }
 
   function stopAndSave() {
@@ -178,12 +185,16 @@ export default function Study() {
       duration: 6000,
       undo: () => addToTimeFlow(newSession),
     })
+    playSuccessSound()
+    hapticSuccess()
   }
 
   function resetTimer() {
     clearInterval(timerRef.current)
     setTimerRunning(false)
     setTimerSeconds(0)
+    playWarningBeep()
+    hapticLight()
   }
 
   const formatTimer = (s) => {
@@ -301,10 +312,10 @@ export default function Study() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '4px', padding: '16px 24px 0', borderBottom: '1px solid var(--border)' }}>
-        {['log', 'stats', 'subjects'].map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={tabStyle(activeTab === tab)}>
-            {tab === 'log' ? 'Today' : tab === 'stats' ? 'Stats' : 'Subjects'}
+      <div style={{ display: 'flex', gap: '4px', padding: '16px 24px 0', borderBottom: '1px solid var(--border)', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+        {['log', 'stats', 'subjects', 'flashcards', 'courses', 'ai-planner'].map(tab => (
+          <button key={tab} onClick={() => { playSubtleClick(); setActiveTab(tab); }} style={tabStyle(activeTab === tab)}>
+            {tab === 'log' ? 'Today' : tab === 'stats' ? 'Stats' : tab === 'subjects' ? 'Subjects' : tab === 'flashcards' ? '🗂 Flashcards' : tab === 'courses' ? '📚 Courses' : '✨ AI Planner'}
           </button>
         ))}
       </div>
@@ -444,6 +455,33 @@ export default function Study() {
             </div>
           </Card>
         </>}
+
+        {/* ══ FLASHCARDS TAB ══════════════════════════════════ */}
+        {activeTab === 'flashcards' && (
+          <FlashcardsTabContent
+            state={state}
+            setModule={setModule}
+            showToast={showToast}
+          />
+        )}
+
+        {/* ══ COURSES TAB ════════════════════════════════════ */}
+        {activeTab === 'courses' && (
+          <CoursesTabContent
+            state={state}
+            setModule={setModule}
+            showToast={showToast}
+          />
+        )}
+
+        {/* ══ AI PLANNER TAB ══════════════════════════════════ */}
+        {activeTab === 'ai-planner' && (
+          <AIPlannerTabContent
+            state={state}
+            setModule={setModule}
+            showToast={showToast}
+          />
+        )}
 
         {/* ══ SUBJECTS TAB ═══════════════════════════════════ */}
         {activeTab === 'subjects' && <>
@@ -716,6 +754,704 @@ function SessionRow({ session: s, onDelete, onEdit, showDate = false }) {
         <Pencil size={13} />
       </button>
       <ConfirmDeleteButton onConfirm={() => onDelete(s.id)} size={13} label="Delete session" />
+    </div>
+  )
+}
+
+function FlashcardsTabContent({ state, setModule, showToast }) {
+  const decks = state.study?.flashcards || []
+  const [newDeckName, setNewDeckName] = useState('')
+  const [selectedDeckId, setSelectedDeckId] = useState(null)
+  
+  const [isManagingCards, setIsManagingCards] = useState(false)
+  const [newFront, setNewFront] = useState('')
+  const [newBack, setNewBack] = useState('')
+
+  const [isReviewing, setIsReviewing] = useState(false)
+  const [reviewQueue, setReviewQueue] = useState([])
+  const [reviewIndex, setReviewIndex] = useState(0)
+  const [showAnswer, setShowAnswer] = useState(false)
+
+  const selectedDeck = decks.find(d => d.id === selectedDeckId)
+
+  function handleCreateDeck() {
+    if (!newDeckName.trim()) return
+    const newDeck = {
+      id: 'deck_' + Date.now(),
+      name: newDeckName.trim(),
+      cards: [],
+      createdAt: new Date().toISOString(),
+    }
+    setModule('study', {
+      ...state.study,
+      flashcards: [...decks, newDeck],
+    })
+    setNewDeckName('')
+    showToast('Deck created! 🗂', 'success')
+    playSuccessSound()
+    hapticSuccess()
+  }
+
+  function handleDeleteDeck(deckId) {
+    if (!window.confirm('Delete this deck and all its flashcards?')) return
+    setModule('study', {
+      ...state.study,
+      flashcards: decks.filter(d => d.id !== deckId),
+    })
+    if (selectedDeckId === deckId) {
+      setSelectedDeckId(null)
+      setIsReviewing(false)
+      setIsManagingCards(false)
+    }
+    showToast('Deck deleted', 'warning')
+    playWarningBeep()
+    hapticLight()
+  }
+
+  function handleAddCard() {
+    if (!newFront.trim() || !newBack.trim()) return
+    const newCard = {
+      id: 'card_' + Date.now(),
+      front: newFront.trim(),
+      back: newBack.trim(),
+      nextReviewDate: new Date().toISOString().slice(0, 10),
+      intervalDays: 0,
+      createdAt: new Date().toISOString(),
+    }
+
+    const updatedDecks = decks.map(d => {
+      if (d.id !== selectedDeckId) return d
+      return {
+        ...d,
+        cards: [...(d.cards || []), newCard]
+      }
+    })
+
+    setModule('study', {
+      ...state.study,
+      flashcards: updatedDecks,
+    })
+    setNewFront('')
+    setNewBack('')
+    showToast('Card added! ✓', 'success')
+    playSubtleClick()
+    hapticLight()
+  }
+
+  function handleDeleteCard(cardId) {
+    const updatedDecks = decks.map(d => {
+      if (d.id !== selectedDeckId) return d
+      return {
+        ...d,
+        cards: (d.cards || []).filter(c => c.id !== cardId)
+      }
+    })
+    setModule('study', {
+      ...state.study,
+      flashcards: updatedDecks,
+    })
+    playWarningBeep()
+    hapticLight()
+  }
+
+  function startReview(deck) {
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const due = (deck.cards || []).filter(c => !c.nextReviewDate || c.nextReviewDate <= todayStr)
+    
+    if (due.length === 0) {
+      showToast('Deck is clean! No cards due for review today. 🎉', 'success')
+      playSuccessSound()
+      return
+    }
+
+    setReviewQueue(due)
+    setReviewIndex(0)
+    setShowAnswer(false)
+    setIsReviewing(true)
+    playSubtleClick()
+    hapticLight()
+  }
+
+  function handleAnkiRate(rating) {
+    const card = reviewQueue[reviewIndex]
+    let interval = 0
+    if (rating === 'good') {
+      interval = 2
+    } else if (rating === 'easy') {
+      interval = 4
+    }
+
+    const nextDate = new Date()
+    nextDate.setDate(nextDate.getDate() + interval)
+    const nextDateStr = nextDate.toISOString().slice(0, 10)
+
+    const updatedDecks = decks.map(d => {
+      if (d.id !== selectedDeckId) return d
+      const updatedCards = (d.cards || []).map(c => {
+        if (c.id !== card.id) return c
+        return {
+          ...c,
+          intervalDays: interval,
+          nextReviewDate: nextDateStr,
+        }
+      })
+      return { ...d, cards: updatedCards }
+    })
+
+    setModule('study', {
+      ...state.study,
+      flashcards: updatedDecks,
+    })
+
+    if (reviewIndex + 1 < reviewQueue.length) {
+      setReviewIndex(reviewIndex + 1)
+      setShowAnswer(false)
+      playSubtleClick()
+      hapticLight()
+    } else {
+      setIsReviewing(false)
+      showToast('🏆 Review Session Complete! Excellent retention!', 'success')
+      playSuccessSound()
+      hapticSuccess()
+    }
+  }
+
+  const labelStyle = {
+    fontSize: '11px',
+    color: 'var(--text-muted)',
+    fontWeight: '700',
+    marginBottom: '4px',
+    display: 'block',
+    textTransform: 'uppercase',
+  }
+
+  const inputStyle = {
+    width: '100%',
+    padding: '10px 12px',
+    borderRadius: '10px',
+    background: 'var(--bg-secondary)',
+    border: '1px solid var(--border)',
+    color: 'var(--text-primary)',
+    fontSize: '14px',
+    outline: 'none',
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+      {isReviewing && reviewQueue[reviewIndex] ? (
+        <Card style={{ padding: '24px', background: 'rgba(30,41,59,0.3)', border: '1px solid var(--accent-indigo)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Reviewing Deck: <strong>{selectedDeck?.name}</strong></span>
+            <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--accent-indigo)', fontFamily: 'JetBrains Mono, monospace' }}>Card {reviewIndex + 1} / {reviewQueue.length}</span>
+          </div>
+
+          <div style={{
+            minHeight: '160px',
+            background: 'var(--bg-secondary)',
+            borderRadius: '16px',
+            border: '1px solid var(--border)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            textAlign: 'center',
+            position: 'relative',
+            cursor: 'pointer',
+            overflow: 'hidden'
+          }} onClick={() => setShowAnswer(s => !s)}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', position: 'absolute', top: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {showAnswer ? '💡 Answer (Click to see Question)' : '❓ Question (Click to reveal Answer)'}
+            </div>
+            
+            <div style={{
+              fontSize: '18px',
+              fontWeight: '700',
+              color: showAnswer ? '#E2E8F0' : '#F8FAFC',
+              fontFamily: 'DM Sans, sans-serif'
+            }}>
+              {showAnswer ? reviewQueue[reviewIndex].back : reviewQueue[reviewIndex].front}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
+            {!showAnswer ? (
+              <Button onClick={() => setShowAnswer(true)} style={{ width: '100%', height: '42px' }}>
+                Reveal Answer
+              </Button>
+            ) : (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => handleAnkiRate('again')}
+                  style={{
+                    flex: 1,
+                    height: '42px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(239,68,68,0.3)',
+                    background: 'rgba(239,68,68,0.1)',
+                    color: '#FCA5A5',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Again ❌
+                </button>
+                <button
+                  onClick={() => handleAnkiRate('good')}
+                  style={{
+                    flex: 1,
+                    height: '42px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(99,102,241,0.3)',
+                    background: 'rgba(99,102,241,0.1)',
+                    color: '#C7D2FE',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Good (2d) 👍
+                </button>
+                <button
+                  onClick={() => handleAnkiRate('easy')}
+                  style={{
+                    flex: 1,
+                    height: '42px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(16,185,129,0.3)',
+                    background: 'rgba(16,185,129,0.1)',
+                    color: '#A7F3D0',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Easy (4d) 🚀
+                </button>
+              </div>
+            )}
+            <Button variant="secondary" onClick={() => setIsReviewing(false)} style={{ height: '36px', marginTop: '6px' }}>
+              Exit Review
+            </Button>
+          </div>
+        </Card>
+      ) : isManagingCards && selectedDeck ? (
+        <Card style={{ padding: '18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <h4 style={{ margin: 0, fontSize: '15px' }}>🗂 Manage Deck: <strong>{selectedDeck.name}</strong></h4>
+            <Button variant="secondary" onClick={() => setIsManagingCards(false)} style={{ padding: '4px 10px', fontSize: '12px' }}>
+              Back to Decks
+            </Button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--bg-secondary)', padding: '12px', borderRadius: '12px', marginBottom: '16px' }}>
+            <div style={{ fontWeight: '700', fontSize: '12px', color: 'var(--text-secondary)' }}>Add New Flashcard</div>
+            <div>
+              <label style={labelStyle}>Front side (Question)</label>
+              <input
+                style={inputStyle}
+                placeholder="e.g. What is the time complexity of quicksort?"
+                value={newFront}
+                onChange={e => setNewFront(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Back side (Answer)</label>
+              <input
+                style={inputStyle}
+                placeholder="e.g. O(n log n) average, O(n^2) worst case"
+                value={newBack}
+                onChange={e => setNewBack(e.target.value)}
+              />
+            </div>
+            <Button onClick={handleAddCard} disabled={!newFront.trim() || !newBack.trim()} style={{ height: '36px', marginTop: '4px' }}>
+              Add Flashcard
+            </Button>
+          </div>
+
+          <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Cards list ({selectedDeck.cards?.length || 0})</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '260px', overflowY: 'auto' }}>
+            {(selectedDeck.cards || []).map(card => (
+              <div key={card.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: '10px' }}>
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontWeight: '700', color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{card.front}</div>
+                  <div style={{ color: 'var(--text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', marginTop: '2px' }}>{card.back}</div>
+                </div>
+                <button
+                  onClick={() => handleDeleteCard(card.id)}
+                  style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {(selectedDeck.cards || []).length === 0 && (
+              <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '13px' }}>No cards in this deck yet.</div>
+            )}
+          </div>
+        </Card>
+      ) : (
+        <>
+          <Card style={{ padding: '18px' }}>
+            <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '14px' }}>
+              🗂 Create Flashcard Deck
+            </h3>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <input
+                style={inputStyle}
+                placeholder="e.g. Algorithms & Data Structures"
+                value={newDeckName}
+                onChange={e => setNewDeckName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleCreateDeck() }}
+              />
+              <Button onClick={handleCreateDeck} disabled={!newDeckName.trim()}>
+                Create
+              </Button>
+            </div>
+          </Card>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '12px' }}>
+            {decks.map(deck => {
+              const todayStr = new Date().toISOString().slice(0, 10)
+              const dueCount = (deck.cards || []).filter(c => !c.nextReviewDate || c.nextReviewDate <= todayStr).length
+
+              return (
+                <Card key={deck.id} style={{ padding: '16px', background: 'rgba(30,41,59,0.3)', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '800' }}>{deck.name}</h4>
+                    <button
+                      onClick={() => handleDeleteDeck(deck.id)}
+                      style={{ background: 'none', border: 'none', color: '#F43F5E', cursor: 'pointer', fontSize: '12px' }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+
+                  <div style={{ margin: '14px 0 16px', display: 'flex', gap: '16px' }}>
+                    <div>
+                      <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--accent-indigo)' }}>{(deck.cards || []).length}</div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>total cards</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '18px', fontWeight: '800', color: dueCount > 0 ? '#F59E0B' : '#10B981' }}>{dueCount}</div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>due today</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <Button
+                      onClick={() => {
+                        setSelectedDeckId(deck.id)
+                        setIsManagingCards(true)
+                      }}
+                      variant="secondary"
+                      style={{ flex: 1, padding: '6px', fontSize: '12px' }}
+                    >
+                      ⚙️ Manage
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setSelectedDeckId(deck.id)
+                        startReview(deck)
+                      }}
+                      disabled={(deck.cards || []).length === 0}
+                      style={{ flex: 1, padding: '6px', fontSize: '12px', background: dueCount > 0 ? 'var(--accent-indigo)' : 'var(--border-focus)' }}
+                    >
+                      📖 Review
+                    </Button>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+
+          {decks.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: '32px' }}>🗂</div>
+              <div style={{ fontWeight: '600', marginTop: '6px' }}>No flashcard decks yet</div>
+              <div style={{ fontSize: '12px' }}>Create a deck above and add cards to start study review.</div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function CoursesTabContent({ state, setModule, showToast }) {
+  const checklists = state.study?.checklists || []
+  const subjects = state.study?.subjects?.length ? state.study.subjects : SUBJECTS
+  const [selectedSubject, setSelectedSubject] = useState(subjects[0] || 'Other')
+  const [newChapterText, setNewChapterText] = useState('')
+  const [expandedSubject, setExpandedSubject] = useState(subjects[0] || '')
+
+  function handleAddChapter() {
+    if (!newChapterText.trim()) return
+    const newItem = {
+      id: 'chapter_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      subject: selectedSubject,
+      chapter: newChapterText.trim(),
+      isCompleted: false,
+      createdAt: new Date().toISOString()
+    }
+    setModule('study', {
+      ...state.study,
+      checklists: [...checklists, newItem]
+    })
+    setNewChapterText('')
+    showToast('Chapter checklist item added! 📚', 'success')
+    playSuccessSound()
+    hapticSuccess()
+  }
+
+  function handleToggleChapter(id, currentVal) {
+    const updated = checklists.map(item => {
+      if (item.id !== id) return item
+      const nextState = !currentVal
+      if (nextState) {
+        playSuccessSound()
+        hapticSuccess()
+      } else {
+        playSubtleClick()
+        hapticLight()
+      }
+      return { ...item, isCompleted: nextState }
+    })
+    setModule('study', {
+      ...state.study,
+      checklists: updated
+    })
+  }
+
+  function handleDeleteChapter(id) {
+    setModule('study', {
+      ...state.study,
+      checklists: checklists.filter(item => item.id !== id)
+    })
+    showToast('Chapter deleted', 'warning')
+    playWarningBeep()
+    hapticLight()
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <Card style={{ padding: '16px' }}>
+        <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '13px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Plus size={14} color="var(--accent-indigo)" /> Add Chapter Checklist
+        </h3>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <select
+            style={{ width: '130px', padding: '8px', borderRadius: '10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none' }}
+            value={selectedSubject}
+            onChange={e => setSelectedSubject(e.target.value)}
+          >
+            {subjects.map(sub => <option key={sub} value={sub}>{sub}</option>)}
+          </select>
+          <input
+            style={{ flex: 1, padding: '8px 10px', borderRadius: '10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none' }}
+            placeholder="e.g. Chapter 1: Introduction to AI..."
+            value={newChapterText}
+            onChange={e => setNewChapterText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAddChapter() }}
+          />
+          <Button onClick={handleAddChapter} disabled={!newChapterText.trim()}>Add</Button>
+        </div>
+      </Card>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {subjects.map(subject => {
+          const subjectItems = checklists.filter(c => c.subject === subject)
+          const completedCount = subjectItems.filter(c => c.isCompleted).length
+          const totalCount = subjectItems.length
+          const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
+          const isExpanded = expandedSubject === subject
+
+          return (
+            <Card key={subject} style={{ padding: '14px' }}>
+              <div
+                onClick={() => { playSubtleClick(); setExpandedSubject(isExpanded ? '' : subject); }}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+              >
+                <div>
+                  <h4 style={{ margin: 0, fontWeight: '800', fontSize: '14px', color: 'var(--text-primary)' }}>{subject}</h4>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{completedCount} / {totalCount} chapters completed ({pct}%)</span>
+                </div>
+                <div style={{ fontSize: '18px' }}>{isExpanded ? '▲' : '▼'}</div>
+              </div>
+
+              {totalCount > 0 && (
+                <div style={{ height: '5px', background: 'var(--bg-secondary)', borderRadius: '3px', overflow: 'hidden', marginTop: '8px' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#10B981' : '#3B82F6', borderRadius: '3px', transition: 'width 0.4s ease' }} />
+                </div>
+              )}
+
+              {isExpanded && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                  {subjectItems.map(item => (
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                      <div
+                        onClick={() => handleToggleChapter(item.id, item.isCompleted)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: item.isCompleted ? 'var(--text-muted)' : 'var(--text-primary)' }}
+                      >
+                        <span style={{ fontSize: '16px' }}>{item.isCompleted ? '✅' : '⬜'}</span>
+                        <span style={{ textDecoration: item.isCompleted ? 'line-through' : 'none' }}>{item.chapter}</span>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteChapter(item.id)}
+                        style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px 6px', fontSize: '12px' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {subjectItems.length === 0 && (
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px' }}>
+                      No chapters added yet for this subject.
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function AIPlannerTabContent({ state, setModule, showToast }) {
+  const [examDate, setExamDate] = useState('')
+  const [dailyHours, setDailyHours] = useState('6')
+  const [aiLoading, setAiLoading] = useState(false)
+  const subjects = state.study?.subjects?.length ? state.study.subjects : SUBJECTS
+
+  // Saved plan inside study goals or state.study.aiPlan
+  const savedPlan = state.study?.aiPlan || null
+
+  async function handleGeneratePlan() {
+    if (!examDate) {
+      showToast('Please specify an Exam Date first!', 'warning')
+      return
+    }
+
+    const apiKey = getGeminiApiKey()
+    if (!apiKey) {
+      showToast('Add your Gemini API key in Settings to use the AI Planner!', 'error')
+      return
+    }
+
+    setAiLoading(true)
+    try {
+      showToast('AI Exam Planner is drafting your weekly revision calendar... ✍️', 'info')
+      const plan = await generateStudyPlanWithAI({
+        apiKey,
+        examDate,
+        subjects: subjects.join(', '),
+        dailyHours,
+      })
+
+      if (plan?.weeklyMilestones || plan?.dailySchedule) {
+        setModule('study', {
+          ...state.study,
+          aiPlan: plan
+        })
+        showToast('Study Plan generated successfully! ✨', 'success')
+        playSuccessSound()
+        hapticSuccess()
+      } else {
+        showToast('Could not parse layout structure. Try again.', 'error')
+      }
+    } catch (e) {
+      showToast(e.message || 'AI planning failed', 'error')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <Card style={{ padding: '18px' }}>
+        <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Sparkles size={16} color="var(--accent-indigo)" /> AI Study & Exam Calendar Planner
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+          <div>
+            <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700', marginBottom: '4px', display: 'block' }}>EXAM DATE</label>
+            <input
+              type="date"
+              style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', outline: 'none' }}
+              value={examDate}
+              onChange={e => setExamDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700', marginBottom: '4px', display: 'block' }}>DAILY PREP HOURS</label>
+            <input
+              type="number"
+              style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', outline: 'none' }}
+              placeholder="6"
+              value={dailyHours}
+              onChange={e => setDailyHours(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <Button
+          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+          onClick={handleGeneratePlan}
+          disabled={aiLoading || !examDate}
+        >
+          <Sparkles size={14} className={aiLoading ? 'animate-pulse' : ''} />
+          {aiLoading ? 'Decomposing study weeks with AI...' : 'Generate Exam Calendar Plan'}
+        </Button>
+      </Card>
+
+      {savedPlan && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Weekly targets */}
+          {savedPlan.weeklyMilestones && (
+            <Card style={{ padding: '16px' }}>
+              <h4 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '13px', color: 'var(--accent-indigo)', marginBottom: '10px' }}>📅 Weekly Milestones Plan</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {savedPlan.weeklyMilestones.map((wm, idx) => (
+                  <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px' }}>
+                    <strong style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)' }}>{wm.week}</strong>
+                    <ul style={{ margin: '4px 0 0', paddingLeft: '16px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      {wm.targets?.map((t, tIdx) => <li key={tIdx}>{t}</li>)}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Daily recommends */}
+          {savedPlan.dailySchedule && (
+            <Card style={{ padding: '16px' }}>
+              <h4 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '13px', color: 'var(--accent-cyan)', marginBottom: '10px' }}>⏱️ Daily Recommended Schedule</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                {savedPlan.dailySchedule.map((ds, idx) => (
+                  <div key={idx} style={{ background: 'rgba(255,255,255,0.01)', padding: '8px 10px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                    <div>
+                      <strong style={{ color: 'var(--text-secondary)' }}>{ds.day}</strong>
+                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)' }}>{ds.topic}</span>
+                    </div>
+                    <span style={{ fontWeight: '700', color: 'var(--accent-cyan)' }}>{ds.hours}h</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Tips */}
+          {savedPlan.tips && (
+            <Card style={{ padding: '16px', background: 'rgba(16,185,129,0.02)', border: '1px solid rgba(16,185,129,0.15)' }}>
+              <h4 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '13px', color: '#34D399', marginBottom: '8px' }}>💡 AI Revision Tips</h4>
+              <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {savedPlan.tips.map((tip, idx) => <li key={idx}>{tip}</li>)}
+              </ul>
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -17,6 +17,12 @@ import {
   CalendarDays,
   X,
   Trophy,
+  Brain,
+  Users,
+  Book,
+  Wind,
+  HelpCircle,
+  Sparkles,
 } from 'lucide-react'
 
 const primaryTabs = [
@@ -37,6 +43,13 @@ const moreTabs = [
   { to: '/analysis-builder', icon: Microscope, label: 'Analysis', color: 'var(--accent-purple)' },
   { to: '/scoring', icon: Target, label: 'Scoring', color: 'var(--accent-amber)' },
   { to: '/wisdom', icon: BookOpen, label: 'Wisdom', color: 'var(--accent-indigo)' },
+  { to: '/goals', icon: Target, label: 'Goals', color: 'var(--accent-indigo)' },
+  { to: '/decisions', icon: HelpCircle, label: 'Decisions', color: 'var(--accent-amber)' },
+  { to: '/crm', icon: Users, label: 'CRM', color: '#10B981' },
+  { to: '/brain', icon: Brain, label: 'Brain', color: 'var(--accent-purple)' },
+  { to: '/readings', icon: Book, label: 'Readings', color: 'var(--accent-indigo)' },
+  { to: '/meditations', icon: Wind, label: 'Meditation', color: 'var(--accent-cyan)' },
+  { to: '/wrapped', icon: Sparkles, label: 'Wrapped', color: '#FCD34D' },
   { to: '/settings', icon: Settings, label: 'Settings', color: 'var(--text-secondary)' },
 ]
 

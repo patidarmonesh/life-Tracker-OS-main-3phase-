@@ -12,6 +12,8 @@ import ConfirmDeleteButton from '../components/ui/ConfirmDeleteButton'
 import TagInput from '../components/ui/TagInput'
 import { useToast } from '../context/toastContextCore'
 import { extractBillWithGemini, getGeminiApiKey } from '../services/geminiService'
+import { playSuccessSound, playWarningBeep } from '../hooks/useAudio'
+import { hapticSuccess, hapticLight } from '../hooks/useHaptic'
 import {
   ensureBillsFolder,
   getBillsFolderId,
@@ -142,6 +144,103 @@ export default function Finance() {
   const [uploadingBill, setUploadingBill] = useState(false)
   const [accountFilter, setAccountFilter] = useState('all')
   const fileInputRef = useRef(null)
+
+  // SMS UPI Parser State
+  const [showSMSModal, setShowSMSModal] = useState(false)
+  const [smsInput, setSmsInput] = useState('')
+  const [parsedSMSResult, setParsedSMSResult] = useState(null)
+
+  function handleParseSMS() {
+    if (!smsInput.trim()) {
+      showToast('Please paste a transaction SMS text first', 'warning')
+      return
+    }
+
+    const amountMatch = smsInput.match(/(?:rs\.?|inr|amt|sent|debited|paid|withdrawal|withdrawn|spent)\s*(?:rs\.?|inr)?\s*(\d+(?:\.\d+)?)/i)
+    if (!amountMatch) {
+      showToast("Could not extract amount. Please make sure the SMS contains words like 'debited', 'paid' or 'spent' followed by a number", 'error')
+      playWarningBeep()
+      hapticLight()
+      return
+    }
+
+    const amount = parseFloat(amountMatch[1])
+
+    let merchant = 'Unknown Merchant'
+    const merchantMatch = smsInput.match(/(?:to|at|for|ref|payee|towards)\s+([a-z0-9\s&'\-\.]+?)(?:\s+ref|\s+on|\s+ref\.|\s+via|\s+balance|\s+bal|\s+a\/c|\s+ac|\s+\d{2}[-\/.]|\s+date|$)/i)
+    if (merchantMatch && merchantMatch[1]) {
+      const candidate = merchantMatch[1].trim()
+      if (candidate.length > 2 && !candidate.toLowerCase().includes('debited') && !candidate.toLowerCase().includes('credited')) {
+        merchant = candidate
+      }
+    }
+
+    let account = 'Bank'
+    if (smsInput.match(/hdfc/i)) account = 'HDFC'
+    else if (smsInput.match(/sbi/i)) account = 'SBI'
+    else if (smsInput.match(/icici/i)) account = 'ICICI'
+    else if (smsInput.match(/paytm/i)) account = 'Paytm'
+    else if (smsInput.match(/phonepe/i)) account = 'PhonePe'
+    else if (smsInput.match(/gpay/i)) account = 'GPay'
+
+    let category = 'Other'
+    const textLower = smsInput.toLowerCase()
+    if (textLower.match(/swiggy|zomato|ubereats|food|restaurant|cafe|hotel|chai|bakery|lunch|dinner|breakfast/)) category = 'Food & Drinks'
+    else if (textLower.match(/uber|ola|rapido|metro|auto|cab|taxi|train|petrol|diesel|fuel|cng/)) category = 'Transport'
+    else if (textLower.match(/amazon|flipkart|myntra|shopping|clothing|fashion|mall|store/)) category = 'Shopping'
+    else if (textLower.match(/netflix|spotify|youtube|hotstar|prime|jio|airtel|recharge|electricity|water|bill|gas/)) category = 'Bills & Utilities'
+    else if (textLower.match(/gym|fitness|protein|cult|medical|pharmacy|doctor|hospital|medicine/)) category = 'Health & Medical'
+
+    setParsedSMSResult({
+      amount,
+      merchant,
+      account,
+      category,
+      date: today,
+      time: format(new Date(), 'HH:mm'),
+    })
+    
+    showToast('UPI SMS parsed successfully! 📊 Verify and save.', 'success')
+    playSuccessSound()
+    hapticSuccess()
+  }
+
+  function handleSaveSMSExpense() {
+    if (!parsedSMSResult) return
+
+    const newExpense = {
+      id: uuid(),
+      amount: parsedSMSResult.amount,
+      currency: currencyCode,
+      category: parsedSMSResult.category,
+      subcategory: '',
+      description: `SMS Import: ${parsedSMSResult.merchant}`,
+      date: parsedSMSResult.date,
+      time: parsedSMSResult.time,
+      paymentMethod: 'UPI',
+      isImpulsive: false,
+      account: parsedSMSResult.account,
+      isRecurring: false,
+      tags: ['sms-import'],
+      billDriveFileId: null,
+      billOCRText: null,
+      createdAt: new Date().toISOString(),
+    }
+
+    const updatedExpenses = [newExpense, ...expenses]
+    setModule('finance', {
+      ...state.finance,
+      expenses: updatedExpenses,
+    })
+
+    showToast('SMS Expense imported and saved! 💸', 'success')
+    playSuccessSound()
+    hapticSuccess()
+    
+    setSmsInput('')
+    setParsedSMSResult(null)
+    setShowSMSModal(false)
+  }
 
   const rawAccounts = state.settings?.preferences?.accounts?.length
     ? state.settings.preferences.accounts
@@ -338,6 +437,8 @@ export default function Finance() {
         bills: updatedBills,
       })
       showToast('Expense updated ✓', 'success')
+      playSuccessSound()
+      hapticSuccess()
       closeExpenseModal()
       return
     }
@@ -377,6 +478,8 @@ export default function Finance() {
     })
 
     showToast('Expense saved ✓', 'success')
+    playSuccessSound()
+    hapticSuccess()
     closeExpenseModal()
   }
 
@@ -405,6 +508,8 @@ export default function Finance() {
         })
       },
     })
+    playWarningBeep()
+    hapticLight()
   }
 
   async function handleBillUpload(e) {
@@ -576,18 +681,26 @@ export default function Finance() {
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-      <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '1.4rem' }}>💸 Finance</h1>
-        <Button
-          onClick={() => {
-            setPendingBillForExpense(null)
-            setEditingEntry(null)
-            resetForm()
-            setShowAddModal(true)
-          }}
-        >
-          <Plus size={16} /> Add Expense
-        </Button>
+      <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '1.4rem', margin: 0 }}>💸 Finance</h1>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Button
+            variant="secondary"
+            onClick={() => { playSubtleClick(); hapticLight(); setShowSMSModal(true); }}
+          >
+            📥 UPI SMS Import
+          </Button>
+          <Button
+            onClick={() => {
+              setPendingBillForExpense(null)
+              setEditingEntry(null)
+              resetForm()
+              setShowAddModal(true)
+            }}
+          >
+            <Plus size={16} /> Add Expense
+          </Button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '4px', padding: '16px 24px 0', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
@@ -596,6 +709,8 @@ export default function Finance() {
           { key: 'month', label: 'This Month' },
           { key: 'yearly', label: 'Yearly' },
           { key: 'bills', label: '🧾 Bills' },
+          { key: 'savings', label: '💰 Savings' },
+          { key: 'recurring', label: '💳 Subscriptions & Debt' },
         ].map(({ key, label }) => (
           <button key={key} onClick={() => setActiveTab(key)} style={tabStyle(activeTab === key)}>
             {label}
@@ -1018,6 +1133,16 @@ export default function Finance() {
               </div>
             )}
           </>
+        )}
+
+        {activeTab === 'savings' && (
+          <SavingsTabContent
+            state={state}
+            setModule={setModule}
+            showToast={showToast}
+            currencyCode={currencyCode}
+            currencySymbol={currencySymbol}
+          />
         )}
       </div>
 
@@ -1487,5 +1612,972 @@ function BillPreview({ bill, height, contain = false }) {
         marginBottom: '8px',
       }}
     />
+  )
+}
+
+function SavingsTabContent({ state, setModule, showToast, currencyCode, currencySymbol }) {
+  const [goals, setGoals] = useState(state.finance?.savingsGoals || [])
+  const [form, setForm] = useState({
+    title: '',
+    targetAmount: '',
+    targetDate: '',
+    category: 'General',
+  })
+  
+  const [transactionModal, setTransactionModal] = useState({
+    isOpen: false,
+    goalId: null,
+    type: 'deposit', // 'deposit' | 'withdraw'
+    amount: '',
+    description: '',
+  })
+
+  useEffect(() => {
+    setGoals(state.finance?.savingsGoals || [])
+  }, [state.finance?.savingsGoals])
+
+  function handleCreateGoal() {
+    if (!form.title.trim() || !form.targetAmount) return
+    
+    const newGoal = {
+      id: 'savings_' + Date.now(),
+      title: form.title.trim(),
+      targetAmount: parseFloat(form.targetAmount),
+      currentAmount: 0,
+      category: form.category,
+      targetDate: form.targetDate || '',
+      contributions: [],
+      createdAt: new Date().toISOString()
+    }
+    
+    const updatedGoals = [...goals, newGoal]
+    setModule('finance', {
+      ...state.finance,
+      savingsGoals: updatedGoals
+    })
+    
+    setForm({
+      title: '',
+      targetAmount: '',
+      targetDate: '',
+      category: 'General'
+    })
+    
+    showToast('Savings goal created! 💰', 'success')
+    playSuccessSound()
+    hapticSuccess()
+  }
+
+  function handleTransaction() {
+    const { goalId, type, amount, description } = transactionModal
+    if (!goalId || !amount) return
+    const val = parseFloat(amount)
+    if (isNaN(val) || val <= 0) return
+
+    const updated = goals.map(g => {
+      if (g.id !== goalId) return g
+      
+      const change = type === 'deposit' ? val : -val
+      const nextAmount = Math.max(0, g.currentAmount + change)
+      
+      if (type === 'deposit' && nextAmount >= g.targetAmount && g.currentAmount < g.targetAmount) {
+        showToast(`🏆 Goal Completed: ${g.title}! Outstanding job!`, 'success')
+        playSuccessSound()
+        hapticSuccess()
+      } else {
+        if (type === 'deposit') {
+          playSuccessSound()
+          hapticSuccess()
+        } else {
+          playWarningBeep()
+          hapticLight()
+        }
+      }
+      
+      const newTx = {
+        id: 'tx_' + Date.now(),
+        amount: val,
+        type: type,
+        description: description.trim() || (type === 'deposit' ? 'Deposit' : 'Withdrawal'),
+        date: new Date().toISOString()
+      }
+      
+      return {
+        ...g,
+        currentAmount: nextAmount,
+        contributions: [newTx, ...(g.contributions || [])]
+      }
+    })
+
+    setModule('finance', {
+      ...state.finance,
+      savingsGoals: updated
+    })
+
+    setTransactionModal({
+      isOpen: false,
+      goalId: null,
+      type: 'deposit',
+      amount: '',
+      description: ''
+    })
+    
+    showToast(type === 'deposit' ? 'Contribution added! ✓' : 'Funds withdrawn ✓', 'success')
+  }
+
+  function handleDeleteGoal(goalId) {
+    if (!window.confirm('Are you sure you want to delete this savings goal?')) return
+    const updated = goals.filter(g => g.id !== goalId)
+    setModule('finance', {
+      ...state.finance,
+      savingsGoals: updated
+    })
+    showToast('Savings goal deleted', 'warning')
+    playWarningBeep()
+    hapticLight()
+  }
+  
+  const labelStyle = {
+    fontSize: '11px',
+    color: 'var(--text-muted)',
+    fontWeight: '700',
+    marginBottom: '4px',
+    display: 'block',
+    textTransform: 'uppercase',
+  }
+  const inputStyle = {
+    width: '100%',
+    padding: '10px 12px',
+    borderRadius: '10px',
+    background: 'var(--bg-secondary)',
+    border: '1px solid var(--border)',
+    color: 'var(--text-primary)',
+    fontSize: '14px',
+    outline: 'none',
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '16px', padding: '0 24px 48px' }}>
+      <Card style={{ padding: '18px' }}>
+        <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          💰 Create Savings Goal
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div>
+            <label style={labelStyle}>Goal Name / Item</label>
+            <input
+              style={inputStyle}
+              placeholder="e.g. MacBook Pro M3"
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Target Amount ({currencySymbol})</label>
+            <input
+              type="number"
+              style={inputStyle}
+              placeholder="e.g. 150000"
+              value={form.targetAmount}
+              onChange={e => setForm(f => ({ ...f, targetAmount: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Target Date (Optional)</label>
+            <input
+              type="date"
+              style={inputStyle}
+              value={form.targetDate}
+              onChange={e => setForm(f => ({ ...f, targetDate: e.target.value }))}
+            />
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+          <div style={{ width: '180px' }}>
+            <label style={labelStyle}>Category</label>
+            <select
+              style={inputStyle}
+              value={form.category}
+              onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+            >
+              <option value="General">General 📦</option>
+              <option value="Tech">Technology 💻</option>
+              <option value="Travel">Travel ✈️</option>
+              <option value="Emergency">Emergency Fund 🚨</option>
+              <option value="Investment">Investment 📈</option>
+            </select>
+          </div>
+          <Button onClick={handleCreateGoal} disabled={!form.title.trim() || !form.targetAmount} style={{ height: '40px' }}>
+            Set Goal
+          </Button>
+        </div>
+      </Card>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {goals.map(g => {
+          const pct = Math.min(100, Math.round((g.currentAmount / g.targetAmount) * 100))
+          const needed = Math.max(0, g.targetAmount - g.currentAmount)
+          
+          let etaDisplay = 'No target date set'
+          if (g.targetDate) {
+            const todayDate = new Date()
+            const targetD = new Date(g.targetDate)
+            const ms = targetD.getTime() - todayDate.getTime()
+            const daysLeft = Math.ceil(ms / (1000 * 60 * 60 * 24))
+            if (daysLeft > 0) {
+              const dailyRate = needed / daysLeft
+              const monthlyRate = dailyRate * 30
+              etaDisplay = `${daysLeft} days remaining. Save approx ${currencySymbol}${Math.ceil(dailyRate)}/day (${currencySymbol}${Math.ceil(monthlyRate)}/mo)`
+            } else if (needed === 0) {
+              etaDisplay = 'Goal target achieved! 🎉'
+            } else {
+              etaDisplay = 'Target date passed'
+            }
+          }
+
+          return (
+            <Card key={g.id} style={{ padding: '18px', background: 'rgba(30,41,59,0.3)', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', background: 'rgba(16,185,129,0.12)', color: '#10B981', textTransform: 'uppercase' }}>
+                    {g.category}
+                  </span>
+                  <h4 style={{ fontSize: '16px', fontWeight: '700', marginTop: '6px', marginBottom: '2px' }}>{g.title}</h4>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{etaDisplay}</div>
+                </div>
+                <button
+                  onClick={() => handleDeleteGoal(g.id)}
+                  style={{ background: 'none', border: 'none', color: '#F43F5E', cursor: 'pointer', fontSize: '12px' }}
+                >
+                  Delete
+                </button>
+              </div>
+
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: '700', marginBottom: '6px' }}>
+                  <span style={{ color: 'var(--text-primary)' }}>
+                    {currencySymbol}{g.currentAmount.toLocaleString('en-IN')} / {currencySymbol}{g.targetAmount.toLocaleString('en-IN')}
+                  </span>
+                  <span style={{ color: pct >= 100 ? '#10B981' : 'var(--accent-indigo)' }}>{pct}%</span>
+                </div>
+                <div style={{ height: '8px', background: 'rgba(255,255,255,0.06)', borderRadius: '999px', overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: pct >= 100 ? 'linear-gradient(90deg, #10B981, #34D399)' : 'linear-gradient(90deg, #6366F1, #8B5CF6)', borderRadius: '999px', transition: 'width 0.4s ease' }} />
+                </div>
+                {needed > 0 && (
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                    Still need to save: <strong>{currencySymbol}{needed.toLocaleString('en-IN')}</strong>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                <Button
+                  onClick={() => setTransactionModal({ isOpen: true, goalId: g.id, type: 'deposit', amount: '', description: '' })}
+                  variant="secondary"
+                  style={{ flex: 1, padding: '6px 12px', fontSize: '13px', borderColor: 'rgba(16,185,129,0.3)', color: '#A7F3D0' }}
+                >
+                  📥 Deposit
+                </Button>
+                <Button
+                  onClick={() => setTransactionModal({ isOpen: true, goalId: g.id, type: 'withdraw', amount: '', description: '' })}
+                  variant="secondary"
+                  style={{ flex: 1, padding: '6px 12px', fontSize: '13px', borderColor: 'rgba(244,63,94,0.3)', color: '#FECDD3' }}
+                >
+                  📤 Withdraw
+                </Button>
+              </div>
+
+              {g.contributions && g.contributions.length > 0 && (
+                <div style={{ marginTop: '14px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', marginBottom: '6px' }}>Recent contributions</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {g.contributions.slice(0, 3).map(tx => (
+                      <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        <span>
+                          {tx.type === 'deposit' ? '➕' : '➖'} {tx.description}
+                        </span>
+                        <span style={{ fontWeight: '600', color: tx.type === 'deposit' ? '#10B981' : '#F43F5E' }}>
+                          {tx.type === 'deposit' ? '+' : '-'}{currencySymbol}{tx.amount}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+          )
+        })}
+
+        {goals.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: '32px' }}>📊</div>
+            <div style={{ fontWeight: '600', marginTop: '6px' }}>No savings goals created</div>
+            <div style={{ fontSize: '12px' }}>Set your saving goals above to start tracking allocations.</div>
+          </div>
+        )}
+      </div>
+
+      {activeTab === 'recurring' && (
+        <RecurringDebtTab
+          state={state}
+          setModule={setModule}
+          showToast={showToast}
+          currencySymbol={currencySymbol}
+          inputStyle={inputStyle}
+          labelStyle={labelStyle}
+        />
+      )}
+
+      <Modal
+        isOpen={transactionModal.isOpen}
+        onClose={() => setTransactionModal({ isOpen: false, goalId: null, type: 'deposit', amount: '', description: '' })}
+        title={transactionModal.type === 'deposit' ? '📥 Deposit Funds' : '📤 Withdraw Funds'}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div>
+            <label style={labelStyle}>Amount ({currencySymbol})</label>
+            <input
+              type="number"
+              style={inputStyle}
+              placeholder="e.g. 5000"
+              value={transactionModal.amount}
+              onChange={e => setTransactionModal(m => ({ ...m, amount: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Description / Reference</label>
+            <input
+              style={inputStyle}
+              placeholder="e.g. Saved from salary, Side project bonus"
+              value={transactionModal.description}
+              onChange={e => setTransactionModal(m => ({ ...m, description: e.target.value }))}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+            <Button
+              variant="secondary"
+              onClick={() => setTransactionModal({ isOpen: false, goalId: null, type: 'deposit', amount: '', description: '' })}
+              style={{ flex: 1 }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleTransaction}
+              disabled={!transactionModal.amount}
+              style={{ flex: 1, background: transactionModal.type === 'deposit' ? '#10B981' : '#F43F5E' }}
+            >
+              Confirm
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* UPI SMS Auto Import Modal */}
+      <Modal
+        isOpen={showSMSModal}
+        onClose={() => {
+          setShowSMSModal(false);
+          setSmsInput('');
+          setParsedSMSResult(null);
+        }}
+        title="📥 UPI SMS Auto-Import"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div>
+            <label style={labelStyle}>Paste UPI SMS Text</label>
+            <textarea
+              rows={4}
+              style={{ ...inputStyle, resize: 'vertical', fontSize: '13px' }}
+              placeholder="Paste SMS here... e.g. 'Debited from a/c HDFC Rs.250 to Zomato' or 'SBI: Amt Sent Rs. 1200.00 to SWIGGY'"
+              value={smsInput}
+              onChange={e => setSmsInput(e.target.value)}
+            />
+          </div>
+
+          {!parsedSMSResult ? (
+            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowSMSModal(false);
+                  setSmsInput('');
+                }}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleParseSMS} style={{ flex: 1 }} disabled={!smsInput.trim()}>
+                Parse SMS
+              </Button>
+            </div>
+          ) : (
+            <div style={{ background: 'rgba(99,102,241,0.04)', border: '1px dashed rgba(99,102,241,0.2)', padding: '14px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
+              <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: 'var(--accent-indigo)' }}>🔍 Parsed Details (Verify & Edit)</h4>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={labelStyle}>Amount ({currencySymbol})</label>
+                  <input
+                    type="number"
+                    style={inputStyle}
+                    value={parsedSMSResult.amount}
+                    onChange={e => setParsedSMSResult(p => ({ ...p, amount: Number(e.target.value) }))}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Vendor / Payee</label>
+                  <input
+                    style={inputStyle}
+                    value={parsedSMSResult.merchant}
+                    onChange={e => setParsedSMSResult(p => ({ ...p, merchant: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={labelStyle}>Account</label>
+                  <select
+                    style={inputStyle}
+                    value={parsedSMSResult.account}
+                    onChange={e => setParsedSMSResult(p => ({ ...p, account: e.target.value }))}
+                  >
+                    {accounts.map(acct => (
+                      <option key={acct} value={acct}>{acct}</option>
+                    ))}
+                    {!accounts.includes(parsedSMSResult.account) && (
+                      <option value={parsedSMSResult.account}>{parsedSMSResult.account}</option>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Category</label>
+                  <select
+                    style={inputStyle}
+                    value={parsedSMSResult.category}
+                    onChange={e => setParsedSMSResult(p => ({ ...p, category: e.target.value }))}
+                  >
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={labelStyle}>Date</label>
+                  <input
+                    type="date"
+                    style={inputStyle}
+                    value={parsedSMSResult.date}
+                    onChange={e => setParsedSMSResult(p => ({ ...p, date: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Time</label>
+                  <input
+                    style={inputStyle}
+                    value={parsedSMSResult.time}
+                    onChange={e => setParsedSMSResult(p => ({ ...p, time: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <Button
+                  variant="secondary"
+                  onClick={() => setParsedSMSResult(null)}
+                  style={{ flex: 1 }}
+                >
+                  Reparse / Clear
+                </Button>
+                <Button onClick={handleSaveSMSExpense} style={{ flex: 1 }}>
+                  Confirm & Save
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+    </div>
+  )
+}
+
+function RecurringDebtTab({ state, setModule, showToast, currencySymbol, inputStyle, labelStyle }) {
+  const subscriptions = state.finance?.subscriptions || []
+  const emis = state.finance?.emis || []
+  const loans = state.finance?.loans || []
+  const expenses = state.finance?.expenses || []
+
+  const [activeSection, setActiveSection] = useState('subs')
+
+  const [subForm, setSubForm] = useState({ name: '', amount: '', cycle: 'Monthly', category: 'Entertainment', nextRenewal: '' })
+  const [emiForm, setEmiForm] = useState({ name: '', amount: '', remainingMonths: 12, totalMonths: 12, rate: 0 })
+  const [loanForm, setLoanForm] = useState({ person: '', amount: '', type: 'Borrowed', dueDate: '', notes: '' })
+
+  const monthlySubTotal = subscriptions.reduce((acc, sub) => {
+    const amt = Number(sub.amount) || 0
+    return acc + (sub.cycle === 'Monthly' ? amt : amt / 12)
+  }, 0)
+
+  const monthlyEmiTotal = emis.reduce((acc, emi) => acc + (Number(emi.amount) || 0), 0)
+
+  function addSubscription() {
+    if (!subForm.name.trim() || !subForm.amount) return
+    const newSub = {
+      id: 'sub_' + Date.now(),
+      name: subForm.name.trim(),
+      amount: Number(subForm.amount),
+      cycle: subForm.cycle,
+      category: subForm.category,
+      nextRenewal: subForm.nextRenewal || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      createdAt: new Date().toISOString()
+    }
+
+    setModule('finance', {
+      ...state.finance,
+      subscriptions: [...subscriptions, newSub]
+    })
+    setSubForm({ name: '', amount: '', cycle: 'Monthly', category: 'Entertainment', nextRenewal: '' })
+    showToast('Subscription registered! 💳', 'success')
+    playSuccessSound()
+    hapticSuccess()
+  }
+
+  function addEMI() {
+    if (!emiForm.name.trim() || !emiForm.amount) return
+    const newEmi = {
+      id: 'emi_' + Date.now(),
+      name: emiForm.name.trim(),
+      amount: Number(emiForm.amount),
+      remainingMonths: Number(emiForm.remainingMonths) || 12,
+      totalMonths: Number(emiForm.totalMonths) || 12,
+      rate: Number(emiForm.rate) || 0,
+      createdAt: new Date().toISOString()
+    }
+
+    setModule('finance', {
+      ...state.finance,
+      emis: [...emis, newEmi]
+    })
+    setEmiForm({ name: '', amount: '', remainingMonths: 12, totalMonths: 12, rate: 0 })
+    showToast('EMI payment logged! ⏱️', 'success')
+    playSuccessSound()
+    hapticSuccess()
+  }
+
+  function addLoan() {
+    if (!loanForm.person.trim() || !loanForm.amount) return
+    const newLoan = {
+      id: 'loan_' + Date.now(),
+      person: loanForm.person.trim(),
+      amount: Number(loanForm.amount),
+      type: loanForm.type,
+      dueDate: loanForm.dueDate || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      notes: loanForm.notes.trim(),
+      createdAt: new Date().toISOString()
+    }
+
+    setModule('finance', {
+      ...state.finance,
+      loans: [...loans, newLoan]
+    })
+    setLoanForm({ person: '', amount: '', type: 'Borrowed', dueDate: '', notes: '' })
+    showToast('Debt ledger entry added! 🤝', 'success')
+    playSuccessSound()
+    hapticSuccess()
+  }
+
+  function payEmiInstallment(id) {
+    const emi = emis.find(e => e.id === id)
+    if (!emi || emi.remainingMonths <= 0) return
+
+    const updated = emis.map(e => {
+      if (e.id !== id) return e
+      return { ...e, remainingMonths: e.remainingMonths - 1 }
+    }).filter(e => e.remainingMonths > 0)
+
+    const expenseEntry = {
+      id: 'exp_' + Date.now(),
+      title: `EMI: ${emi.name} (Installment)`,
+      amount: emi.amount,
+      category: 'Bills Utilities',
+      date: new Date().toISOString().slice(0, 10),
+      paymentMethod: 'UPI',
+      account: 'Primary',
+      tags: ['EMI'],
+      createdAt: new Date().toISOString()
+    }
+
+    setModule('finance', {
+      ...state.finance,
+      emis: updated,
+      expenses: [expenseEntry, ...expenses]
+    })
+    showToast('Installment paid & logged as expense! ⚡', 'success')
+    playSuccessSound()
+    hapticSuccess()
+  }
+
+  function settleLoan(id) {
+    const loan = loans.find(l => l.id === id)
+    if (!loan) return
+
+    const expenseEntry = {
+      id: 'exp_' + Date.now(),
+      title: loan.type === 'Borrowed' ? `Settle Loan (Paid Back ${loan.person})` : `Settle Loan (Received from ${loan.person})`,
+      amount: loan.type === 'Borrowed' ? loan.amount : -loan.amount,
+      category: 'Miscellaneous',
+      date: new Date().toISOString().slice(0, 10),
+      paymentMethod: 'UPI',
+      account: 'Primary',
+      tags: ['Settle Debt'],
+      createdAt: new Date().toISOString()
+    }
+
+    setModule('finance', {
+      ...state.finance,
+      loans: loans.filter(l => l.id !== id),
+      expenses: [expenseEntry, ...expenses]
+    })
+    showToast(loan.type === 'Borrowed' ? 'Borrowed loan paid back & settled! ✓' : 'Lent loan received & settled! ✓', 'success')
+    playSuccessSound()
+    hapticSuccess()
+  }
+
+  function deleteSub(id) {
+    setModule('finance', {
+      ...state.finance,
+      subscriptions: subscriptions.filter(s => s.id !== id)
+    })
+    showToast('Subscription deleted', 'warning')
+    playWarningBeep()
+    hapticLight()
+  }
+
+  function deleteEmi(id) {
+    setModule('finance', {
+      ...state.finance,
+      emis: emis.filter(e => e.id !== id)
+    })
+    showToast('EMI deleted', 'warning')
+    playWarningBeep()
+    hapticLight()
+  }
+
+  function deleteLoan(id) {
+    setModule('finance', {
+      ...state.finance,
+      loans: loans.filter(l => l.id !== id)
+    })
+    showToast('Loan deleted', 'warning')
+    playWarningBeep()
+    hapticLight()
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
+        {[
+          { key: 'subs', label: `💳 Subscriptions (${subscriptions.length})` },
+          { key: 'emis', label: `⏱️ EMIs (${emis.length})` },
+          { key: 'loans', label: `🤝 Debt Ledger (${loans.length})` }
+        ].map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => { playSubtleClick(); setActiveSection(key); }}
+            style={{
+              background: activeSection === key ? 'rgba(99, 102, 241, 0.12)' : 'transparent',
+              border: 'none',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              color: activeSection === key ? 'var(--accent-indigo)' : 'var(--text-muted)',
+              fontWeight: activeSection === key ? '700' : '400',
+              cursor: 'pointer',
+              fontSize: '13px'
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeSection === 'subs' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
+            <Card style={{ padding: '16px' }}>
+              <h3 style={{ fontSize: '13px', fontWeight: '800', marginBottom: '12px' }}>➕ Register Subscription</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <input
+                  style={inputStyle}
+                  placeholder="Subscription Name (e.g. Netflix, Spotify)"
+                  value={subForm.name}
+                  onChange={e => setSubForm(s => ({ ...s, name: e.target.value }))}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <input
+                    type="number"
+                    style={inputStyle}
+                    placeholder={`Amount (${currencySymbol})`}
+                    value={subForm.amount}
+                    onChange={e => setSubForm(s => ({ ...s, amount: e.target.value }))}
+                  />
+                  <select
+                    style={inputStyle}
+                    value={subForm.cycle}
+                    onChange={e => setSubForm(s => ({ ...s, cycle: e.target.value }))}
+                  >
+                    <option value="Monthly">Monthly</option>
+                    <option value="Yearly">Yearly</option>
+                  </select>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' }}>
+                  <input
+                    type="date"
+                    style={inputStyle}
+                    value={subForm.nextRenewal}
+                    onChange={e => setSubForm(s => ({ ...s, nextRenewal: e.target.value }))}
+                  />
+                  <select
+                    style={inputStyle}
+                    value={subForm.category}
+                    onChange={e => setSubForm(s => ({ ...s, category: e.target.value }))}
+                  >
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Utilities">Utilities</option>
+                    <option value="Education">Education</option>
+                    <option value="Work">Work</option>
+                  </select>
+                </div>
+                <Button onClick={addSubscription} disabled={!subForm.name.trim() || !subForm.amount} style={{ marginTop: '4px' }}>
+                  Register Sub
+                </Button>
+              </div>
+            </Card>
+
+            <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center' }}>
+              <div style={{ fontSize: '20px' }}>💳</div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: 'var(--accent-indigo)', margin: '4px 0 2px' }}>
+                {currencySymbol} {monthlySubTotal.toFixed(0)} / mo
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Total subscription burn rate</span>
+            </Card>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {subscriptions.map(sub => (
+              <Card key={sub.id} style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800' }}>{sub.name}</h4>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {sub.category} • Next billing: {sub.nextRenewal}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
+                    {currencySymbol} {sub.amount} / {sub.cycle === 'Monthly' ? 'mo' : 'yr'}
+                  </strong>
+                  <ConfirmDeleteButton onConfirm={() => deleteSub(sub.id)} size={12} label="Cancel sub" />
+                </div>
+              </Card>
+            ))}
+            {subscriptions.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                No active subscriptions logged.
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeSection === 'emis' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
+            <Card style={{ padding: '16px' }}>
+              <h3 style={{ fontSize: '13px', fontWeight: '800', marginBottom: '12px' }}>➕ Add EMI Installment</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <input
+                  style={inputStyle}
+                  placeholder="EMI Name (e.g. Phone, Car Loan)"
+                  value={emiForm.name}
+                  onChange={e => setEmiForm(s => ({ ...s, name: e.target.value }))}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <input
+                    type="number"
+                    style={inputStyle}
+                    placeholder={`EMI Amount (${currencySymbol})`}
+                    value={emiForm.amount}
+                    onChange={e => setEmiForm(s => ({ ...s, amount: e.target.value }))}
+                  />
+                  <input
+                    type="number"
+                    style={inputStyle}
+                    placeholder="Interest Rate (%)"
+                    value={emiForm.rate}
+                    onChange={e => setEmiForm(s => ({ ...s, rate: e.target.value }))}
+                  />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <label style={labelStyle}>REMAINING MONTHS</label>
+                    <input
+                      type="number"
+                      style={inputStyle}
+                      value={emiForm.remainingMonths}
+                      onChange={e => setEmiForm(s => ({ ...s, remainingMonths: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>TOTAL MONTHS</label>
+                    <input
+                      type="number"
+                      style={inputStyle}
+                      value={emiForm.totalMonths}
+                      onChange={e => setEmiForm(s => ({ ...s, totalMonths: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <Button onClick={addEMI} disabled={!emiForm.name.trim() || !emiForm.amount} style={{ marginTop: '4px' }}>
+                  Register EMI
+                </Button>
+              </div>
+            </Card>
+
+            <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center' }}>
+              <div style={{ fontSize: '20px' }}>⏱️</div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: 'var(--accent-cyan)', margin: '4px 0 2px' }}>
+                {currencySymbol} {monthlyEmiTotal.toFixed(0)} / mo
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Total EMI outgoings</span>
+            </Card>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {emis.map(emi => {
+              const progress = emi.totalMonths > 0 ? Math.round(((emi.totalMonths - emi.remainingMonths) / emi.totalMonths) * 100) : 0
+              return (
+                <Card key={emi.id} style={{ padding: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800' }}>{emi.name}</h4>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        {emi.remainingMonths} of {emi.totalMonths} months left • {emi.rate > 0 ? `${emi.rate}% interest` : 'Interest-free'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
+                        {currencySymbol} {emi.amount} / mo
+                      </strong>
+                      <Button onClick={() => payEmiInstallment(emi.id)} style={{ padding: '4px 10px', fontSize: '11px' }}>Pay</Button>
+                      <ConfirmDeleteButton onConfirm={() => deleteEmi(emi.id)} size={12} label="Remove EMI" />
+                    </div>
+                  </div>
+                  <div style={{ height: '5px', background: 'var(--bg-secondary)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${progress}%`, background: 'var(--accent-cyan)', borderRadius: '3px', transition: 'width 0.4s ease' }} />
+                  </div>
+                </Card>
+              )
+            })}
+            {emis.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                No active EMI schedules logged.
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeSection === 'loans' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
+            <Card style={{ padding: '16px' }}>
+              <h3 style={{ fontSize: '13px', fontWeight: '800', marginBottom: '12px' }}>➕ Register Debt Entry</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <input
+                  style={inputStyle}
+                  placeholder="Person Name (e.g. Alice, Bob)"
+                  value={loanForm.person}
+                  onChange={e => setLoanForm(l => ({ ...l, person: e.target.value }))}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <input
+                    type="number"
+                    style={inputStyle}
+                    placeholder={`Amount (${currencySymbol})`}
+                    value={loanForm.amount}
+                    onChange={e => setLoanForm(l => ({ ...l, amount: e.target.value }))}
+                  />
+                  <select
+                    style={inputStyle}
+                    value={loanForm.type}
+                    onChange={e => setLoanForm(l => ({ ...l, type: e.target.value }))}
+                  >
+                    <option value="Borrowed">🔴 Borrowed (You owe)</option>
+                    <option value="Lent">🟢 Lent (Owed to you)</option>
+                  </select>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' }}>
+                  <input
+                    type="date"
+                    style={inputStyle}
+                    value={loanForm.dueDate}
+                    onChange={e => setLoanForm(l => ({ ...l, dueDate: e.target.value }))}
+                  />
+                  <input
+                    style={inputStyle}
+                    placeholder="Short description..."
+                    value={loanForm.notes}
+                    onChange={e => setLoanForm(l => ({ ...l, notes: e.target.value }))}
+                  />
+                </div>
+                <Button onClick={addLoan} disabled={!loanForm.person.trim() || !loanForm.amount} style={{ marginTop: '4px' }}>
+                  Log Debt
+                </Button>
+              </div>
+            </Card>
+
+            <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center' }}>
+              <div style={{ fontSize: '20px' }}>🤝</div>
+              <div style={{ fontSize: '18px', fontWeight: '800', color: '#10B981', margin: '4px 0 2px' }}>
+                + {currencySymbol} {loans.filter(l => l.type === 'Lent').reduce((acc, l) => acc + l.amount, 0)}
+              </div>
+              <div style={{ fontSize: '18px', fontWeight: '800', color: '#EF4444', marginBottom: '4px' }}>
+                - {currencySymbol} {loans.filter(l => l.type === 'Borrowed').reduce((acc, l) => acc + l.amount, 0)}
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Lent vs Borrowed Debt Ledger</span>
+            </Card>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {loans.map(loan => (
+              <Card key={loan.id} style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderLeft: `3px solid ${loan.type === 'Lent' ? '#10B981' : '#EF4444'}` }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800' }}>
+                    {loan.type === 'Lent' ? `🟢 Owed by ${loan.person}` : `🔴 Owed to ${loan.person}`}
+                  </h4>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    Due date: {loan.dueDate} {loan.notes && `• "${loan.notes}"`}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <strong style={{ fontSize: '15px', color: loan.type === 'Lent' ? '#10B981' : '#EF4444' }}>
+                    {currencySymbol} {loan.amount}
+                  </strong>
+                  <Button onClick={() => settleLoan(loan.id)} style={{ padding: '4px 10px', fontSize: '11px', background: loan.type === 'Lent' ? '#10B981' : '#EF4444' }}>Settle</Button>
+                  <ConfirmDeleteButton onConfirm={() => deleteLoan(loan.id)} size={12} label="Remove entry" />
+                </div>
+              </Card>
+            ))}
+            {loans.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                No active loans or debts recorded.
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   )
 }

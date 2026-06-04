@@ -17,6 +17,8 @@ import { useCountUp } from '../hooks/useCountUp'
 import { useToast } from '../context/toastContextCore'
 import NLInput from '../components/ui/NLInput'
 import WeeklySummary from '../components/ui/WeeklySummary'
+import { playSuccessSound, playWarningBeep } from '../hooks/useAudio'
+import { hapticSuccess, hapticLight } from '../hooks/useHaptic'
 import SmartReminders from '../components/ui/SmartReminders'
 
 export default function Home() {
@@ -72,6 +74,36 @@ export default function Home() {
   const todayLogs = (state.habits?.dailyLogs || []).filter(l => l.date === today)
   const todayBodyLog = (state.health?.bodyLogs || []).find(l => l.date === today)
   const todayHealth = todayBodyLog || {}
+  
+  const waterLogs = state.health?.waterLogs || []
+  const todayWaterLogs = waterLogs.filter(w => w.date === today)
+  const todayWaterTotal = todayWaterLogs.reduce((acc, log) => acc + (log.amountMl || 0), 0)
+  const waterGoal = preferences.waterGoal || 3000
+
+  function logWaterHome(amountMl) {
+    const newLog = {
+      id: 'water_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+      amountMl: parseInt(amountMl),
+      date: today,
+      timestamp: new Date().toISOString(),
+    }
+    const updatedLogs = [...waterLogs, newLog]
+    const prevTotal = todayWaterTotal
+    const nextTotal = prevTotal + amountMl
+    if (nextTotal >= waterGoal && prevTotal < waterGoal) {
+      showToast('🎉 Hydration Goal Achieved! Fantastic job!', 'success')
+      playSuccessSound()
+      hapticSuccess()
+    } else {
+      playSuccessSound()
+      hapticSuccess()
+    }
+    setModule('health', {
+      ...state.health,
+      waterLogs: updatedLogs
+    })
+  }
+
   const checkpoints = (state.habits?.checkpoints || []).filter(c => c.isActive)
 
   const getCheckpointStatus = cpId =>
@@ -289,6 +321,14 @@ export default function Home() {
         color: '#A78BFA',
         to: '/health',
       },
+      {
+        icon: '💧',
+        label: 'Water Log',
+        value: `${todayWaterTotal} ml`,
+        sub: `${waterGoal} ml goal`,
+        color: '#60A5FA',
+        to: '/health',
+      },
     ],
     [
       todaySpend,
@@ -302,6 +342,8 @@ export default function Home() {
       todayHealth.sleepHours,
       bestStreak,
       currency,
+      todayWaterTotal,
+      waterGoal,
     ]
   )
 
@@ -765,6 +807,42 @@ export default function Home() {
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
                 {sub}
               </div>
+              {label === 'Water Log' && (
+                <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }} onClick={e => e.stopPropagation()}>
+                   <button
+                     onClick={() => logWaterHome(250)}
+                     style={{
+                       flex: 1,
+                       padding: '5px 8px',
+                       borderRadius: '8px',
+                       border: '1px solid rgba(59,130,246,0.3)',
+                       background: 'rgba(59,130,246,0.1)',
+                       color: '#93C5FD',
+                       fontSize: '11px',
+                       fontWeight: '700',
+                       cursor: 'pointer',
+                     }}
+                   >
+                     +250ml
+                   </button>
+                   <button
+                     onClick={() => logWaterHome(500)}
+                     style={{
+                       flex: 1,
+                       padding: '5px 8px',
+                       borderRadius: '8px',
+                       border: '1px solid rgba(59,130,246,0.3)',
+                       background: 'rgba(59,130,246,0.1)',
+                       color: '#93C5FD',
+                       fontSize: '11px',
+                       fontWeight: '700',
+                       cursor: 'pointer',
+                     }}
+                   >
+                     +500ml
+                   </button>
+                </div>
+              )}
             </Card>
           ))}
         </section>

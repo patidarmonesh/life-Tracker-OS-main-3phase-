@@ -3,7 +3,7 @@
 
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { format, subDays } from 'date-fns'
-import { Send, Sparkles, Bot, User, Trash2, Sun, Zap, Volume2 } from 'lucide-react'
+import { Send, Sparkles, Bot, User, Trash2, Sun, Zap, Volume2, Mic, MicOff } from 'lucide-react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { getGeminiApiKey } from '../services/geminiService'
 import Card from '../components/ui/Card'
@@ -630,6 +630,56 @@ export default function AIChat() {
   const { patchModule, setModule } = useAppActions()
   const { showToast } = useToast()
   const [input, setInput] = useState('')
+  const [isListening, setIsListening] = useState(false)
+  const recognitionRef = useRef(null)
+
+  function toggleListening() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      showToast('Speech recognition is not supported in this browser.', 'error')
+      return
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop()
+      setIsListening(false)
+      playSubtleClick()
+      hapticMedium()
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.lang = 'en-US'
+
+    recognition.onstart = () => {
+      setIsListening(true)
+      playSubtleClick()
+      hapticMedium()
+    }
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript
+      setInput(prev => prev + (prev ? ' ' : '') + transcript)
+      playSuccessSound()
+      hapticSuccess()
+    }
+
+    recognition.onerror = (event) => {
+      console.error(event.error)
+      showToast('Speech recognition error: ' + event.error, 'error')
+      setIsListening(false)
+      playWarningBeep()
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+    }
+
+    recognitionRef.current = recognition
+    recognition.start()
+  }
   const [loading, setLoading] = useState(false)
 
   const messages = state.aiChat?.messages || []
@@ -1283,6 +1333,24 @@ export default function AIChat() {
               fontFamily: 'DM Sans, sans-serif',
             }}
           />
+          <button
+            type="button"
+            onClick={toggleListening}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: isListening ? '#EF4444' : 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 6,
+              borderRadius: '8px',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {isListening ? <MicOff size={18} className="animate-pulse" /> : <Mic size={18} />}
+          </button>
 
           <button
             disabled={loading}

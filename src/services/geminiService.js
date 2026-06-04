@@ -198,3 +198,140 @@ ${JSON.stringify(snapshot, null, 2)}
     parsed: extractJsonBlock(text),
   }
 }
+
+export async function decomposeGoalWithAI({ apiKey, title, description }) {
+  const prompt = `
+You are an expert AI productivity coach. Decompose this goal into 3 to 5 clear, structured milestones.
+Goal Title: "${title}"
+Goal Description: "${description || 'No description provided'}"
+
+Return ONLY valid JSON in this exact schema, do not add markdown wrapping or explanation:
+{
+  "milestones": [
+    { "text": "Milestone description here" }
+  ]
+}
+`
+
+  const data = await geminiRequest({
+    apiKey,
+    contents: [
+      {
+        parts: [{ text: prompt }],
+      },
+    ],
+    generationConfig: { temperature: 0.1 },
+  })
+
+  const text =
+    data?.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('') || ''
+
+  return extractJsonBlock(text)
+}
+
+export async function generateWeeklyReportAndBurnoutRisk({ apiKey, snapshot }) {
+  const prompt = `
+You are an expert AI Life Coach and Mental Health Predictor. Analyze this user's 7-day productivity and health log dataset.
+Look at sleep hours, step counts, study duration, budget adherence, habit completion, and journal sentiments.
+
+Correlation rules:
+- Low sleep + very high study hours = High Burnout risk.
+- Low spending + high mood = Healthy spending habits.
+- High step count + high mood = Exercise benefits mood.
+
+Return ONLY valid JSON in this exact schema, do not add markdown wrapping or explanation:
+{
+  "burnoutRisk": "Low" | "Medium" | "High" | "Critical",
+  "burnoutAnalysis": "A 2-3 sentence analysis of burnout patterns and correlations.",
+  "productivityReview": "A 2-3 sentence review of study hours vs. waste time.",
+  "suggestions": [
+    "Suggestion action 1",
+    "Suggestion action 2",
+    "Suggestion action 3"
+  ]
+}
+
+Logs snapshot:
+${JSON.stringify(snapshot, null, 2)}
+`
+
+  const data = await geminiRequest({
+    apiKey,
+    contents: [
+      {
+        parts: [{ text: prompt }],
+      },
+    ],
+    generationConfig: { temperature: 0.2 },
+  })
+
+  const text =
+    data?.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('') || ''
+
+  return extractJsonBlock(text)
+}
+
+export async function generateStudyPlanWithAI({ apiKey, examDate, subjects, dailyHours }) {
+  const prompt = `
+You are an expert academic planner. Create a highly customized study schedule to prepare for an exam on ${examDate}.
+The student is studying: ${subjects}.
+They can study ${dailyHours} hours per day.
+
+Provide a structured weekly target list and daily hour recommendations to optimize their learning and avoid burnout.
+Return ONLY valid JSON in this exact schema, do not add markdown wrapping or explanation:
+{
+  "weeklyMilestones": [
+    { "week": "Week 1", "targets": ["Target 1", "Target 2"] }
+  ],
+  "dailySchedule": [
+    { "day": "Monday", "topic": "Subject/Topic recommendation", "hours": 2 }
+  ],
+  "tips": ["Tip 1", "Tip 2"]
+}
+`
+
+  const data = await geminiRequest({
+    apiKey,
+    contents: [
+      {
+        parts: [{ text: prompt }],
+      },
+    ],
+    generationConfig: { temperature: 0.2 },
+  })
+
+  const text =
+    data?.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('') || ''
+
+  return extractJsonBlock(text)
+}
+
+export async function analyzeJournalSentimentWithAI({ apiKey, content }) {
+  const prompt = `
+You are an expert mental health analyzer. Analyze the sentiment and emotions of this journal entry content.
+Journal Entry Content: "${content}"
+
+Analyze the text and return ONLY valid JSON in this exact schema, do not add markdown wrapping or explanation:
+{
+  "sentiment": "Positive",
+  "recurringThemes": ["Theme 1", "Theme 2"],
+  "healthCheckRecommendation": "A 1-2 sentence supportive feedback/recommendation based on their emotion."
+}
+`
+
+  const data = await geminiRequest({
+    apiKey,
+    contents: [
+      {
+        parts: [{ text: prompt }],
+      },
+    ],
+    generationConfig: { temperature: 0.2 },
+  })
+
+  const text =
+    data?.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('') || ''
+
+  return extractJsonBlock(text)
+}
+

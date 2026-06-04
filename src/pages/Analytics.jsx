@@ -15,7 +15,11 @@ import {
   ReferenceLine,
   Cell,
 } from 'recharts'
-import { Download } from 'lucide-react'
+import { Download, Sparkles, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { useToast } from '../context/toastContextCore'
+import { getGeminiApiKey, generateWeeklyReportAndBurnoutRisk } from '../services/geminiService'
+import { playSuccessSound, playWarningBeep } from '../hooks/useAudio'
+import { hapticSuccess, hapticLight } from '../hooks/useHaptic'
 import { useAppState } from '../context/appHooks'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -380,6 +384,8 @@ export default function Analytics() {
           <ProductivityCurve timeEntries={timeEntries} studySessions={studySessions} />
         </Card>
 
+        <AIBurnoutPredictor snapshot={analytics.dailyData.slice(-7)} />
+
         <Card>
           <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '14px' }}>Period Insight</h3>
           <div style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.7' }}>
@@ -627,5 +633,127 @@ function ProductivityCurve({ timeEntries, studySessions }) {
         </div>
       )}
     </div>
+  )
+}
+
+function AIBurnoutPredictor({ snapshot }) {
+  const [report, setReport] = useState(() => {
+    try {
+      const cached = localStorage.getItem('lifeos-cached-burnout-report')
+      return cached ? JSON.parse(cached) : null
+    } catch {
+      return null
+    }
+  })
+  const [loading, setLoading] = useState(false)
+  const { showToast } = useToast()
+
+  async function handleGenerate() {
+    const apiKey = getGeminiApiKey()
+    if (!apiKey) {
+      showToast('Gemini API key is missing. Add it in Settings!', 'error')
+      return
+    }
+
+    setLoading(true)
+    showToast('Analyzing patterns & predicting burnout risk... 🧠', 'info')
+    try {
+      const res = await generateWeeklyReportAndBurnoutRisk({ apiKey, snapshot })
+      if (res) {
+        setReport(res)
+        localStorage.setItem('lifeos-cached-burnout-report', JSON.stringify(res))
+        showToast('AI analysis completed! ✨', 'success')
+        playSuccessSound()
+        hapticSuccess()
+      } else {
+        showToast('Failed to parse AI report.', 'error')
+      }
+    } catch (e) {
+      showToast(e.message || 'AI prediction failed', 'error')
+      playWarningBeep()
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const riskColors = {
+    Low: '#10B981',
+    Medium: '#F59E0B',
+    High: '#F97316',
+    Critical: '#EF4444',
+  }
+
+  const riskColor = report ? riskColors[report.burnoutRisk] || '#6366F1' : '#6366F1'
+
+  return (
+    <Card style={{ padding: '18px', border: report ? `1px solid ${riskColor}40` : '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+        <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+          🧠 AI Weekly Report & Burnout Predictor
+        </h3>
+        <Button onClick={handleGenerate} disabled={loading} variant="secondary" style={{ padding: '6px 12px', fontSize: '12px', borderColor: 'rgba(99,102,241,0.4)', color: '#C7D2FE' }}>
+          <Sparkles size={13} className={loading ? 'animate-spin' : ''} style={{ marginRight: '4px' }} />
+          {loading ? 'Analyzing...' : report ? 'Regenerate Analysis' : 'Analyze Burnout Risk'}
+        </Button>
+      </div>
+
+      {report ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: `${riskColor}10`,
+            border: `1px solid ${riskColor}30`,
+            padding: '10px 14px',
+            borderRadius: '10px'
+          }}>
+            <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-secondary)' }}>Burnout Threat Level:</span>
+            <span style={{
+              fontSize: '14px',
+              fontWeight: '800',
+              color: riskColor,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
+              {report.burnoutRisk === 'Critical' || report.burnoutRisk === 'High' ? '⚠️ ' : '✅ '}
+              {report.burnoutRisk}
+            </span>
+          </div>
+
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', marginBottom: '4px' }}>Burnout Pattern Analysis</div>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.6' }}>{report.burnoutAnalysis}</p>
+          </div>
+
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', marginBottom: '4px' }}>Productivity & Focus Balance</div>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.6' }}>{report.productivityReview}</p>
+          </div>
+
+          {report.suggestions && report.suggestions.length > 0 && (
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', marginBottom: '6px' }}>AI Recommended Restorations</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {report.suggestions.map((sug, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    <CheckCircle2 size={14} color="#10B981" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <span>{sug}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+          <div style={{ fontSize: '32px', marginBottom: '8px' }}>⚡</div>
+          No correlation analysis generated yet. Click above to run the Gemini Burnout Predictor on your last 7 days of steps, study hours, sleep and mood.
+        </div>
+      )}
+    </Card>
   )
 }

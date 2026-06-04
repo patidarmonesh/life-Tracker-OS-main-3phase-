@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState } from 'react'
 import { v4 as uuid } from 'uuid'
-import { MessageSquare } from 'lucide-react'
+import { MessageSquare, Mic, MicOff } from 'lucide-react'
+import { playSuccessSound, playSubtleClick, playWarningBeep } from '../../hooks/useAudio'
+import { hapticSuccess, hapticLight } from '../../hooks/useHaptic'
 import { getTodayDateKey } from '../../utils/dateTime'
 
 const PATTERNS = [
@@ -58,6 +60,56 @@ function parseInput(text) {
 
 export default function NLInput({ state, setModule, patchModule, showToast }) {
   const [input, setInput] = useState('')
+  const [isListening, setIsListening] = useState(false)
+  const recognitionRef = useRef(null)
+
+  function toggleListening() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      showToast('Speech recognition is not supported in this browser.', 'error')
+      return
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop()
+      setIsListening(false)
+      playSubtleClick()
+      hapticLight()
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.lang = 'en-US'
+
+    recognition.onstart = () => {
+      setIsListening(true)
+      playSubtleClick()
+      hapticLight()
+    }
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript
+      setInput(prev => prev + (prev ? ' ' : '') + transcript)
+      playSuccessSound()
+      hapticSuccess()
+    }
+
+    recognition.onerror = (event) => {
+      console.error(event.error)
+      showToast('Speech recognition error: ' + event.error, 'error')
+      setIsListening(false)
+      playWarningBeep()
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+    }
+
+    recognitionRef.current = recognition
+    recognition.start()
+  }
   const [lastAction, setLastAction] = useState(null)
   const inputRef = useRef(null)
   const timezone = state?.settings?.profile?.timezone
@@ -193,6 +245,24 @@ export default function NLInput({ state, setModule, patchModule, showToast }) {
             fontFamily: 'DM Sans, sans-serif',
           }}
         />
+        <button
+          type="button"
+          onClick={toggleListening}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: isListening ? '#EF4444' : 'var(--text-muted)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 6,
+            borderRadius: '8px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          {isListening ? <MicOff size={18} className="animate-pulse" /> : <Mic size={18} />}
+        </button>
         <button
           onClick={handleSubmit}
           disabled={!input.trim()}

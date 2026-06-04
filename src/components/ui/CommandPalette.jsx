@@ -55,6 +55,13 @@ const MODULE_CONFIG = {
     badgeColor: '#EC4899',
     route: '/health',
   },
+  wisdom: {
+    label: 'Wisdom Log',
+    icon: BookOpen,
+    color: 'var(--accent-indigo)',
+    badgeColor: '#EC4899',
+    route: '/wisdom',
+  },
 }
 
 const QUICK_ACTIONS = [
@@ -228,6 +235,27 @@ function searchModules(state, query) {
         sortTime: log.createdAt || log.date,
       })
       healthCount++
+    }
+  }
+
+  // Wisdom — entries
+  const wisdomEntries = state.wisdom?.entries || []
+  let wisdomCount = 0
+  for (const entry of wisdomEntries) {
+    if (wisdomCount >= MAX_PER_MODULE) break
+    if (
+      fuzzyMatch(entry.text, q) ||
+      fuzzyMatch(entry.source, q)
+    ) {
+      results.push({
+        id: `wisdom-${entry.id}`,
+        module: 'wisdom',
+        title: entry.text || 'Wisdom Insight',
+        subtitle: entry.source ? `Source: ${entry.source}` : 'Wisdom Log',
+        date: entry.createdAt ? entry.createdAt.slice(0, 10) : '',
+        sortTime: entry.createdAt,
+      })
+      wisdomCount++
     }
   }
 

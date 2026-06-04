@@ -199,10 +199,10 @@ export default function Settings() {
   }
 
   const VALID_MODULE_KEYS = new Set([
-    'finance', 'timeflow', 'study', 'habits', 'health', 'journal', 'wisdom', 'settings', 'aiChat',
+    'finance', 'timeflow', 'study', 'habits', 'health', 'journal', 'wisdom', 'goals', 'decisions', 'crm', 'secondBrain', 'readings', 'meditations', 'settings', 'aiChat',
   ])
 
-  const EXPECTED_KEYS = ['finance', 'study', 'timeflow', 'habits', 'health', 'journal', 'wisdom', 'settings']
+  const EXPECTED_KEYS = ['finance', 'study', 'timeflow', 'habits', 'health', 'journal', 'wisdom', 'goals', 'decisions', 'crm', 'secondBrain', 'readings', 'meditations', 'settings']
 
   function importBackup(e) {
     const file = e.target.files?.[0]
@@ -232,6 +232,11 @@ export default function Settings() {
         if (imported.habits?.checkpoints?.length) counts.push(`${imported.habits.checkpoints.length} habit checkpoints`)
         if (imported.health?.bodyLogs?.length) counts.push(`${imported.health.bodyLogs.length} health logs`)
         if (imported.journal?.entries?.length) counts.push(`${imported.journal.entries.length} journal entries`)
+        if (imported.decisions?.entries?.length) counts.push(`${imported.decisions.entries.length} decisions`)
+        if (imported.crm?.contacts?.length) counts.push(`${imported.crm.contacts.length} CRM contacts`)
+        if (imported.secondBrain?.notes?.length) counts.push(`${imported.secondBrain.notes.length} brain notes`)
+        if (imported.readings?.books?.length) counts.push(`${imported.readings.books.length} readings`)
+        if (imported.meditations?.sessions?.length) counts.push(`${imported.meditations.sessions.length} meditations`)
 
         const summary = counts.length > 0 ? `Imported ${counts.join(', ')}` : 'Backup imported successfully'
         showToast(summary + ' ✓', 'success')
@@ -246,13 +251,19 @@ export default function Settings() {
   function clearModule(moduleKey) {
     if (!window.confirm(`Clear all data for ${moduleKey}?`)) return
     const emptyMap = {
-      finance: { expenses: [], budgets: {}, categories: [], bills: [] },
+      finance: { expenses: [], budgets: {}, categories: [], bills: [], savingsGoals: [] },
       timeflow: { entries: [] },
-      study: { sessions: [], goals: {}, subjects: [] },
+      study: { sessions: [], goals: {}, subjects: [], flashcards: [] },
       habits: { checkpoints: [], dailyLogs: [] },
-      health: { bodyLogs: [], nutrition: [], hevyWorkouts: [], manualWorkouts: [] },
+      health: { bodyLogs: [], nutrition: [], hevyWorkouts: [], manualWorkouts: [], waterLogs: [] },
       journal: { entries: [] },
       wisdom: { entries: [] },
+      goals: { entries: [] },
+      decisions: { entries: [] },
+      crm: { contacts: [] },
+      secondBrain: { notes: [] },
+      readings: { books: [] },
+      meditations: { sessions: [] },
       aiChat: { messages: [] },
     }
     if (emptyMap[moduleKey]) setModule(moduleKey, emptyMap[moduleKey])
@@ -313,9 +324,15 @@ export default function Settings() {
     timeEntries: state.timeflow?.entries?.length || 0,
     studySessions: state.study?.sessions?.length || 0,
     habitsCount: state.habits?.checkpoints?.length || 0,
-    healthLogs: (state.health?.bodyLogs?.length || 0) + (state.health?.manualWorkouts?.length || 0),
+    healthLogs: (state.health?.bodyLogs?.length || 0) + (state.health?.manualWorkouts?.length || 0) + (state.health?.waterLogs?.length || 0),
     journalEntries: state.journal?.entries?.length || 0,
     wisdomCount: state.wisdom?.entries?.length || 0,
+    goalsCount: state.goals?.entries?.length || 0,
+    decisionsCount: state.decisions?.entries?.length || 0,
+    crmCount: state.crm?.contacts?.length || 0,
+    secondBrainCount: state.secondBrain?.notes?.length || 0,
+    readingsCount: state.readings?.books?.length || 0,
+    meditationsCount: state.meditations?.sessions?.length || 0,
   }), [state])
 
   return (
@@ -759,6 +776,12 @@ export default function Settings() {
               ['health', `Health (${stat.healthLogs})`],
               ['journal', `Journal (${stat.journalEntries})`],
               ['wisdom', `Wisdom (${stat.wisdomCount})`],
+              ['goals', `Goals (${stat.goalsCount})`],
+              ['decisions', `Decisions (${stat.decisionsCount})`],
+              ['crm', `CRM (${stat.crmCount})`],
+              ['secondBrain', `Brain (${stat.secondBrainCount})`],
+              ['readings', `Readings (${stat.readingsCount})`],
+              ['meditations', `Meditations (${stat.meditationsCount})`],
             ].map(([key, label]) => (
               <button
                 key={key}
@@ -869,7 +892,7 @@ export default function Settings() {
                 try {
                   const text = await file.text()
                   const data = JSON.parse(text)
-                  const MODULES = ['finance', 'study', 'timeflow', 'habits', 'health', 'journal', 'wisdom', 'settings']
+                  const MODULES = ['finance', 'study', 'timeflow', 'habits', 'health', 'journal', 'wisdom', 'goals', 'decisions', 'crm', 'secondBrain', 'readings', 'meditations', 'settings']
                   const validModules = MODULES.filter(m => data[m])
                   if (validModules.length === 0) {
                     showToast('Invalid backup file — no recognized modules found.', 'error')
