@@ -871,4 +871,3 @@ export default function AppShell({ children }) {
     </div>
   )
 }
-
