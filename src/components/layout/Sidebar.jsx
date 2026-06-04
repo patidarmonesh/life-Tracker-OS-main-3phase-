@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import {
   Home, BarChart2, Clock, BookOpen, CheckSquare,
   Heart, FileText, Bot, PieChart, Settings, Target, Microscope, CalendarDays,
-  PanelLeftClose, PanelLeft, Trophy, Brain, Users, Book, Wind, HelpCircle
+    PanelLeftClose, PanelLeft, Trophy, Brain, Users, Book, Wind, HelpCircle, Sparkles
 } from 'lucide-react'
 
 const navSections = [
