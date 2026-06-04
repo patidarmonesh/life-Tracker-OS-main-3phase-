@@ -47,10 +47,10 @@ const initialState = {
   health: { imported: {}, manualLogs: [], energyLogs: [], waterLogs: [] },
   journal: { entries: [] },
   wisdom: { entries: [
-    { id: 'default_1', text: 'Vichar vritti se aate h isle hamesha socha karo', source: 'Bhagavad Gita', isFloating: true, createdAt: new Date().toISOString() }
+    { id: 'default_1', text: 'Vichar vritti se aate h isle hamesha socha karo', source: 'Bhagavad Gita', isFloating: true, createdAt: '2024-01-01T00:00:00.000Z' }
   ] },
   goals: { entries: [
-    { id: 'sample_goal_1', title: 'Build a high-performance Life OS', description: 'Implement next-level productivity features and study trackers', timeframe: 'Year', category: 'Career', milestones: [{ id: 'm1', text: 'Define roadmap', isCompleted: true }, { id: 'm2', text: 'Write code & tests', isCompleted: false }], linkedHabits: [], linkedSubjects: [], createdAt: new Date().toISOString(), targetDate: '2026-12-31' }
+    { id: 'sample_goal_1', title: 'Build a high-performance Life OS', description: 'Implement next-level productivity features and study trackers', timeframe: 'Year', category: 'Career', milestones: [{ id: 'm1', text: 'Define roadmap', isCompleted: true }, { id: 'm2', text: 'Write code & tests', isCompleted: false }], linkedHabits: [], linkedSubjects: [], createdAt: '2024-01-01T00:00:00.000Z', targetDate: '2026-12-31' }
   ] },
   decisions: { entries: [] },
   crm: { contacts: [] },
@@ -993,11 +993,13 @@ export function AppProvider({ children }) {
         const hasDriveSession = isAuthenticated && getAccessToken()
 
         if (hasDriveSession) {
+                    // First, load local data so nothing is lost if Drive sync fails
+          const localData = loadStateFromLocalStorage()
           if (!cancelled) {
             dispatch({
               type: 'HYDRATE_STATE',
               data: {
-                ...mergeWithInitialState(),
+                ...(localData ? mergeWithInitialState(localData) : mergeWithInitialState()),
                 syncStatus: 'syncing',
                 hydrated: true,
                 isFromDrive: false,
@@ -1009,7 +1011,7 @@ export function AppProvider({ children }) {
             markSyncing: false,
             ensureFiles: true,
             forceApply: true,
-            mergeLocalRecords: false,
+            mergeLocalRecords: true,
           }).catch(driveError => {
             console.warn('Drive sync failed during hydrate:', driveError)
             if (isDriveAuthError(driveError)) {
