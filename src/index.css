@@ -387,3 +387,15 @@ html.theme-transitioning *::after {
   opacity: 1;
   transition: 0s;
 }
+
+/* ── Custom responsive rules for Finance container ── */
+.finance-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px;
+}
+@media (max-width: 768px) {
+  .finance-container {
+    padding: 12px 10px !important;
+  }
+}
