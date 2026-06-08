@@ -38,13 +38,18 @@ export default function Modal({ isOpen, onClose, title, children }) {
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      className="modal-backdrop"
       style={{
         position: 'fixed', inset: 0,
         background: 'rgba(0,0,0,0.7)',
         backdropFilter: 'blur(6px)',
         WebkitBackdropFilter: 'blur(6px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 1000, padding: '16px',
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '20px 16px',
+        overflowY: 'auto',
         animation: 'modalBackdropFadeIn 0.2s ease',
       }}
     >
@@ -52,13 +57,15 @@ export default function Modal({ isOpen, onClose, title, children }) {
         ref={contentRef}
         tabIndex={-1}
         onClick={e => e.stopPropagation()}
+        className="modal-content"
         style={{
           background: 'var(--bg-card)',
           border: '1px solid var(--border)',
           borderRadius: '20px',
           padding: '24px',
           width: '100%', maxWidth: '480px',
-          maxHeight: '90vh', overflowY: 'auto',
+          margin: 'auto',
+          maxHeight: 'none',
           animation: 'modalFadeIn 0.25s ease',
           outline: 'none',
         }}
