@@ -762,49 +762,49 @@ export default function AppShell({ children }) {
       <div
         onClick={() => navigate('/wisdom')}
         style={{
-          background: 'linear-gradient(90deg, rgba(99,102,241,0.06) 0%, rgba(236,72,153,0.06) 100%)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          borderBottom: '1px solid rgba(99,102,241,0.15)',
-          padding: '6px 16px',
+          background: 'linear-gradient(90deg, rgba(99,102,241,0.12) 0%, rgba(236,72,153,0.12) 100%)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          borderBottom: '1px solid rgba(99,102,241,0.22)',
+          padding: '10px 20px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: '8px',
+          gap: '10px',
           cursor: 'pointer',
-          transition: 'all 0.3s ease',
+          transition: 'all 0.2s ease',
           zIndex: 90,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
+          flexWrap: 'wrap',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
         }}
         className="floating-wisdom-banner"
       >
-        <Sparkles size={13} color="#EC4899" style={{ animation: 'spin 10s linear infinite', flexShrink: 0 }} />
+        <Sparkles size={14} color="#EC4899" style={{ animation: 'spin 10s linear infinite', flexShrink: 0 }} />
         <span style={{
           fontSize: '11px',
-          fontWeight: '700',
-          color: 'var(--text-secondary)',
-          letterSpacing: '0.03em',
+          fontWeight: '800',
+          color: '#EC4899',
+          letterSpacing: '0.05em',
           textTransform: 'uppercase',
           flexShrink: 0,
         }}>
           Focus Wisdom:
         </span>
         <span style={{
-          fontSize: '12px',
-          fontWeight: '600',
+          fontSize: '13.5px',
+          fontWeight: '700',
           color: 'var(--text-primary)',
           fontStyle: 'italic',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
+          lineHeight: '1.4',
+          textAlign: 'center',
         }}>
           "{activeFloating.text}"
         </span>
         {activeFloating.source && (
           <span style={{
-            fontSize: '10px',
-            color: 'var(--text-muted)',
+            fontSize: '11px',
+            color: 'var(--text-secondary)',
+            fontWeight: '600',
             flexShrink: 0,
           }}>
             — {activeFloating.source}
