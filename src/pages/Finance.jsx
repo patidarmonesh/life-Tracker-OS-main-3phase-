@@ -389,6 +389,24 @@ export default function Finance() {
     resetForm()
   }
 
+  function handleViewBill(expense) {
+    const matchedBill = bills.find(b => b.driveFileId === expense.billDriveFileId || b.linkedExpenseId === expense.id)
+    const targetBill = matchedBill || {
+      id: expense.id,
+      fileName: expense.description || 'Attached Bill',
+      driveFileId: expense.billDriveFileId,
+      extractedText: expense.billOCRText || 'No text extracted',
+      suggestedAmount: expense.amount,
+      suggestedCategory: expense.category,
+      uploadedAt: expense.createdAt || new Date().toISOString(),
+    }
+    
+    // Switch to bills tab
+    setActiveTab('bills')
+    // Open bill preview modal
+    setSelectedBill(targetBill)
+  }
+
   function startEdit(expense) {
     setBillRemoved(false)
     setPendingBillForExpense(null)
@@ -994,7 +1012,7 @@ export default function Finance() {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {filtered.map(e => (
-                      <ExpenseRow key={e.id} expense={e} onDelete={handleDelete} onEdit={startEdit} defaultCurrency={currencyCode} />
+                      <ExpenseRow key={e.id} expense={e} onDelete={handleDelete} onEdit={startEdit} onViewBill={handleViewBill} defaultCurrency={currencyCode} />
                     ))}
                   </div>
                 )
@@ -1123,7 +1141,7 @@ export default function Finance() {
                       {[...filtered]
                         .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.time || '').localeCompare(String(a.time || '')))
                         .map(e => (
-                          <ExpenseRow key={e.id} expense={e} onDelete={handleDelete} onEdit={startEdit} showDate defaultCurrency={currencyCode} />
+                          <ExpenseRow key={e.id} expense={e} onDelete={handleDelete} onEdit={startEdit} onViewBill={handleViewBill} showDate defaultCurrency={currencyCode} />
                         ))}
                     </div>
                   </>
@@ -1608,7 +1626,7 @@ export default function Finance() {
   )
 }
 
-function ExpenseRow({ expense: e, onDelete, onEdit, showDate = false, defaultCurrency = 'INR' }) {
+function ExpenseRow({ expense: e, onDelete, onEdit, onViewBill, showDate = false, defaultCurrency = 'INR' }) {
   return (
     <div
       style={{
@@ -1671,20 +1689,7 @@ function ExpenseRow({ expense: e, onDelete, onEdit, showDate = false, defaultCur
                 type="button"
                 onClick={(evt) => {
                   evt.stopPropagation();
-                  const matchedBill = bills.find(b => b.driveFileId === e.billDriveFileId || b.linkedExpenseId === e.id);
-                  if (matchedBill) {
-                    setSelectedBill(matchedBill);
-                  } else {
-                    setSelectedBill({
-                      id: e.id,
-                      fileName: e.description || 'Attached Bill',
-                      driveFileId: e.billDriveFileId,
-                      extractedText: e.billOCRText || 'No text extracted',
-                      suggestedAmount: e.amount,
-                      suggestedCategory: e.category,
-                      uploadedAt: e.createdAt || new Date().toISOString(),
-                    });
-                  }
+                  onViewBill?.(e);
                 }}
                 style={{
                   background: 'rgba(16,185,129,0.12)',
