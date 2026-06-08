@@ -143,7 +143,9 @@ export default function Finance() {
   const [pendingBillForExpense, setPendingBillForExpense] = useState(null)
   const [uploadingBill, setUploadingBill] = useState(false)
   const [accountFilter, setAccountFilter] = useState('all')
+  const [billRemoved, setBillRemoved] = useState(false)
   const fileInputRef = useRef(null)
+  const modalFileInputRef = useRef(null)
 
   // SMS UPI Parser State
   const [showSMSModal, setShowSMSModal] = useState(false)
@@ -355,6 +357,8 @@ export default function Finance() {
   const monthPct = Math.min(100, (monthTotal / monthlyBudget) * 100)
 
   function resetForm() {
+    setBillRemoved(false)
+    setPendingBillForExpense(null)
     setForm({
       amount: '',
       category: 'Food & Drinks',
@@ -381,10 +385,13 @@ export default function Finance() {
     setShowAddModal(false)
     setPendingBillForExpense(null)
     setEditingEntry(null)
+    setBillRemoved(false)
     resetForm()
   }
 
   function startEdit(expense) {
+    setBillRemoved(false)
+    setPendingBillForExpense(null)
     setEditingEntry(expense)
     setForm({
       amount: String(expense.amount),
@@ -405,6 +412,8 @@ export default function Finance() {
     if (!form.amount || isNaN(Number(form.amount))) return
 
     const linkedBill = pendingBillForExpense || null
+    const billDriveFileId = billRemoved ? null : (linkedBill?.driveFileId || editingEntry?.billDriveFileId || null)
+    const billOCRText = billRemoved ? null : (linkedBill?.extractedText || editingEntry?.billOCRText || null)
 
     if (editingEntry) {
       const updatedExpense = {
@@ -419,15 +428,21 @@ export default function Finance() {
         isImpulsive: form.isImpulsive,
         account: form.account,
         tags: form.tags,
-        billDriveFileId: linkedBill?.driveFileId || editingEntry.billDriveFileId || null,
-        billOCRText: linkedBill?.extractedText || editingEntry.billOCRText || null,
+        billDriveFileId,
+        billOCRText,
         updatedAt: new Date().toISOString(),
       }
 
       let updatedBills = bills
       if (linkedBill) {
+        updatedBills = bills.map(b => {
+          if (b.id === linkedBill.id) return { ...b, linkedExpenseId: editingEntry.id }
+          if (b.linkedExpenseId === editingEntry.id) return { ...b, linkedExpenseId: null }
+          return b
+        })
+      } else if (billRemoved) {
         updatedBills = bills.map(b =>
-          b.id === linkedBill.id ? { ...b, linkedExpenseId: editingEntry.id } : b
+          b.linkedExpenseId === editingEntry.id ? { ...b, linkedExpenseId: null } : b
         )
       }
 
@@ -443,8 +458,9 @@ export default function Finance() {
       return
     }
 
+    const newExpenseId = uuid()
     const newExpense = {
-      id: uuid(),
+      id: newExpenseId,
       amount: Number(form.amount),
       currency: currencyCode,
       category: form.category,
@@ -457,8 +473,8 @@ export default function Finance() {
       account: form.account,
       isRecurring: false,
       tags: form.tags,
-      billDriveFileId: linkedBill?.driveFileId || null,
-      billOCRText: linkedBill?.extractedText || null,
+      billDriveFileId,
+      billOCRText,
       createdAt: new Date().toISOString(),
     }
 
@@ -467,7 +483,7 @@ export default function Finance() {
 
     if (linkedBill) {
       updatedBills = bills.map(b =>
-        b.id === linkedBill.id ? { ...b, linkedExpenseId: newExpense.id } : b
+        b.id === linkedBill.id ? { ...b, linkedExpenseId: newExpenseId } : b
       )
     }
 
@@ -641,6 +657,135 @@ export default function Finance() {
     }
   }
 
+  async function handleModalBillUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadingBill(true)
+
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      const fileType = inferMimeType(file.name, file.type)
+      const thumbnailDataUrl = await createImageThumbnail(file)
+      
+      const fallbackCategory = categories.includes('Miscellaneous')
+        ? 'Miscellaneous'
+        : categories[0] || 'Miscellaneous'
+
+      let extractedText = 'AI extraction requires Gemini API key in Settings.'
+      let suggestedAmount = null
+      let suggestedCategory = fallbackCategory
+      let suggestedDescription = file.name
+
+      if (geminiApiKey) {
+        try {
+          const base64Data = String(base64).split(',')[1]
+
+          const { rawResponse, parsed } = await extractBillWithGemini({
+            apiKey: geminiApiKey,
+            base64Data,
+            mimeType: file.type || 'image/jpeg',
+            allowedCategories: categories,
+          })
+
+          if (parsed) {
+            extractedText = parsed.rawText || rawResponse || 'No readable text found'
+            suggestedAmount =
+              parsed.totalAmount !== null &&
+              parsed.totalAmount !== undefined &&
+              !isNaN(Number(parsed.totalAmount))
+                ? Number(parsed.totalAmount)
+                : null
+
+            suggestedCategory = categories.includes(parsed.category)
+              ? parsed.category
+              : fallbackCategory
+
+            suggestedDescription = parsed.description || parsed.merchant || file.name
+          } else {
+            extractedText = rawResponse || 'No readable text found'
+          }
+        } catch (error) {
+          extractedText = error.message || 'Could not extract text. Check your Gemini API key.'
+        }
+      }
+
+      await ensureBillsFolder()
+      const billsFolderId = getBillsFolderId()
+
+      let driveFileId = null
+      let driveFileUrl = null
+      let driveDownloadUrl = null
+      let driveSyncStatus = 'failed'
+
+      try {
+        const base64Data = String(base64).split(',')[1]
+
+        const uploaded = await uploadBase64FileToDrive({
+          fileName: file.name,
+          mimeType: fileType || 'application/octet-stream',
+          base64Data,
+          parentFolderId: billsFolderId,
+        })
+
+        driveFileId = uploaded.id || null
+        driveFileUrl = uploaded.webViewLink || null
+        driveDownloadUrl = uploaded.webContentLink || null
+        driveSyncStatus = 'synced'
+      } catch (driveError) {
+        console.error('Drive upload failed:', driveError)
+        driveSyncStatus = 'failed'
+      }
+
+      const newBill = {
+        id: uuid(),
+        fileName: file.name,
+        fileType,
+        thumbnailDataUrl,
+        base64: isImageBill({ fileName: file.name, fileType }) && !thumbnailDataUrl
+          ? String(base64)
+          : undefined,
+        extractedText,
+        suggestedAmount,
+        suggestedCategory,
+        suggestedDescription,
+        uploadedAt: new Date().toISOString(),
+        linkedExpenseId: editingEntry?.id || null,
+        driveFileId,
+        driveFileUrl,
+        driveDownloadUrl,
+        driveSyncStatus,
+      }
+
+      const updatedBills = [newBill, ...bills]
+      saveBills(updatedBills)
+      setPendingBillForExpense(newBill)
+      setBillRemoved(false)
+
+      setForm(f => ({
+        ...f,
+        amount: f.amount && f.amount !== '0' && f.amount !== '' ? f.amount : String(suggestedAmount || ''),
+        category: f.category && f.category !== 'Food & Drinks' ? f.category : suggestedCategory,
+        description: f.description ? f.description : (suggestedDescription || ''),
+      }))
+
+      showToast('Bill uploaded and attached! 🧾', 'success')
+      playSuccessSound()
+      hapticSuccess()
+    } catch (error) {
+      console.error('Bill upload failed:', error)
+      showToast('Could not upload this bill.', 'error')
+    } finally {
+      setUploadingBill(false)
+      if (modalFileInputRef.current) modalFileInputRef.current.value = ''
+    }
+  }
+
   const hasGemini = !!geminiApiKey
 
   const inputStyle = {
@@ -680,7 +825,7 @@ export default function Finance() {
   })
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+    <div className="finance-container">
       <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
         <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '1.4rem', margin: 0 }}>💸 Finance</h1>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -1152,20 +1297,94 @@ export default function Finance() {
         title={editingEntry ? 'Edit Expense' : 'Add Expense'}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {pendingBillForExpense ? (
-            <div
-              style={{
-                padding: '10px 12px',
-                borderRadius: '10px',
-                background: 'rgba(16,185,129,0.08)',
-                border: '1px solid rgba(16,185,129,0.25)',
-                fontSize: '12px',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              Linked bill: <strong>{pendingBillForExpense.fileName}</strong>
-            </div>
-          ) : null}
+          {(() => {
+            const activeModalBill = pendingBillForExpense || (editingEntry && !billRemoved && bills.find(b => b.driveFileId === editingEntry.billDriveFileId || b.linkedExpenseId === editingEntry.id))
+            
+            if (activeModalBill) {
+              return (
+                <div
+                  style={{
+                    padding: '12px',
+                    borderRadius: '12px',
+                    background: 'rgba(16,185,129,0.08)',
+                    border: '1px solid rgba(16,185,129,0.25)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: '600' }}>
+                      🧾 Linked Bill: <span style={{ color: '#10B981' }}>{activeModalBill.fileName}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBill(activeModalBill)}
+                        style={{
+                          background: 'rgba(99,102,241,0.15)',
+                          border: 'none',
+                          borderRadius: '6px',
+                          color: 'var(--accent-indigo)',
+                          padding: '4px 10px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🔍 View
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBillRemoved(true)
+                          setPendingBillForExpense(null)
+                        }}
+                        style={{
+                          background: 'rgba(244,63,94,0.15)',
+                          border: 'none',
+                          borderRadius: '6px',
+                          color: '#F43F5E',
+                          padding: '4px 10px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🗑 Unlink
+                      </button>
+                    </div>
+                  </div>
+                  {activeModalBill.suggestedAmount ? (
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      Amount: {formatCurrencyAmount(activeModalBill.suggestedAmount, currencyCode)}
+                    </div>
+                  ) : null}
+                </div>
+              )
+            }
+
+            return (
+              <div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={uploadingBill}
+                  onClick={() => modalFileInputRef.current?.click()}
+                  style={{ width: '100%', justifyContent: 'center', gap: '8px' }}
+                >
+                  {uploadingBill ? '⏳ Uploading...' : '📎 Attach Bill or Receipt'}
+                </Button>
+                <input
+                  ref={modalFileInputRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  style={{ display: 'none' }}
+                  onChange={handleModalBillUpload}
+                />
+              </div>
+            )
+          })()}
 
           <div>
             <label style={labelStyle}>Amount ({currencySymbol})</label>
@@ -1445,10 +1664,44 @@ function ExpenseRow({ expense: e, onDelete, onEdit, showDate = false, defaultCur
               <span style={{ color: '#F43F5E' }}>impulse 🤦</span>
             </>
           ) : null}
-          {e.billOCRText ? (
+          {(e.billDriveFileId || e.billOCRText) ? (
             <>
               <span>•</span>
-              <span style={{ color: '#10B981' }}>bill attached</span>
+              <button
+                type="button"
+                onClick={(evt) => {
+                  evt.stopPropagation();
+                  const matchedBill = bills.find(b => b.driveFileId === e.billDriveFileId || b.linkedExpenseId === e.id);
+                  if (matchedBill) {
+                    setSelectedBill(matchedBill);
+                  } else {
+                    setSelectedBill({
+                      id: e.id,
+                      fileName: e.description || 'Attached Bill',
+                      driveFileId: e.billDriveFileId,
+                      extractedText: e.billOCRText || 'No text extracted',
+                      suggestedAmount: e.amount,
+                      suggestedCategory: e.category,
+                      uploadedAt: e.createdAt || new Date().toISOString(),
+                    });
+                  }
+                }}
+                style={{
+                  background: 'rgba(16,185,129,0.12)',
+                  border: '1px solid rgba(16,185,129,0.25)',
+                  borderRadius: '4px',
+                  padding: '1px 6px',
+                  color: '#10B981',
+                  fontSize: '10px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                🧾 bill attached
+              </button>
             </>
           ) : null}
         </div>
