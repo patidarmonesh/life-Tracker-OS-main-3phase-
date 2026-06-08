@@ -140,6 +140,10 @@ export default function Health() {
   const [showGymModal, setShowGymModal] = useState(false)
   const [showNutritionModal, setShowNutritionModal] = useState(false)
   const [importStatus, setImportStatus] = useState(null)
+  const [showPairModal, setShowPairModal] = useState(false)
+  const [selectedBrand, setSelectedBrand] = useState('Apple Watch')
+  const [pairingProgress, setPairingProgress] = useState(0)
+  const [isPairing, setIsPairing] = useState(false)
 
   const [logForm, setLogForm] = useState({
     date: today, weight:'', bodyFat:'', muscleMass:'',
@@ -367,11 +371,17 @@ export default function Health() {
   }
 
   function syncSmartwatch() {
+    const isConnected = state.health?.isWatchConnected
+    const watchBrand = state.health?.watchBrand || 'Smartwatch'
+    if (!isConnected) {
+      showToast('No device connected. Please pair your smartwatch first.', 'warning')
+      return
+    }
     if (watchSyncing) return
     playSubtleClick()
     hapticLight()
     setWatchSyncing(true)
-    showToast('Connecting to Smartwatch via Bluetooth... 📡', 'info')
+    showToast(`Connecting to ${watchBrand} via Bluetooth... 📡`, 'info')
     
     setTimeout(() => {
       const syncedSteps = Math.floor(Math.random() * 6000) + 6000
@@ -386,7 +396,7 @@ export default function Health() {
       const entry = {
         id: existing?.id || uuid(),
         date: today,
-        notes: existing?.notes || 'Smartwatch auto-sync biometrics.',
+        notes: existing?.notes || `Synced with ${watchBrand} auto-sync biometrics.`,
         weight: existing?.weight || '',
         bodyFat: existing?.bodyFat || '',
         muscleMass: existing?.muscleMass || '',
@@ -410,11 +420,54 @@ export default function Health() {
         bodyLogs: [entry, ...bodyLogs.filter(l => l.date !== today)]
       })
 
-      showToast('Smartwatch sync complete! Steps & Sleep updated. ⌚', 'success')
+      showToast(`${watchBrand} sync complete! Steps & Sleep updated. ⌚`, 'success')
       playSuccessSound()
       hapticSuccess()
       setWatchSyncing(false)
     }, 1200)
+  }
+
+  function handlePairWatch() {
+    if (isPairing) return
+    setIsPairing(true)
+    setPairingProgress(0)
+    
+    const interval = setInterval(() => {
+      setPairingProgress(p => {
+        if (p >= 100) {
+          clearInterval(interval)
+          return 100
+        }
+        return p + 20
+      })
+    }, 300)
+
+    setTimeout(() => {
+      clearInterval(interval)
+      setModule('health', {
+        ...state.health,
+        isWatchConnected: true,
+        watchBrand: selectedBrand,
+      })
+      showToast(`${selectedBrand} paired successfully! ⌚`, 'success')
+      playSuccessSound()
+      hapticSuccess()
+      setIsPairing(false)
+      setShowPairModal(false)
+    }, 1800)
+  }
+
+  function handleDisconnectWatch() {
+    if (window.confirm(`Disconnect ${state.health?.watchBrand || 'Smartwatch'}?`)) {
+      setModule('health', {
+        ...state.health,
+        isWatchConnected: false,
+        watchBrand: null,
+      })
+      showToast('Smartwatch disconnected.', 'info')
+      playSubtleClick()
+      hapticLight()
+    }
   }
 
   /* ─── save: gym log ─────────────────────────────────────── */
@@ -645,45 +698,79 @@ export default function Health() {
 
         {/* ══════ TODAY TAB ═════════════════════════════════════ */}
         {activeTab === 'today' && <>
-          {/* Smartwatch Sync Dashboard */}
-          <Card style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(99,102,241,0.04) 0%, rgba(139,92,246,0.04) 100%)', border: '1px solid rgba(99,102,241,0.18)', marginBottom: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '24px' }}>⌚</span>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800' }}>Smartwatch Sync</h3>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {todayBodyLog?.source === 'smartwatch' ? 'Synced with Watch today' : 'Not synced today'}
-                  </span>
+          {!state.health?.isWatchConnected ? (
+            <Card style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(99,102,241,0.04) 0%, rgba(139,92,246,0.04) 100%)', border: '1px solid rgba(99,102,241,0.18)', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '24px' }}>⌚</span>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800' }}>Smartwatch Disconnected</h3>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Pair a device to sync steps, sleep & biometrics</span>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => { playSubtleClick(); hapticLight(); setShowPairModal(true); }}
+                  style={{ padding: '8px 14px', fontSize: '12px' }}
+                >
+                  🔗 Pair Smartwatch
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <Card style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(16,185,129,0.04) 0%, rgba(99,102,241,0.04) 100%)', border: '1px solid rgba(16,185,129,0.18)', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '24px' }}>⌚</span>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800' }}>{state.health.watchBrand || 'Smartwatch'} (Connected)</h3>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {todayBodyLog?.source === 'smartwatch' ? 'Synced with Watch today' : 'Not synced today'}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <button
+                    onClick={handleDisconnectWatch}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    Disconnect
+                  </button>
+                  <Button
+                    variant={todayBodyLog?.source === 'smartwatch' ? 'secondary' : 'primary'}
+                    onClick={syncSmartwatch}
+                    disabled={watchSyncing}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px' }}
+                  >
+                    <RefreshCw size={14} className={watchSyncing ? 'animate-spin' : ''} />
+                    {watchSyncing ? 'Syncing...' : 'Sync Watch'}
+                  </Button>
                 </div>
               </div>
-              <Button
-                variant={todayBodyLog?.source === 'smartwatch' ? 'secondary' : 'primary'}
-                onClick={syncSmartwatch}
-                disabled={watchSyncing}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px' }}
-              >
-                <RefreshCw size={14} className={watchSyncing ? 'animate-spin' : ''} />
-                {watchSyncing ? 'Syncing...' : 'Sync Watch'}
-              </Button>
-            </div>
-            {todayBodyLog?.source === 'smartwatch' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginTop: '12px', background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', fontSize: '11px' }}>
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>💓 Heart Rate</span>
-                  <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{todayBodyLog.avgHeartRate} bpm</strong>
+              {todayBodyLog?.source === 'smartwatch' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginTop: '12px', background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', fontSize: '11px' }}>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>💓 Heart Rate</span>
+                    <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{todayBodyLog.avgHeartRate} bpm</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>🩸 SpO2</span>
+                    <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{todayBodyLog.spo2}%</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>💤 Sleep Duration</span>
+                    <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{todayBodyLog.sleepHours} hrs</strong>
+                  </div>
                 </div>
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>🩸 SpO2</span>
-                  <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{todayBodyLog.spo2}%</strong>
-                </div>
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>💤 Sleep Duration</span>
-                  <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{todayBodyLog.sleepHours} hrs</strong>
-                </div>
-              </div>
-            )}
-          </Card>
+              )}
+            </Card>
+          )}
 
           {/* stat cards */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'10px' }}>
@@ -1652,6 +1739,59 @@ export default function Health() {
           {importStatus === 'reading' && <div style={{ padding:'12px', background:'rgba(99,102,241,0.1)', borderRadius:'10px', fontSize:'13px', color:'var(--accent-indigo)', textAlign:'center' }}>⏳ Processing...</div>}
           {importStatus?.startsWith('success') && <div style={{ padding:'12px', background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.3)', borderRadius:'10px', fontSize:'13px', color:'#10B981', textAlign:'center' }}>✅ Imported {importStatus.split(':')[1]} records!</div>}
           {importStatus === 'error' && <div style={{ padding:'12px', background:'rgba(244,63,94,0.1)', border:'1px solid rgba(244,63,94,0.3)', borderRadius:'10px', fontSize:'13px', color:'#F43F5E', textAlign:'center' }}>❌ Import failed. Check file format.</div>}
+        </div>
+      </Modal>
+
+      {/* ── Smartwatch Pairing Modal ───────────────────────── */}
+      <Modal isOpen={showPairModal} onClose={() => { if (!isPairing) setShowPairModal(false); }} title="🔗 Pair Smartwatch">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {isPairing ? (
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <div style={{ fontSize: '32px', animation: 'spin 1.5s linear infinite', display: 'inline-block', marginBottom: '12px' }}>📡</div>
+              <h4 style={{ fontSize: '15px', fontWeight: '700', marginBottom: '6px' }}>Searching for {selectedBrand}...</h4>
+              <div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden', maxWidth: '240px', margin: '12px auto 0' }}>
+                <div style={{ height: '100%', width: `${pairingProgress}%`, background: 'var(--accent-indigo)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Make sure Bluetooth is enabled on your device</span>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '12px', borderRadius: '10px', lineHeight: '1.6' }}>
+                Select your smartwatch model to connect and authorize health data synchronization.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {[
+                  { id: 'Apple Watch', name: '🍎 Apple Watch', desc: 'Syncs via Apple HealthKit' },
+                  { id: 'Fitbit', name: '⌚ Fitbit Ionic / Versa', desc: 'Syncs via Fitbit Web API' },
+                  { id: 'Garmin', name: '🛰️ Garmin Connect', desc: 'Syncs via Garmin Connect API' },
+                  { id: 'Galaxy Watch', name: '🌌 Samsung Galaxy Watch / WearOS', desc: 'Syncs via Health Connect API' },
+                ].map(brand => (
+                  <button
+                    key={brand.id}
+                    onClick={() => setSelectedBrand(brand.id)}
+                    style={{
+                      padding: '12px',
+                      borderRadius: '12px',
+                      border: '1px solid',
+                      borderColor: selectedBrand === brand.id ? 'var(--accent-indigo)' : 'var(--border)',
+                      background: selectedBrand === brand.id ? 'rgba(99,102,241,0.1)' : 'var(--bg-secondary)',
+                      color: 'var(--text-primary)',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <strong style={{ display: 'block', fontSize: '13.5px' }}>{brand.name}</strong>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', display: 'block' }}>{brand.desc}</span>
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                <Button variant="secondary" onClick={() => setShowPairModal(false)} style={{ flex: 1 }}>Cancel</Button>
+                <Button onClick={handlePairWatch} style={{ flex: 1 }}>Connect Device</Button>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
 
