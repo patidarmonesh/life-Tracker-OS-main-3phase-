@@ -255,6 +255,7 @@ export default function TimeFlow() {
   const [freeText, setFreeText] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState(null)
+  const [aiModalTab, setAiModalTab] = useState('auto')
   const [form, setForm] = useState({
     name: '', category: defaultCategory, start: '09:00', end: '10:00',
     mood: 3, productivityScore: 3, isWaste: false, notes: '', tags: [],
@@ -529,6 +530,67 @@ User's day: ${freeText}`
     setAiLoading(false)
   }
 
+  async function runAutoTimelineAnalysis() {
+    if (dayEntries.length === 0) return
+    setAiLoading(true)
+    setAiResult(null)
+    const apiKey = getGeminiApiKey()
+
+    if (!apiKey) {
+      setAiLoading(false)
+      setAiResult({
+        error: true,
+        message: 'No Gemini API key found. Go to Settings → API Keys to add your key.',
+      })
+      return
+    }
+
+    try {
+      const formattedTimeline = dayEntries.map(e => `- ${e.start} to ${e.end} (${e.durationMinutes} mins): ${e.name} [Category: ${e.category}, Productivity Score: ${e.productivityScore}/5, Waste: ${e.isWaste ? 'Yes' : 'No'}]`).join('\n')
+      
+      const prompt = `You are a world-class productivity coach and life analyst. Analyze the user's logged daily timeline and provide high-value, actionable suggestions, insights, and habits. Keep feedback helpful and direct.
+
+Here is their timeline for the day (${selectedDate}):
+${formattedTimeline}
+
+Return ONLY valid JSON in this format, no markdown, no explanation:
+{
+  "insights": ["specific insight 1", "specific insight 2"],
+  "badHabits": ["time waster or poor habit identified if any"],
+  "goodHabits": ["positive behavior or habit identified if any"],
+  "suggestions": ["actionable improvement suggestion 1", "actionable improvement suggestion 2"]
+}`
+
+      const res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3 },
+          }),
+        }
+      )
+      const data = await res.json()
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      const jsonMatch = raw.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0])
+        setAiResult(parsed)
+      } else {
+        setAiResult({ error: true, message: 'Could not parse AI performance report. Please try again.' })
+      }
+    } catch (err) {
+      console.error(err)
+      setAiResult({ error: true, message: 'AI request failed. Check connection or Gemini key.' })
+    }
+    setAiLoading(false)
+  }
+
   function importAIEntries() {
     if (!aiResult?.activities) return
     const newEntries = aiResult.activities
@@ -580,7 +642,11 @@ User's day: ${freeText}`
       <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
         <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '1.4rem' }}>⏱️ Time Flow</h1>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <Button variant="secondary" onClick={() => setShowAIModal(true)}>
+          <Button variant="secondary" onClick={() => {
+            setAiResult(null);
+            setAiModalTab(dayEntries.length > 0 ? 'auto' : 'text');
+            setShowAIModal(true);
+          }}>
             ✨ Analyse with AI
           </Button>
           <Button onClick={() => setShowAddModal(true)}>
@@ -789,30 +855,83 @@ User's day: ${freeText}`
       </Modal>
 
       {/* ══ AI ANALYSE MODAL ═══════════════════════════════════ */}
-      <Modal isOpen={showAIModal} onClose={() => { setShowAIModal(false); setAiResult(null) }} title="✨ Analyse Day with AI">
+      <Modal isOpen={showAIModal} onClose={() => { setShowAIModal(false); setAiResult(null); setFreeText(''); }} title="✨ Day Analysis with AI">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '12px', borderRadius: '10px', lineHeight: '1.6' }}>
-            Write your day in plain language. AI will extract structured time entries automatically.
-            <br /><br />
-            <span style={{ color: 'var(--accent-amber)', fontWeight: '600' }}>Example:</span> "6am woke up, 6-6:30 meditation, 7-12 studied ML, 12-1 lunch and reels, 1-3 nap..."
+          
+          {/* Modal Tabs */}
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+            <button
+              onClick={() => { setAiResult(null); setAiModalTab('auto'); }}
+              style={{
+                flex: 1, padding: '10px', border: 'none', background: 'transparent',
+                borderBottom: aiModalTab === 'auto' ? '2px solid var(--accent-indigo)' : '2px solid transparent',
+                color: aiModalTab === 'auto' ? 'var(--accent-indigo)' : 'var(--text-muted)',
+                fontWeight: aiModalTab === 'auto' ? '700' : '400', fontSize: '13px', cursor: 'pointer',
+              }}
+            >
+              📊 Auto-Analyze Timeline
+            </button>
+            <button
+              onClick={() => { setAiResult(null); setAiModalTab('text'); }}
+              style={{
+                flex: 1, padding: '10px', border: 'none', background: 'transparent',
+                borderBottom: aiModalTab === 'text' ? '2px solid var(--accent-indigo)' : '2px solid transparent',
+                color: aiModalTab === 'text' ? 'var(--accent-indigo)' : 'var(--text-muted)',
+                fontWeight: aiModalTab === 'text' ? '700' : '400', fontSize: '13px', cursor: 'pointer',
+              }}
+            >
+              ✍️ Plain Text Log Parser
+            </button>
           </div>
-          <textarea
-            value={freeText}
-            onChange={e => setFreeText(e.target.value)}
-            placeholder="Write your entire day here..."
-            rows={6}
-            style={{
-              width: '100%', padding: '12px', borderRadius: '10px',
-              background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-              color: 'var(--text-primary)', fontSize: '14px', outline: 'none',
-              fontFamily: 'DM Sans, sans-serif', resize: 'vertical', lineHeight: '1.6',
-            }}
-          />
 
-          {!aiResult && (
-            <Button onClick={analyseWithAI} disabled={aiLoading || !freeText.trim()}>
-              {aiLoading ? '⏳ Analysing...' : '✨ Analyse with Gemini AI'}
-            </Button>
+          {aiModalTab === 'auto' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {dayEntries.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: '32px', marginBottom: '8px' }}>📭</div>
+                  <div style={{ fontSize: '13.5px', fontWeight: '600', color: 'var(--text-secondary)' }}>No timeline entries found for today</div>
+                  <div style={{ fontSize: '12px', marginTop: '4px' }}>Please log some activities in the timeline first, or use the "Plain Text Log Parser" tab to write them in prose.</div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '12px', borderRadius: '10px', lineHeight: '1.6' }}>
+                    Gemini AI will analyze your <strong>{dayEntries.length} timeline logs</strong> for {selectedDate} and suggest productivity improvements, identify habits, and give insights.
+                  </div>
+                  {!aiResult && (
+                    <Button onClick={runAutoTimelineAnalysis} disabled={aiLoading}>
+                      {aiLoading ? '⏳ Generating Performance Report...' : '✨ Generate AI Productivity Report'}
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {aiModalTab === 'text' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '12px', borderRadius: '10px', lineHeight: '1.6' }}>
+                Write your day in plain language. AI will extract structured time entries automatically.
+                <br /><br />
+                <span style={{ color: 'var(--accent-amber)', fontWeight: '600' }}>Example:</span> "6am woke up, 6-6:30 meditation, 7-12 studied ML, 12-1 lunch and reels, 1-3 nap..."
+              </div>
+              <textarea
+                value={freeText}
+                onChange={e => setFreeText(e.target.value)}
+                placeholder="Write your entire day here..."
+                rows={6}
+                style={{
+                  width: '100%', padding: '12px', borderRadius: '10px',
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                  color: 'var(--text-primary)', fontSize: '14px', outline: 'none',
+                  fontFamily: 'DM Sans, sans-serif', resize: 'vertical', lineHeight: '1.6',
+                }}
+              />
+              {!aiResult && (
+                <Button onClick={analyseWithAI} disabled={aiLoading || !freeText.trim()}>
+                  {aiLoading ? '⏳ Extracting timeline...' : '✨ Parse & Import with AI'}
+                </Button>
+              )}
+            </div>
           )}
 
           {aiResult?.error && (
@@ -824,21 +943,23 @@ User's day: ${freeText}`
           {aiResult && !aiResult.error && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {/* Activities preview */}
-              <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
-                  Extracted {aiResult.activities?.length || 0} Activities
+              {aiModalTab === 'text' && aiResult.activities?.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                    Extracted {aiResult.activities?.length || 0} Activities
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '160px', overflowY: 'auto' }}>
+                    {aiResult.activities?.map((a, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '13px' }}>
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: CATEGORY_COLORS[a.category] || '#6B7280', flexShrink: 0 }} />
+                        <span style={{ color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px' }}>{a.start}–{a.end}</span>
+                        <span style={{ flex: 1, fontWeight: '600' }}>{a.name}</span>
+                        {a.isWaste && <span style={{ fontSize: '11px', color: '#F43F5E' }}>waste</span>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
-                  {aiResult.activities?.map((a, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '13px' }}>
-                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: CATEGORY_COLORS[a.category] || '#6B7280', flexShrink: 0 }} />
-                      <span style={{ color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px' }}>{a.start}–{a.end}</span>
-                      <span style={{ flex: 1, fontWeight: '600' }}>{a.name}</span>
-                      {a.isWaste && <span style={{ fontSize: '11px', color: '#F43F5E' }}>waste</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
+              )}
 
               {/* Insights */}
               {aiResult.insights?.length > 0 && (
@@ -850,22 +971,36 @@ User's day: ${freeText}`
                 </div>
               )}
 
+              {/* Good Habits */}
+              {aiResult.goodHabits?.length > 0 && (
+                <div style={{ padding: '10px 12px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#10B981', marginBottom: '4px' }}>✨ Good Habits Identified</div>
+                  {aiResult.goodHabits.map((h, i) => <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>• {h}</div>)}
+                </div>
+              )}
+
+              {/* Bad Habits */}
               {aiResult.badHabits?.length > 0 && (
                 <div style={{ padding: '10px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#EF4444', marginBottom: '4px' }}>⚠️ Bad Habits</div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#EF4444', marginBottom: '4px' }}>⚠️ Bad Habits / Time Wasters</div>
                   {aiResult.badHabits.map((h, i) => <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>• {h}</div>)}
                 </div>
               )}
 
+              {/* Suggestions */}
               {aiResult.suggestions?.length > 0 && (
-                <div style={{ padding: '10px 12px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#10B981', marginBottom: '4px' }}>🚀 Suggestions</div>
+                <div style={{ padding: '10px 12px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#F59E0B', marginBottom: '4px' }}>🚀 Improvement Suggestions</div>
                   {aiResult.suggestions.map((s, i) => <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>• {s}</div>)}
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: '8px' }}>
-                <Button onClick={importAIEntries} style={{ flex: 1 }}>✅ Import to Timeline</Button>
+                {aiModalTab === 'text' && aiResult.activities?.length > 0 ? (
+                  <Button onClick={importAIEntries} style={{ flex: 1 }}>✅ Import to Timeline</Button>
+                ) : (
+                  <Button onClick={() => { setShowAIModal(false); setAiResult(null); }} style={{ flex: 1 }}>Done</Button>
+                )}
                 <Button variant="secondary" onClick={() => setAiResult(null)}>Re-analyse</Button>
               </div>
             </div>
