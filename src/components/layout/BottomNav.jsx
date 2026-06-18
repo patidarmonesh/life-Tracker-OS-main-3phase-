@@ -23,6 +23,7 @@ import {
   Wind,
   HelpCircle,
   Sparkles,
+  Headphones,
 } from 'lucide-react'
 
 const primaryTabs = [
@@ -49,6 +50,7 @@ const moreTabs = [
   { to: '/brain', icon: Brain, label: 'Brain', color: 'var(--accent-purple)' },
   { to: '/readings', icon: Book, label: 'Readings', color: 'var(--accent-indigo)' },
   { to: '/meditations', icon: Wind, label: 'Meditation', color: 'var(--accent-cyan)' },
+  { to: '/focus', icon: Headphones, label: 'Focus', color: 'var(--accent-cyan)' },
   { to: '/wrapped', icon: Sparkles, label: 'Wrapped', color: '#FCD34D' },
   { to: '/settings', icon: Settings, label: 'Settings', color: 'var(--text-secondary)' },
 ]
