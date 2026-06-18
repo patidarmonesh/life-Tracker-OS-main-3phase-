@@ -15,6 +15,7 @@ const PAGE_TITLES = {
   '/scoring': 'Scoring Studio',
   '/analysis-builder': 'Analysis Builder',
   '/calendar': 'Calendar',
+  '/focus': 'Focus Mode',
 }
 
 /**
