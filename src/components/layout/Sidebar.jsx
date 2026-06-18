@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import {
   Home, BarChart2, Clock, BookOpen, CheckSquare,
   Heart, FileText, Bot, PieChart, Settings, Target, Microscope, CalendarDays,
-    PanelLeftClose, PanelLeft, Trophy, Brain, Users, Book, Wind, HelpCircle, Sparkles
+    PanelLeftClose, PanelLeft, Trophy, Brain, Users, Book, Wind, HelpCircle, Sparkles, Headphones
 } from 'lucide-react'
 
 const navSections = [
@@ -35,6 +35,7 @@ const navSections = [
       { to: '/brain', icon: Brain, label: 'Second Brain', color: 'var(--accent-purple)' },
       { to: '/readings', icon: Book, label: 'Reading Tracker', color: 'var(--accent-indigo)' },
       { to: '/meditations', icon: Wind, label: 'Meditation', color: 'var(--accent-cyan)' },
+      { to: '/focus', icon: Headphones, label: 'Focus Mode', color: 'var(--accent-cyan)' },
       { to: '/wrapped', icon: Sparkles, label: 'Year in Review', color: '#FCD34D' },
     ],
   },
