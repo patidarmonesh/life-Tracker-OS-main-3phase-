@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   getStoredSession,
   initializeGoogleAuth,
-  refreshAccessToken,
+  attemptAutoLogin,
   signInWithGoogle,
   signOutGoogle,
   onTokenRefresh,
   startTokenRefreshWatcher,
   installTokenRefreshListeners,
   removeTokenRefreshListeners,
+  disableAutoSelect,
 } from '../services/authService'
 import { AuthContext } from './appContextCore'
 
@@ -33,8 +34,8 @@ export function AuthProvider({ children }) {
         }
 
         // ── Step 2: Initialize the GIS tokenClient FIRST ───────────────────
-        // This MUST complete before startTokenRefreshWatcher() is called,
-        // otherwise the watcher fires with a null tokenClient and silently fails.
+        // This MUST complete before any token operations are attempted,
+        // otherwise the tokenClient is null and all requests silently fail.
         try {
           await initializeGoogleAuth()
         } catch (googleError) {
@@ -47,21 +48,33 @@ export function AuthProvider({ children }) {
           // Don't bail out — the user can still use the app with cached data
         }
 
-        // ── Step 3: If we have a session, check if token needs an immediate
-        //           refresh (e.g. app reopened after 30 min, token near dead)
-        if (session?.user) {
-          // Fire a silent refresh immediately — don't wait for the watcher
-          // This handles the "reopen browser" case where token has < 5 min left
-          const freshToken = await refreshAccessToken()
-          if (freshToken) {
-            console.log('[AuthContext] Boot: silent token refresh OK')
-          } else {
-            console.warn('[AuthContext] Boot: silent refresh failed — user may need to re-login if Drive calls fail')
-          }
+        // ── Step 3: Attempt auto-login ─────────────────────────────────────
+        // Uses a multi-strategy approach:
+        //   1. Silent token refresh (existing session still valid)
+        //   2. Google One Tap auto-select (returning user, no click needed)
+        //   3. Falls back to manual login if both fail
+        const autoResult = await attemptAutoLogin()
 
-          // ── Step 4: Start the 30-second watcher loop ─────────────────────
-          startTokenRefreshWatcher()
-          installTokenRefreshListeners()
+        if (autoResult && mounted) {
+          if (autoResult.token) {
+            // Full auto-login success — we have both identity and Drive access
+            if (autoResult.user) setUser(autoResult.user)
+            console.log(`[AuthContext] Boot: auto-login succeeded via ${autoResult.strategy}`)
+
+            // Start the 30-second watcher loop for proactive token refresh
+            startTokenRefreshWatcher()
+            installTokenRefreshListeners()
+          } else if (autoResult.user) {
+            // Partial success — One Tap identified the user but Drive token
+            // needs a consent popup. Set user so UI shows who they are,
+            // but they'll need to click "Continue with Google" for Drive access.
+            setUser(autoResult.user)
+            console.warn('[AuthContext] Boot: user identified but Drive token needs manual consent')
+          }
+        } else if (session?.user && mounted) {
+          // Auto-login failed but we have a cached user — keep showing them
+          // but they'll need to re-authenticate when Drive calls fail
+          console.warn('[AuthContext] Boot: auto-login failed — cached user kept, may need re-login')
         }
 
         if (mounted) setIsAuthReady(true)
@@ -115,7 +128,8 @@ export function AuthProvider({ children }) {
   }
 
   const logout = () => {
-    signOutGoogle()   // clears session + stops watcher
+    signOutGoogle()   // clears session + stops watcher + disables auto-select
+    disableAutoSelect()  // extra safety: prevent One Tap auto-login loop
     removeTokenRefreshListeners()
     setUser(null)
     setAuthError('')
