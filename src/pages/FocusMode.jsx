@@ -3,6 +3,7 @@ import {
   Play, Square, Volume2, VolumeX, Headphones, RotateCcw,
   Radio, Flower2, Waves, Wind, CloudRain,
   Brain, Heart, Zap, Flame, Bell,
+  Save, Trash2, X, Plus, Check,
 } from 'lucide-react'
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -113,6 +114,20 @@ const ALL_IDS = [...NOISE_CHANNELS, ...BEAT_CHANNELS].map((c) => c.id)
 const ZERO_VOLS = Object.fromEntries(ALL_IDS.map((id) => [id, 0]))
 const ZERO_MUTE = Object.fromEntries(ALL_IDS.map((id) => [id, false]))
 const DEFAULT_HZ = { theta: 6, alpha: 10, beta: 16, gamma: 40, isochronic: 10 }
+
+const CUSTOM_PRESETS_KEY = 'lifeos-focus-custom-presets'
+const CUSTOM_COLORS = ['#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#10B981', '#06B6D4', '#3B82F6', '#F97316', '#84CC16']
+
+function loadCustomPresets() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_PRESETS_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function saveCustomPresets(presets) {
+  try { localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(presets)) } catch { /* full */ }
+}
 
 const PRESETS = [
   {
@@ -441,6 +456,13 @@ export default function FocusMode() {
   const [activePreset, setActivePreset] = useState(null)
   const [beatFreqs, setBeatFreqs] = useState({ ...DEFAULT_HZ })
 
+  /* ── Custom Presets ── */
+  const [customPresets, setCustomPresets] = useState(() => loadCustomPresets())
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const [saveColor, setSaveColor] = useState(CUSTOM_COLORS[0])
+  const [saveIcon, setSaveIcon] = useState('🎵')
+
   /* ── Audio Refs ── */
   const audioCtxRef = useRef(null)
   const masterGainRef = useRef(null)
@@ -664,6 +686,44 @@ export default function FocusMode() {
     setActivePreset(null)
   }, [])
 
+  /* ── Custom Preset Handlers ── */
+  const saveCurrentAsPreset = useCallback(() => {
+    if (!saveName.trim()) return
+    const activeMix = {}
+    ALL_IDS.forEach((ch) => {
+      if (volumes[ch] > 0 && !muted[ch]) activeMix[ch] = volumes[ch]
+    })
+    if (Object.keys(activeMix).length === 0) return
+
+    const hasCustomHz = Object.entries(beatFreqs).some(([k, v]) => v !== DEFAULT_HZ[k])
+    const newPreset = {
+      id: 'custom-' + Date.now(),
+      name: saveName.trim(),
+      icon: saveIcon,
+      color: saveColor,
+      goal: Object.entries(activeMix).map(([k, v]) => `${k[0].toUpperCase() + k.slice(1)} ${v}%`).join(' · '),
+      mix: activeMix,
+      why: 'Your custom mix.',
+      custom: true,
+      ...(hasCustomHz ? { beatHz: { ...beatFreqs } } : {}),
+    }
+    const updated = [...customPresets, newPreset]
+    setCustomPresets(updated)
+    saveCustomPresets(updated)
+    setActivePreset(newPreset.id)
+    setShowSaveModal(false)
+    setSaveName('')
+  }, [saveName, saveIcon, saveColor, volumes, muted, beatFreqs, customPresets])
+
+  const deleteCustomPreset = useCallback((presetId) => {
+    const updated = customPresets.filter((p) => p.id !== presetId)
+    setCustomPresets(updated)
+    saveCustomPresets(updated)
+    if (activePreset === presetId) setActivePreset(null)
+  }, [customPresets, activePreset])
+
+  const allPresets = [...PRESETS, ...customPresets]
+
   /* ── Computed ── */
   const activeCount = ALL_IDS.filter((ch) => !muted[ch] && volumes[ch] > 0).length
   const totalMix = ALL_IDS.reduce((s, ch) => s + (muted[ch] ? 0 : volumes[ch]), 0)
@@ -744,7 +804,7 @@ export default function FocusMode() {
             WebkitOverflowScrolling: 'touch',
           }}
         >
-          {PRESETS.map((pr) => {
+          {allPresets.map((pr) => {
             const active = activePreset === pr.id
             return (
               <button
@@ -789,6 +849,25 @@ export default function FocusMode() {
                     {pr.tag}
                   </span>
                 )}
+                {pr.custom && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 10,
+                      fontSize: 9,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      color: pr.color,
+                      background: `${pr.color}18`,
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                    }}
+                  >
+                    Custom
+                  </span>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 18 }}>{pr.icon}</span>
                   <span
@@ -826,11 +905,254 @@ export default function FocusMode() {
                     )}
                   </div>
                 )}
+                {/* Delete button for custom presets */}
+                {pr.custom && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteCustomPreset(pr.id)
+                    }}
+                    title="Delete preset"
+                    style={{
+                      position: 'absolute',
+                      bottom: 8,
+                      right: 10,
+                      background: 'rgba(239,68,68,0.12)',
+                      border: 'none',
+                      borderRadius: 8,
+                      padding: 5,
+                      cursor: 'pointer',
+                      color: '#EF4444',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
               </button>
             )
           })}
+
+          {/* ── Save Current Mix Button ── */}
+          <button
+            onClick={() => {
+              const hasActive = ALL_IDS.some((ch) => !muted[ch] && volumes[ch] > 0)
+              if (hasActive) setShowSaveModal(true)
+            }}
+            title="Save current mix as a custom preset"
+            style={{
+              minWidth: 80,
+              padding: '14px 18px',
+              borderRadius: 16,
+              border: '2px dashed rgba(148,163,184,0.25)',
+              background: 'rgba(255,255,255,0.02)',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              flexShrink: 0,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <Plus size={22} />
+            <span style={{ fontSize: 11, fontWeight: 600 }}>Save Mix</span>
+          </button>
         </div>
       </section>
+
+      {/* ── Save Preset Modal ── */}
+      {showSaveModal && (
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={() => setShowSaveModal(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.6)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              zIndex: 200,
+              animation: 'modalBackdropFadeIn 0.2s ease',
+            }}
+          />
+          {/* Modal */}
+          <div
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 210,
+              width: 'min(400px, 90vw)',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: 20,
+              padding: '24px',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.5)',
+              animation: 'modalFadeIn 0.25s cubic-bezier(0.32, 0.72, 0, 1)',
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Save size={18} style={{ color: 'var(--accent-indigo)' }} />
+                <span style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 16 }}>
+                  Save Custom Preset
+                </span>
+              </div>
+              <button
+                onClick={() => setShowSaveModal(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: 'none',
+                  borderRadius: 10,
+                  padding: 8,
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Preset Name */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
+                Preset Name
+              </label>
+              <input
+                type="text"
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                placeholder="e.g. Late Night Coding"
+                autoFocus
+                maxLength={40}
+                onKeyDown={(e) => { if (e.key === 'Enter') saveCurrentAsPreset() }}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1px solid var(--border)',
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'var(--text-primary)',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  outline: 'none',
+                  transition: 'border-color 0.2s',
+                }}
+              />
+            </div>
+
+            {/* Icon Picker */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
+                Icon
+              </label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {['🎵', '🎶', '🎧', '🧠', '💻', '📚', '☕', '🌙', '🔥', '🌊', '⚡', '🎯', '💎', '🚀', '🌿'].map((em) => (
+                  <button
+                    key={em}
+                    onClick={() => setSaveIcon(em)}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
+                      border: saveIcon === em ? `2px solid ${saveColor}` : '1px solid var(--border)',
+                      background: saveIcon === em ? `${saveColor}18` : 'rgba(255,255,255,0.03)',
+                      cursor: 'pointer',
+                      fontSize: 16,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Color Picker */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
+                Color
+              </label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {CUSTOM_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setSaveColor(c)}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: '50%',
+                      border: saveColor === c ? '3px solid #fff' : '2px solid transparent',
+                      background: c,
+                      cursor: 'pointer',
+                      boxShadow: saveColor === c ? `0 0 12px ${c}60` : 'none',
+                      transition: 'all 0.15s ease',
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Mix Preview */}
+            <div style={{
+              padding: '10px 14px',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid var(--border)',
+              marginBottom: 20,
+              fontSize: 12,
+              color: 'var(--text-secondary)',
+              lineHeight: 1.6,
+            }}>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Current Mix: </span>
+              {ALL_IDS.filter((ch) => !muted[ch] && volumes[ch] > 0)
+                .map((ch) => `${ch[0].toUpperCase() + ch.slice(1)} ${volumes[ch]}%`)
+                .join(' · ') || 'No active channels'}
+            </div>
+
+            {/* Save Button */}
+            <button
+              onClick={saveCurrentAsPreset}
+              disabled={!saveName.trim() || !ALL_IDS.some((ch) => !muted[ch] && volumes[ch] > 0)}
+              style={{
+                width: '100%',
+                padding: '12px 20px',
+                borderRadius: 14,
+                border: 'none',
+                background: saveName.trim() ? `linear-gradient(135deg, ${saveColor}, ${saveColor}cc)` : 'rgba(255,255,255,0.06)',
+                color: saveName.trim() ? '#fff' : 'var(--text-muted)',
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: saveName.trim() ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                boxShadow: saveName.trim() ? `0 4px 16px ${saveColor}30` : 'none',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <Check size={16} />
+              Save Preset
+            </button>
+          </div>
+        </>
+      )}
 
       {/* ── Waveform Visualizer ── */}
       <div style={{ marginBottom: 20 }}>
