@@ -19,6 +19,9 @@ export default function Auth() {
     return <Navigate to="/" replace />
   }
 
+  // Show a clean auto-login screen while boot() is running
+  const isAutoLogging = isLoading || !isAuthReady
+
   return (
     <div
       style={{
@@ -69,7 +72,46 @@ export default function Auth() {
           </p>
         </div>
 
-        {(authError || localError) && (
+        {/* Auto-login in progress — show pulse animation */}
+        {isAutoLogging && (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '14px',
+              padding: '20px 0',
+            }}
+          >
+            <div
+              style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                animation: 'authPulse 1.5s ease-in-out infinite',
+              }}
+            />
+            <span
+              style={{
+                fontSize: '14px',
+                color: 'rgba(148,163,184,0.9)',
+                fontWeight: 500,
+              }}
+            >
+              Connecting...
+            </span>
+            <style>{`
+              @keyframes authPulse {
+                0%, 100% { transform: scale(1); opacity: 0.7; }
+                50% { transform: scale(1.15); opacity: 1; }
+              }
+            `}</style>
+          </div>
+        )}
+
+        {/* Errors */}
+        {!isAutoLogging && (authError || localError) && (
           <div
             style={{
               marginBottom: '16px',
@@ -85,43 +127,29 @@ export default function Auth() {
           </div>
         )}
 
-        {!isAuthReady && !isLoading && (
-          <div
+        {/* Login button — only visible after auto-login completes */}
+        {!isAutoLogging && (
+          <button
+            onClick={handleLogin}
+            disabled={isLoading}
             style={{
-              marginBottom: '16px',
-              padding: '12px 14px',
-              borderRadius: '12px',
-              background: 'rgba(245,158,11,0.12)',
-              border: '1px solid rgba(245,158,11,0.28)',
-              color: '#fcd34d',
-              fontSize: '13px',
-            }}
-          >
-            Google auth is initializing...
-          </div>
-        )}
-
-        <button
-          onClick={handleLogin}
-          disabled={isLoading || !isAuthReady}
-          style={{
-            width: '100%',
-            height: '48px',
-            border: 'none',
-            borderRadius: '14px',
-            background:
-              isLoading || !isAuthReady
+              width: '100%',
+              height: '48px',
+              border: 'none',
+              borderRadius: '14px',
+              background: isLoading
                 ? 'rgba(99,102,241,0.45)'
                 : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-            color: 'white',
-            fontSize: '15px',
-            fontWeight: 700,
-            cursor: isLoading || !isAuthReady ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          {isLoading ? 'Signing in...' : 'Continue with Google'}
-        </button>
+              color: 'white',
+              fontSize: '15px',
+              fontWeight: 700,
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {isLoading ? 'Signing in...' : 'Continue with Google'}
+          </button>
+        )}
 
         <p
           style={{
@@ -140,3 +168,4 @@ export default function Auth() {
     </div>
   )
 }
+
