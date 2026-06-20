@@ -53,13 +53,30 @@ export function AuthProvider({ children }) {
         //   1. Silent token refresh (existing session still valid)
         //   2. Google One Tap auto-select (returning user, no click needed)
         //   3. Falls back to manual login if both fail
-        const autoResult = await attemptAutoLogin()
+        let autoResult = null
+        const isLoggedOut = localStorage.getItem('lifeos_logged_out') === 'true'
+
+        if (!isLoggedOut) {
+          autoResult = await Promise.race([
+            attemptAutoLogin(),
+            new Promise((resolve) => setTimeout(() => {
+              console.warn('[AuthContext] Boot: auto-login timed out after 6 seconds')
+              resolve(null)
+            }, 6000))
+          ])
+        } else {
+          console.log('[AuthContext] Boot: User is explicitly logged out, skipping auto-login')
+        }
 
         if (autoResult && mounted) {
           if (autoResult.token) {
             // Full auto-login success — we have both identity and Drive access
             if (autoResult.user) setUser(autoResult.user)
             console.log(`[AuthContext] Boot: auto-login succeeded via ${autoResult.strategy}`)
+            
+            try {
+              localStorage.removeItem('lifeos_logged_out')
+            } catch {}
 
             // Start the 30-second watcher loop for proactive token refresh
             startTokenRefreshWatcher()
@@ -113,6 +130,9 @@ export function AuthProvider({ children }) {
       const session = await signInWithGoogle()
       if (session?.user) {
         setUser(session.user)
+        try {
+          localStorage.removeItem('lifeos_logged_out')
+        } catch {}
         // signInWithGoogle already calls startTokenRefreshWatcher()
         installTokenRefreshListeners()
       }
@@ -128,6 +148,9 @@ export function AuthProvider({ children }) {
   }
 
   const logout = () => {
+    try {
+      localStorage.setItem('lifeos_logged_out', 'true')
+    } catch {}
     signOutGoogle()   // clears session + stops watcher + disables auto-select
     disableAutoSelect()  // extra safety: prevent One Tap auto-login loop
     removeTokenRefreshListeners()
