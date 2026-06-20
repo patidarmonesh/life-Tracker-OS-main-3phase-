@@ -255,6 +255,7 @@ export default function TimeFlow() {
   const [freeText, setFreeText] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState(null)
+  const [isSaved, setIsSaved] = useState(false)
   const [aiModalTab, setAiModalTab] = useState('auto')
   const [form, setForm] = useState({
     name: '', category: defaultCategory, start: '09:00', end: '10:00',
@@ -459,10 +460,105 @@ export default function TimeFlow() {
     })
   }
 
+  function saveAnalysisToJournal(analysis, date) {
+    if (!analysis) return
+
+    // Format content nicely
+    let content = `## ⚡ Quick Summary\n${analysis.shortSummary || 'No summary generated.'}\n\n`
+    content += `## 🎯 Kal Se Ye Karo (Tomorrow's Action Plan)\n`
+    if (analysis.tomorrowActions && analysis.tomorrowActions.length > 0) {
+      content += analysis.tomorrowActions.map((a, i) => `${i + 1}. ${a}`).join('\n') + '\n\n'
+    } else {
+      content += `No action items generated.\n\n`
+    }
+    
+    if (analysis.detailedAnalysis) {
+      content += `## 📊 Detailed Analysis\n${analysis.detailedAnalysis}\n\n`
+    }
+
+    content += `## 💡 Insights\n`
+    if (analysis.insights && analysis.insights.length > 0) {
+      content += analysis.insights.map(i => `• ${i}`).join('\n') + '\n\n'
+    } else {
+      content += `No insights.\n\n`
+    }
+
+    content += `## ✨ Good Habits\n`
+    if (analysis.goodHabits && analysis.goodHabits.length > 0) {
+      content += analysis.goodHabits.map(h => `• ${h}`).join('\n') + '\n\n'
+    } else {
+      content += `No good habits identified.\n\n`
+    }
+
+    content += `## ⚠️ Bad Habits / Time Wasters\n`
+    if (analysis.badHabits && analysis.badHabits.length > 0) {
+      content += analysis.badHabits.map(h => `• ${h}`).join('\n') + '\n\n'
+    } else {
+      content += `No bad habits identified.\n\n`
+    }
+
+    content += `## 🚀 Suggestions\n`
+    if (analysis.suggestions && analysis.suggestions.length > 0) {
+      content += analysis.suggestions.map(s => `• ${s}`).join('\n') + '\n\n'
+    } else {
+      content += `No suggestions.\n\n`
+    }
+
+    // Determine mood rating (1-5) based on dayScore (1-10)
+    const score = Number(analysis.dayScore) || 7
+    const moodValue = Math.min(5, Math.max(1, Math.ceil(score / 2)))
+
+    // Save to journal state
+    const journalEntries = state.journal?.entries || []
+    
+    // Check if there is an existing entry for this day with the same source
+    const existingIndex = journalEntries.findIndex(
+      e => e.date === date && e.source === 'timeflow-ai-analysis'
+    )
+
+    const payload = {
+      date,
+      title: `🤖 AI TimeFlow Analysis — ${date}`,
+      content: content.trim(),
+      mood: moodValue,
+      energy: 3,
+      gratitude: '',
+      tags: ['ai-timeflow-analysis', 'auto-generated'],
+      source: 'timeflow-ai-analysis',
+      aiSentiment: score >= 8 ? 'Very Positive' : score >= 5 ? 'Neutral' : 'Needs Improvement',
+      aiRecommendation: analysis.tomorrowActions ? analysis.tomorrowActions.join('; ') : '',
+      updatedAt: new Date().toISOString(),
+    }
+
+    let updatedEntries
+    if (existingIndex > -1) {
+      // Update existing
+      updatedEntries = journalEntries.map((e, idx) => 
+        idx === existingIndex ? { ...e, ...payload } : e
+      )
+    } else {
+      // Add new
+      const newEntry = {
+        id: uuid(),
+        ...payload,
+        createdAt: new Date().toISOString(),
+      }
+      updatedEntries = [newEntry, ...journalEntries]
+    }
+
+    setModule('journal', {
+      ...state.journal,
+      entries: updatedEntries,
+    })
+    setIsSaved(true)
+    showToast('Analysis saved to Journal ✓', 'success')
+  }
+
   async function analyseWithAI() {
     if (!freeText.trim()) return
     setAiLoading(true)
     setAiResult(null)
+    setIsSaved(false)
     const apiKey = getGeminiApiKey()
 
     if (!apiKey) {
@@ -476,7 +572,7 @@ export default function TimeFlow() {
 
     try {
       const categoryList = categories.join('|')
-      const prompt = `You are a personal life analyst. Extract structured time entries from the user's daily log text. Return ONLY valid JSON, no markdown, no explanation.
+      const prompt = `You are a personal life analyst. Extract structured time entries from the user's daily log text. Provide a short summary, a detailed analysis paragraph, a day score out of 10, and a list of tomorrow action items ("kal se ye karo"). Return ONLY valid JSON, no markdown, no explanation.
 
 Return format:
 {
@@ -496,7 +592,11 @@ Return format:
   "goodHabits": ["good habit if any"],
   "totalWasteMinutes": number,
   "totalProductiveMinutes": number,
-  "suggestions": ["suggestion 1", "suggestion 2"]
+  "suggestions": ["suggestion 1", "suggestion 2"],
+  "tomorrowActions": ["what user should do starting tomorrow to improve, written in Hindi/English mix like 'kal se ye karo to improve...'"],
+  "shortSummary": "quick 3-4 line TL;DR summary of the day",
+  "detailedAnalysis": "detailed analysis paragraph of how the day went",
+  "dayScore": 1-10
 }
 
 User's day: ${freeText}`
@@ -521,6 +621,7 @@ User's day: ${freeText}`
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0])
         setAiResult(parsed)
+        saveAnalysisToJournal(parsed, selectedDate)
       } else {
         setAiResult({ error: true, message: 'Could not parse AI response. Try again.' })
       }
@@ -534,6 +635,7 @@ User's day: ${freeText}`
     if (dayEntries.length === 0) return
     setAiLoading(true)
     setAiResult(null)
+    setIsSaved(false)
     const apiKey = getGeminiApiKey()
 
     if (!apiKey) {
@@ -548,7 +650,7 @@ User's day: ${freeText}`
     try {
       const formattedTimeline = dayEntries.map(e => `- ${e.start} to ${e.end} (${e.durationMinutes} mins): ${e.name} [Category: ${e.category}, Productivity Score: ${e.productivityScore}/5, Waste: ${e.isWaste ? 'Yes' : 'No'}]`).join('\n')
       
-      const prompt = `You are a world-class productivity coach and life analyst. Analyze the user's logged daily timeline and provide high-value, actionable suggestions, insights, and habits. Keep feedback helpful and direct.
+      const prompt = `You are a world-class productivity coach and life analyst. Analyze the user's logged daily timeline and provide high-value, actionable suggestions, insights, habits, a short summary, a detailed analysis paragraph, a day score out of 10, and tomorrow's action items ("kal se ye karo"). Keep feedback helpful and direct.
 
 Here is their timeline for the day (${selectedDate}):
 ${formattedTimeline}
@@ -558,7 +660,11 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
   "insights": ["specific insight 1", "specific insight 2"],
   "badHabits": ["time waster or poor habit identified if any"],
   "goodHabits": ["positive behavior or habit identified if any"],
-  "suggestions": ["actionable improvement suggestion 1", "actionable improvement suggestion 2"]
+  "suggestions": ["actionable improvement suggestion 1", "actionable improvement suggestion 2"],
+  "tomorrowActions": ["what user should do starting tomorrow to improve, written in Hindi/English mix like 'kal se ye karo to improve...'"],
+  "shortSummary": "quick 3-4 line TL;DR summary of the day",
+  "detailedAnalysis": "detailed analysis paragraph of how the day went",
+  "dayScore": 1-10
 }`
 
       const res = await fetch(
@@ -581,6 +687,7 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0])
         setAiResult(parsed)
+        saveAnalysisToJournal(parsed, selectedDate)
       } else {
         setAiResult({ error: true, message: 'Could not parse AI performance report. Please try again.' })
       }
@@ -644,6 +751,7 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button variant="secondary" onClick={() => {
             setAiResult(null);
+            setIsSaved(false);
             setAiModalTab(dayEntries.length > 0 ? 'auto' : 'text');
             setShowAIModal(true);
           }}>
@@ -855,13 +963,13 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
       </Modal>
 
       {/* ══ AI ANALYSE MODAL ═══════════════════════════════════ */}
-      <Modal isOpen={showAIModal} onClose={() => { setShowAIModal(false); setAiResult(null); setFreeText(''); }} title="✨ Day Analysis with AI">
+      <Modal isOpen={showAIModal} onClose={() => { setShowAIModal(false); setAiResult(null); setFreeText(''); setIsSaved(false); }} title="✨ Day Analysis with AI">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
           {/* Modal Tabs */}
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
             <button
-              onClick={() => { setAiResult(null); setAiModalTab('auto'); }}
+              onClick={() => { setAiResult(null); setAiModalTab('auto'); setIsSaved(false); }}
               style={{
                 flex: 1, padding: '10px', border: 'none', background: 'transparent',
                 borderBottom: aiModalTab === 'auto' ? '2px solid var(--accent-indigo)' : '2px solid transparent',
@@ -872,7 +980,7 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
               📊 Auto-Analyze Timeline
             </button>
             <button
-              onClick={() => { setAiResult(null); setAiModalTab('text'); }}
+              onClick={() => { setAiResult(null); setAiModalTab('text'); setIsSaved(false); }}
               style={{
                 flex: 1, padding: '10px', border: 'none', background: 'transparent',
                 borderBottom: aiModalTab === 'text' ? '2px solid var(--accent-indigo)' : '2px solid transparent',
@@ -942,6 +1050,36 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
 
           {aiResult && !aiResult.error && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              
+              {/* Day Score & Short Summary */}
+              {(aiResult.dayScore || aiResult.shortSummary) && (
+                <div style={{ padding: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>⚡ Quick Summary</div>
+                    {aiResult.dayScore && (
+                      <div style={{ fontSize: '11px', fontWeight: '800', background: 'var(--accent-indigo)', color: '#fff', padding: '3px 8px', borderRadius: '12px' }}>
+                        SCORE: {aiResult.dayScore}/10
+                      </div>
+                    )}
+                  </div>
+                  {aiResult.shortSummary && (
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5', fontStyle: 'italic' }}>
+                      "{aiResult.shortSummary}"
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Detailed Analysis */}
+              {aiResult.detailedAnalysis && (
+                <div style={{ padding: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>📊 Detailed Analysis</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                    {aiResult.detailedAnalysis}
+                  </div>
+                </div>
+              )}
+
               {/* Activities preview */}
               {aiModalTab === 'text' && aiResult.activities?.length > 0 && (
                 <div>
@@ -961,10 +1099,22 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
                 </div>
               )}
 
+              {/* Tomorrow's Action Plan */}
+              {aiResult.tomorrowActions?.length > 0 && (
+                <div style={{ padding: '12px', background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.2)', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#EC4899', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>🎯 Kal Se Ye Karo (Tomorrow's Action Plan)</div>
+                  {aiResult.tomorrowActions.map((action, i) => (
+                    <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: '600' }}>
+                      {i + 1}. {action}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Insights */}
               {aiResult.insights?.length > 0 && (
                 <div style={{ padding: '12px', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--accent-indigo)', marginBottom: '6px' }}>💡 AI Insights</div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--accent-indigo)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>💡 AI Insights</div>
                   {aiResult.insights.map((insight, i) => (
                     <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>• {insight}</div>
                   ))}
@@ -974,7 +1124,7 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
               {/* Good Habits */}
               {aiResult.goodHabits?.length > 0 && (
                 <div style={{ padding: '10px 12px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#10B981', marginBottom: '4px' }}>✨ Good Habits Identified</div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>✨ Good Habits Identified</div>
                   {aiResult.goodHabits.map((h, i) => <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>• {h}</div>)}
                 </div>
               )}
@@ -982,7 +1132,7 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
               {/* Bad Habits */}
               {aiResult.badHabits?.length > 0 && (
                 <div style={{ padding: '10px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#EF4444', marginBottom: '4px' }}>⚠️ Bad Habits / Time Wasters</div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#EF4444', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>⚠️ Bad Habits / Time Wasters</div>
                   {aiResult.badHabits.map((h, i) => <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>• {h}</div>)}
                 </div>
               )}
@@ -990,8 +1140,14 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
               {/* Suggestions */}
               {aiResult.suggestions?.length > 0 && (
                 <div style={{ padding: '10px 12px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#F59E0B', marginBottom: '4px' }}>🚀 Improvement Suggestions</div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#F59E0B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>🚀 Improvement Suggestions</div>
                   {aiResult.suggestions.map((s, i) => <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>• {s}</div>)}
+                </div>
+              )}
+
+              {isSaved && (
+                <div style={{ fontSize: '12px', color: '#10B981', fontWeight: '600', textAlign: 'center', marginTop: '4px' }}>
+                  💾 Automatically saved to Journal ✓
                 </div>
               )}
 
@@ -999,9 +1155,20 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
                 {aiModalTab === 'text' && aiResult.activities?.length > 0 ? (
                   <Button onClick={importAIEntries} style={{ flex: 1 }}>✅ Import to Timeline</Button>
                 ) : (
-                  <Button onClick={() => { setShowAIModal(false); setAiResult(null); }} style={{ flex: 1 }}>Done</Button>
+                  <Button onClick={() => { setShowAIModal(false); setAiResult(null); setIsSaved(false); }} style={{ flex: 1 }}>Done</Button>
                 )}
-                <Button variant="secondary" onClick={() => setAiResult(null)}>Re-analyse</Button>
+                <Button variant="secondary" onClick={() => saveAnalysisToJournal(aiResult, selectedDate)} disabled={!aiResult || aiResult.error}>
+                  💾 Save to Journal
+                </Button>
+                <Button variant="secondary" onClick={() => {
+                  if (aiModalTab === 'auto') {
+                    runAutoTimelineAnalysis()
+                  } else {
+                    analyseWithAI()
+                  }
+                }}>
+                  Re-analyse
+                </Button>
               </div>
             </div>
           )}
