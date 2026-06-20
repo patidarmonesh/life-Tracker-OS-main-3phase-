@@ -218,10 +218,16 @@ export async function refreshAccessToken() {
     await initializeGoogleAuth()
 
     const token = await new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        console.warn('[authService] Silent refresh timed out')
+        resolve(null)
+      }, 5000)
+
       const prevCallback = tokenClient.callback
 
       tokenClient.callback = async (response) => {
         tokenClient.callback = prevCallback          // restore immediately
+        clearTimeout(timeout)
 
         if (response?.error) {
           // 'immediate_failed' means the user must interact — that's OK,
