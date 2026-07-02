@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis } from 'recharts'
-import { Plus, Pencil } from 'lucide-react'
+import { Plus, Pencil, Mic, MicOff, MessageSquare, Send, Zap } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -257,6 +257,14 @@ export default function TimeFlow() {
   const [aiResult, setAiResult] = useState(null)
   const [isSaved, setIsSaved] = useState(false)
   const [aiModalTab, setAiModalTab] = useState('auto')
+  const [showQuickAI, setShowQuickAI] = useState(false)
+  const [quickAIText, setQuickAIText] = useState('')
+  const [quickAILoading, setQuickAILoading] = useState(false)
+  const [quickAIParsed, setQuickAIParsed] = useState(null)
+  const [isListening, setIsListening] = useState(false)
+  const [quickAIChatHistory, setQuickAIChatHistory] = useState([])
+  const recognitionRef = useRef(null)
+  const chatEndRef = useRef(null)
   const [form, setForm] = useState({
     name: '', category: defaultCategory, start: '09:00', end: '10:00',
     mood: 3, productivityScore: 3, isWaste: false, notes: '', tags: [],
@@ -314,9 +322,34 @@ export default function TimeFlow() {
     return { day: formatDateKey(d, timezone, { weekday: 'short' }), productive: +(prod / 60).toFixed(1), waste: +(waste / 60).toFixed(1) }
   }), [allEntries, timezone])
 
+  // ── Smart Time Auto-fill ────────────────────────────────
+  function getSmartStartTime() {
+    // Get the last entry's end time for the selected date
+    if (dayEntries.length > 0) {
+      const lastEntry = dayEntries[dayEntries.length - 1]
+      return lastEntry.end || '09:00'
+    }
+    // If no entries, use current time rounded to nearest 15 min
+    const now = new Date()
+    const mins = Math.round(now.getMinutes() / 15) * 15
+    const h = now.getHours()
+    const m = mins >= 60 ? 0 : mins
+    const adjustedH = mins >= 60 ? h + 1 : h
+    return `${String(adjustedH).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  }
+
+  function getSmartEndTime(startTime) {
+    // End time = start time + 1 hour
+    const [h, m] = startTime.split(':').map(Number)
+    const endH = Math.min(h + 1, 23)
+    return `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  }
+
   function resetForm() {
+    const smartStart = getSmartStartTime()
+    const smartEnd = getSmartEndTime(smartStart)
     setForm({
-      name: '', category: defaultCategory, start: '09:00', end: '10:00',
+      name: '', category: defaultCategory, start: smartStart, end: smartEnd,
       mood: 3, productivityScore: 3, isWaste: false, notes: '', tags: [],
     })
   }
@@ -724,6 +757,182 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
     setAiResult(null)
   }
 
+  // ── AI Quick Add (Chat/Voice) ───────────────────────────
+  function startVoiceInput() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      showToast('Voice input not supported in this browser', 'error')
+      return
+    }
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'hi-IN' // Hindi+English mix
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+    recognition.continuous = false
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript
+      setQuickAIText(prev => prev ? prev + ' ' + transcript : transcript)
+      setIsListening(false)
+    }
+    recognition.onerror = () => {
+      setIsListening(false)
+      showToast('Voice input failed, try again', 'error')
+    }
+    recognition.onend = () => setIsListening(false)
+
+    recognitionRef.current = recognition
+    recognition.start()
+    setIsListening(true)
+  }
+
+  function stopVoiceInput() {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop()
+      setIsListening(false)
+    }
+  }
+
+  async function handleQuickAISend() {
+    if (!quickAIText.trim()) return
+    const userMsg = quickAIText.trim()
+    setQuickAIChatHistory(prev => [...prev, { role: 'user', text: userMsg }])
+    setQuickAIText('')
+    setQuickAILoading(true)
+    setQuickAIParsed(null)
+
+    const apiKey = getGeminiApiKey()
+    if (!apiKey) {
+      setQuickAIChatHistory(prev => [...prev, { role: 'ai', text: '❌ No Gemini API key found. Go to Settings → API Keys to add your key.' }])
+      setQuickAILoading(false)
+      return
+    }
+
+    try {
+      const categoryList = categories.join('|')
+      const prompt = `You are a smart time-tracking assistant. The user will tell you what activities they did and when, in casual Hindi/English mix. Extract structured time entries from their message.
+
+IMPORTANT: The user might say things like:
+- "mene 2 bje se 4 bje tk ML padha" → Study from 14:00 to 16:00
+- "subah 6 se 7 exercise ki" → Exercise from 06:00 to 07:00  
+- "raat 10 bje se 12 bje tk reels dekhi" → Social Media from 22:00 to 00:00
+- "lunch 1 se 2" → Meals from 13:00 to 14:00
+- "3 se 5 coding kiya, phir 5 se 6 gym gaya" → two entries
+
+Parse ALL activities mentioned. Convert Hindi time references to 24-hour format.
+Available categories: ${categoryList}
+
+Return ONLY valid JSON, no markdown:
+{
+  "entries": [
+    {
+      "start": "HH:MM",
+      "end": "HH:MM",
+      "name": "activity name in user's language",
+      "category": "one of: ${categoryList}",
+      "productivityScore": 1-5,
+      "isWaste": boolean
+    }
+  ],
+  "reply": "A friendly confirmation message in Hinglish like 'Done bhai! 2 entries add kar di 🔥' — keep it short and casual"
+}
+
+User says: ${userMsg}`
+
+      const res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.2 },
+          }),
+        }
+      )
+      const data = await res.json()
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      const jsonMatch = raw.match(/\{[\s\S]*\}/)
+
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0])
+        setQuickAIParsed(parsed)
+        setQuickAIChatHistory(prev => [...prev, {
+          role: 'ai',
+          text: parsed.reply || 'Entries parsed! Review below and click Save.',
+          entries: parsed.entries || [],
+        }])
+      } else {
+        setQuickAIChatHistory(prev => [...prev, { role: 'ai', text: '😅 Samajh nahi aaya bhai, thoda aur clearly batao — like "2 se 4 bje ML padha"' }])
+      }
+    } catch {
+      setQuickAIChatHistory(prev => [...prev, { role: 'ai', text: '❌ AI request fail ho gaya. Connection ya API key check karo.' }])
+    }
+    setQuickAILoading(false)
+  }
+
+  function saveQuickAIEntries(entries) {
+    if (!entries?.length) return
+    const newEntries = entries
+      .filter(a => a.start && a.end)
+      .map(a => {
+        const [sh, sm] = a.start.split(':').map(Number)
+        const [eh, em] = a.end.split(':').map(Number)
+        let dur = (eh * 60 + em) - (sh * 60 + sm)
+        if (dur < 0) dur += 1440 // overnight
+        return {
+          id: uuid(), date: selectedDate,
+          start: a.start, end: a.end,
+          durationMinutes: dur,
+          name: a.name, category: a.category || 'Other',
+          productivityScore: a.productivityScore || 3,
+          mood: 3, isWaste: a.isWaste || WASTE_CATEGORIES.includes(a.category),
+          isBadHabit: a.isWaste, notes: '',
+          tags: [], source: 'ai-quick-add', createdAt: new Date().toISOString(),
+        }
+      })
+      .filter(e => e.durationMinutes > 0)
+
+    if (newEntries.length === 0) {
+      showToast('No valid entries to save', 'error')
+      return
+    }
+
+    // Save each entry through the saveEntry flow for Study sync
+    newEntries.forEach(entry => {
+      const payload = { ...entry }
+      // Sync study entries
+      if (payload.category === 'Study') {
+        const studySubjects = state.study?.subjects?.length
+          ? state.study.subjects
+          : ['Mathematics', 'Physics', 'CS Theory', 'Machine Learning', 'Deep Learning', 'DSA', 'Research Paper', 'Project Work', 'GATE Prep', 'Other']
+        const cleanName = payload.name.replace(/^(?:study|studied|learning|learnt|read):\s*/i, '').trim()
+        const matchedSubject = studySubjects.find(s => cleanName.toLowerCase().includes(s.toLowerCase()))
+        const sessionSubject = matchedSubject || studySubjects[0] || 'Other'
+        const sessionTopic = matchedSubject ? cleanName.replace(new RegExp(matchedSubject, 'i'), '').replace(/^[\s—\-•:]+/, '').trim() : cleanName
+        const studySessionId = uuid()
+        const newSession = {
+          id: studySessionId, date: payload.date, subject: sessionSubject,
+          topic: sessionTopic || 'Logged via AI Quick Add', focusType: 'Deep Focus',
+          durationMinutes: payload.durationMinutes, notes: '', rating: payload.productivityScore,
+          source: 'timeflow-ai-quick', createdAt: new Date().toISOString(),
+        }
+        payload.studySessionId = studySessionId
+        const studySessions = state.study?.sessions || []
+        setModule('study', { ...state.study, sessions: [newSession, ...studySessions] })
+      }
+    })
+
+    setModule('timeflow', { ...state.timeflow, entries: [...allEntries, ...newEntries] })
+    showToast(`${newEntries.length} entries added ✓`, 'success')
+    setQuickAIParsed(null)
+  }
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [quickAIChatHistory])
+
   // ── Styles ────────────────────────────────────────────────
   const tabStyle = (active) => ({
     padding: '8px 18px', borderRadius: '8px 8px 0 0', border: 'none', cursor: 'pointer',
@@ -748,16 +957,24 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
       {/* Header */}
       <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
         <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '1.4rem' }}>⏱️ Time Flow</h1>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <Button variant="secondary" onClick={() => {
+            setQuickAIChatHistory([])
+            setQuickAIText('')
+            setQuickAIParsed(null)
+            setShowQuickAI(true)
+          }} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <Zap size={14} /> AI Quick Add
+          </Button>
           <Button variant="secondary" onClick={() => {
             setAiResult(null);
             setIsSaved(false);
             setAiModalTab(dayEntries.length > 0 ? 'auto' : 'text');
             setShowAIModal(true);
           }}>
-            ✨ Analyse with AI
+            ✨ Analyse
           </Button>
-          <Button onClick={() => setShowAddModal(true)}>
+          <Button onClick={() => { resetForm(); setShowAddModal(true) }}>
             <Plus size={16} /> Add Entry
           </Button>
         </div>
@@ -1174,6 +1391,197 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
           )}
         </div>
       </Modal>
+
+      {/* ══ AI QUICK ADD MODAL (Chat/Voice) ════════════════════ */}
+      <Modal isOpen={showQuickAI} onClose={() => { setShowQuickAI(false); setIsListening(false); stopVoiceInput(); }} title="⚡ AI Quick Add — Bol ya Likh">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0', height: '420px' }}>
+
+          {/* Info banner */}
+          <div style={{
+            padding: '10px 14px', borderRadius: '10px', fontSize: '12px',
+            background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(236,72,153,0.08))',
+            border: '1px solid rgba(99,102,241,0.2)',
+            color: 'var(--text-muted)', lineHeight: '1.5', marginBottom: '10px',
+          }}>
+            🎤 <strong>Voice ya type karo</strong> — "mene 2 bje se 4 bje tk ML padha, phir 4 se 5 gym gaya" <br/>
+            AI samajh ke automatically time entries bana dega ✨
+          </div>
+
+          {/* Chat area */}
+          <div style={{
+            flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column',
+            gap: '8px', padding: '8px 2px', marginBottom: '10px',
+            minHeight: 0,
+          }}>
+            {quickAIChatHistory.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)' }}>
+                <div style={{ fontSize: '36px', marginBottom: '8px' }}>💬</div>
+                <div style={{ fontSize: '13px', fontWeight: '600' }}>Bata kya kiya aaj?</div>
+                <div style={{ fontSize: '11px', marginTop: '4px' }}>e.g. "subah 6 bje utha, 7 se 9 padhai ki, 12 se 1 lunch"</div>
+              </div>
+            )}
+            {quickAIChatHistory.map((msg, i) => (
+              <div key={i} style={{
+                display: 'flex',
+                justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              }}>
+                <div style={{
+                  maxWidth: '85%', padding: '10px 14px', borderRadius: '14px',
+                  fontSize: '13px', lineHeight: '1.5',
+                  ...(msg.role === 'user' ? {
+                    background: 'var(--accent-indigo)',
+                    color: '#fff',
+                    borderBottomRightRadius: '4px',
+                  } : {
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-primary)',
+                    borderBottomLeftRadius: '4px',
+                  }),
+                }}>
+                  <div>{msg.text}</div>
+                  {/* Show parsed entries preview */}
+                  {msg.entries?.length > 0 && (
+                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {msg.entries.map((e, j) => (
+                        <div key={j} style={{
+                          display: 'flex', alignItems: 'center', gap: '8px',
+                          padding: '6px 10px', borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.06)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          fontSize: '12px',
+                        }}>
+                          <div style={{
+                            width: '8px', height: '8px', borderRadius: '50%',
+                            background: CATEGORY_COLORS[e.category] || '#6B7280', flexShrink: 0,
+                          }} />
+                          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', opacity: 0.7 }}>
+                            {e.start}–{e.end}
+                          </span>
+                          <span style={{ fontWeight: '600', flex: 1 }}>{e.name}</span>
+                          <span style={{ opacity: 0.6, fontSize: '11px' }}>{e.category}</span>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => saveQuickAIEntries(msg.entries)}
+                        style={{
+                          marginTop: '6px', padding: '8px 16px', borderRadius: '10px',
+                          background: 'linear-gradient(135deg, #10B981, #059669)',
+                          border: 'none', color: '#fff', fontSize: '13px',
+                          fontWeight: '700', cursor: 'pointer',
+                          fontFamily: 'DM Sans, sans-serif',
+                          transition: 'transform 0.15s, box-shadow 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(16,185,129,0.4)' }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none' }}
+                      >
+                        ✅ Save All Entries
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {quickAILoading && (
+              <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                <div style={{
+                  padding: '10px 18px', borderRadius: '14px',
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                  borderBottomLeftRadius: '4px',
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                }}>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {[0, 1, 2].map(i => (
+                      <div key={i} style={{
+                        width: '6px', height: '6px', borderRadius: '50%',
+                        background: 'var(--accent-indigo)',
+                        animation: `dotPulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                      }} />
+                    ))}
+                  </div>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>AI soch raha hai...</span>
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Input bar */}
+          <div style={{
+            display: 'flex', gap: '8px', alignItems: 'center',
+            padding: '8px 0 0',
+            borderTop: '1px solid var(--border)',
+          }}>
+            {/* Voice button */}
+            <button
+              onClick={isListening ? stopVoiceInput : startVoiceInput}
+              style={{
+                width: '42px', height: '42px', borderRadius: '50%', border: 'none',
+                background: isListening
+                  ? 'linear-gradient(135deg, #EF4444, #DC2626)'
+                  : 'linear-gradient(135deg, var(--accent-indigo), #7C3AED)',
+                color: '#fff', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+                animation: isListening ? 'voicePulse 1.5s ease-in-out infinite' : 'none',
+                transition: 'all 0.2s',
+              }}
+              title={isListening ? 'Stop listening' : 'Start voice input'}
+            >
+              {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+            </button>
+
+            {/* Text input */}
+            <input
+              type="text"
+              value={quickAIText}
+              onChange={e => setQuickAIText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleQuickAISend() } }}
+              placeholder={isListening ? '🎤 Bol raha hai...' : 'Bol ya likh — "2 se 4 ML padha"'}
+              disabled={quickAILoading}
+              style={{
+                flex: 1, padding: '10px 14px', borderRadius: '12px',
+                background: 'var(--bg-secondary)',
+                border: isListening ? '2px solid #EF4444' : '1px solid var(--border)',
+                color: 'var(--text-primary)', fontSize: '14px',
+                fontFamily: 'DM Sans, sans-serif', outline: 'none',
+                transition: 'border-color 0.2s',
+              }}
+            />
+
+            {/* Send button */}
+            <button
+              onClick={handleQuickAISend}
+              disabled={quickAILoading || !quickAIText.trim()}
+              style={{
+                width: '42px', height: '42px', borderRadius: '50%', border: 'none',
+                background: quickAIText.trim()
+                  ? 'linear-gradient(135deg, #3B82F6, #2563EB)'
+                  : 'var(--bg-secondary)',
+                color: quickAIText.trim() ? '#fff' : 'var(--text-muted)',
+                cursor: quickAIText.trim() ? 'pointer' : 'default',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, transition: 'all 0.2s',
+              }}
+            >
+              <Send size={18} />
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Keyframe for dotPulse and voicePulse */}
+      <style>{`
+        @keyframes dotPulse {
+          0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+          40% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes voicePulse {
+          0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+          70% { box-shadow: 0 0 0 12px rgba(239,68,68,0); }
+          100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+        }
+      `}</style>
 
     </div>
   )
