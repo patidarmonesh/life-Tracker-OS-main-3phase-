@@ -2,14 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { useAuth } from '../context/appContextCore'
 import { useNavigate } from 'react-router-dom'
-import { format } from 'date-fns'
+import { format, subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { calcLifeScore } from '../utils/scoreCalculator'
 import ScoreRing from '../components/ui/ScoreRing'
 import Card from '../components/ui/Card'
 import XPBar from '../components/ui/XPBar'
 import BadgeGrid from '../components/ui/BadgeGrid'
-import { Plus, Sparkles, Zap, ArrowRight, BarChart3 } from 'lucide-react'
+import { Plus, Sparkles, Zap, ArrowRight, BarChart3, Brain, Shield, TrendingUp, BookOpen, Target } from 'lucide-react'
+import Modal from '../components/ui/Modal'
+import Button from '../components/ui/Button'
 import { formatCurrencyAmount } from '../utils/currency'
 import { getTodayDateKey } from '../utils/dateTime'
 import { generateDailyInsight, getGeminiApiKey } from '../services/geminiService'
@@ -38,6 +40,10 @@ export default function Home() {
   const confettiTimeoutRef = useRef(null)
   const [energyLevel, setEnergyLevel] = useState(3)
   const [energyNotes, setEnergyNotes] = useState('')
+  const [showLifeCoach, setShowLifeCoach] = useState(false)
+  const [lifeCoachLoading, setLifeCoachLoading] = useState(false)
+  const [lifeCoachResult, setLifeCoachResult] = useState(null)
+  const [lifeCoachSaved, setLifeCoachSaved] = useState(false)
   const [isCompactHero, setIsCompactHero] = useState(
     typeof window !== 'undefined' ? window.innerWidth < 920 : false
   )
@@ -232,6 +238,262 @@ export default function Home() {
     })
     setEnergyNotes('')
     showToast('Logged energy level! ⚡', 'success')
+  }
+
+  // ── AI Life Coach ────────────────────────────────────────────
+  async function runLifeCoach() {
+    setLifeCoachLoading(true)
+    setLifeCoachResult(null)
+    setLifeCoachSaved(false)
+    const apiKey = getGeminiApiKey()
+    if (!apiKey) {
+      setLifeCoachLoading(false)
+      setLifeCoachResult({ error: true, message: 'No Gemini API key found. Go to Settings → API Keys.' })
+      return
+    }
+
+    try {
+      const tz = timezone
+      const todayKey = today
+
+      // ── Gather Habits Data ──
+      const allHabits = (state.habits?.checkpoints || []).filter(h => h.isActive !== false)
+      const allLogs = state.habits?.dailyLogs || []
+      const todayHabitLogs = allLogs.filter(l => l.date === todayKey)
+      const missedToday = allHabits.filter(h => !todayHabitLogs.some(l => l.checkpointId === h.id && l.status === 'done'))
+      const doneToday = allHabits.filter(h => todayHabitLogs.some(l => l.checkpointId === h.id && l.status === 'done'))
+      const nonNegMissed = missedToday.filter(h => h.nonNegotiable)
+
+      // Habit streaks for last 7 days per habit
+      const habitSummary = allHabits.map(h => {
+        let streak = 0
+        for (let i = 0; i < 30; i++) {
+          const dk = format(subDays(new Date(), i), 'yyyy-MM-dd')
+          if (allLogs.some(l => l.checkpointId === h.id && l.date === dk && l.status === 'done')) streak++
+          else if (i > 0) break
+        }
+        const last7 = Array.from({ length: 7 }, (_, i) => {
+          const dk = format(subDays(new Date(), i), 'yyyy-MM-dd')
+          return allLogs.some(l => l.checkpointId === h.id && l.date === dk && l.status === 'done')
+        })
+        return `- ${h.icon || '🎯'} ${h.title || h.name}${h.nonNegotiable ? ' [NON-NEGOTIABLE 🔒]' : ''}: streak=${streak}d, last7=${last7.filter(Boolean).length}/7, todayDone=${doneToday.some(d => d.id === h.id) ? 'YES' : 'NO'}`
+      }).join('\n')
+
+      // ── Study Data (last 7 days) ──
+      const studySessions = state.study?.sessions || []
+      const last7StudyMins = Array.from({ length: 7 }, (_, i) => {
+        const dk = format(subDays(new Date(), i), 'yyyy-MM-dd')
+        return studySessions.filter(s => s.date === dk).reduce((a, s) => a + (Number(s.durationMinutes) || 0), 0)
+      })
+      const studyTrend = `Last 7 days study (mins): [${last7StudyMins.reverse().join(', ')}]`
+
+      // ── Timeline Data (last 3 days) ──
+      const timeEntries = state.timeflow?.entries || []
+      const last3Timeline = Array.from({ length: 3 }, (_, i) => {
+        const dk = format(subDays(new Date(), i), 'yyyy-MM-dd')
+        const dayEntries = timeEntries.filter(e => e.date === dk)
+        const waste = dayEntries.filter(e => e.isWaste).reduce((a, e) => a + (Number(e.durationMinutes) || 0), 0)
+        const productive = dayEntries.filter(e => !e.isWaste).reduce((a, e) => a + (Number(e.durationMinutes) || 0), 0)
+        return `${dk}: productive=${(productive/60).toFixed(1)}h, waste=${(waste/60).toFixed(1)}h`
+      }).join('\n')
+
+      // ── Finance Data ──
+      const transactions = state.finance?.transactions || []
+      const expenses = state.finance?.expenses || []
+      const allFinance = [...transactions, ...expenses]
+      const last7Spend = Array.from({ length: 7 }, (_, i) => {
+        const dk = format(subDays(new Date(), i), 'yyyy-MM-dd')
+        return allFinance.filter(t => t.date === dk && (t.type === 'expense' || !t.type)).reduce((a, t) => a + (Number(t.amount) || 0), 0)
+      })
+      const financeSummary = `Last 7 days spending: [${last7Spend.reverse().map(s => Math.round(s)).join(', ')}] INR`
+
+      // ── Journal ──
+      const journals = (state.journal?.entries || []).slice(0, 5)
+      const journalSummary = journals.map(j => `- ${j.date}: "${j.title}" (mood: ${j.mood}/5)`).join('\n')
+
+      // ── Wisdoms ──
+      const wisdoms = state.wisdom?.entries || []
+      const wisdomTexts = wisdoms.slice(0, 10).map(w => `- "${w.text}" (source: ${w.source || 'self'}, category: ${w.category || 'life'})`).join('\n')
+
+      // ── Goals ──
+      const goals = state.goals?.items || []
+      const activeGoals = goals.filter(g => g.status === 'active' || !g.status)
+      const goalsSummary = activeGoals.slice(0, 5).map(g => `- ${g.title} (progress: ${g.progress || 0}%, priority: ${g.priority || 'medium'})`).join('\n')
+
+      // Build the mega prompt
+      const prompt = `You are a STRICT, CARING, BRUTALLY HONEST AI Life Coach. The user's name is ${displayName}. Your job is to analyze their ENTIRE life data and give them tough love + motivation.
+
+IMPORTANT RULES:
+1. If there are NON-NEGOTIABLE habits that are missed today, you MUST SCOLD the user aggressively but caringly. These habits are marked [NON-NEGOTIABLE 🔒]. Be harsh but motivating like a strict coach.
+2. Pick 2-3 wisdoms from their own wisdom collection and REMIND them to follow those wisdoms today.
+3. Compare their recent data to find IMPROVEMENT TRENDS. If they're improving, celebrate it. If declining, call it out.
+4. Be specific with numbers and data. Don't be vague.
+5. Write in a casual Hinglish style (Hindi-English mix) like a friend who's also a strict coach.
+
+=== TODAY'S DATE: ${todayKey} ===
+
+=== HABITS (${allHabits.length} total, ${doneToday.length} done today, ${missedToday.length} missed) ===
+${habitSummary}
+
+MISSED TODAY: ${missedToday.map(h => `${h.icon || '🎯'} ${h.title || h.name}${h.nonNegotiable ? ' [NON-NEGOTIABLE]' : ''}`).join(', ') || 'None — Perfect!'}
+NON-NEGOTIABLE MISSED: ${nonNegMissed.map(h => `${h.icon || '🎯'} ${h.title || h.name}`).join(', ') || 'None'}
+
+=== STUDY TREND ===
+${studyTrend}
+Today so far: ${studyMins} mins (goal: ${studyGoalMins} mins)
+
+=== TIMELINE (last 3 days) ===
+${last3Timeline}
+
+=== FINANCE ===
+${financeSummary}
+Today spent: ${todaySpend} INR (daily budget: ${dailyBudget} INR)
+
+=== RECENT JOURNALS ===
+${journalSummary || 'No recent journals'}
+
+=== USER\'S OWN WISDOMS ===
+${wisdomTexts || 'No wisdoms saved yet'}
+
+=== ACTIVE GOALS ===
+${goalsSummary || 'No active goals'}
+
+=== LIFE SCORE: ${scores.total}/100 ===
+
+Return ONLY valid JSON, no markdown:
+{
+  "overallVerdict": "One powerful sentence about their current state in Hinglish",
+  "improvementTrend": {
+    "direction": "improving" or "declining" or "stable",
+    "details": "Specific data-backed explanation of trend in Hinglish",
+    "motivationalLine": "A powerful motivation line if improving, or a wake-up call if declining"
+  },
+  "nonNegotiableScold": {
+    "hasMissed": true/false,
+    "message": "Strict scolding message in Hinglish for missed non-negotiable habits. Be harsh but caring. If none missed, write a proud message."
+  },
+  "missedHabitsAnalysis": [
+    {
+      "habitName": "name",
+      "isNonNegotiable": true/false,
+      "whyItMatters": "Why this habit is important",
+      "suggestion": "When and how to do it today"
+    }
+  ],
+  "wisdomReminders": [
+    {
+      "wisdom": "exact wisdom text from their collection",
+      "howToApplyToday": "Specific way to apply this wisdom today"
+    }
+  ],
+  "studyCoaching": {
+    "currentStatus": "Assessment of study performance",
+    "trendAnalysis": "Is study time increasing or decreasing over the week?",
+    "todayTarget": "What they should aim for rest of today"
+  },
+  "financeCheck": {
+    "status": "Are they within budget?",
+    "tip": "One specific money-saving tip based on their data"
+  },
+  "topPriorities": ["Priority 1 for rest of today", "Priority 2", "Priority 3"],
+  "closingMessage": "A powerful closing message that makes them feel like they can conquer the world. In Hinglish."
+}`
+
+      const res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.4 },
+          }),
+        }
+      )
+      const data = await res.json()
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      const jsonMatch = raw.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0])
+        setLifeCoachResult(parsed)
+        // Auto-save to journal
+        saveLifeCoachToJournal(parsed)
+      } else {
+        setLifeCoachResult({ error: true, message: 'Could not parse AI response. Try again.' })
+      }
+    } catch (err) {
+      console.error(err)
+      setLifeCoachResult({ error: true, message: 'AI request failed. Check connection or API key.' })
+    }
+    setLifeCoachLoading(false)
+  }
+
+  function saveLifeCoachToJournal(result) {
+    if (!result || result.error) return
+    let content = `## 🧠 AI Life Coach Report — ${today}\n\n`
+    content += `**Verdict:** ${result.overallVerdict}\n\n`
+
+    if (result.improvementTrend) {
+      const dir = result.improvementTrend.direction
+      const emoji = dir === 'improving' ? '📈' : dir === 'declining' ? '📉' : '➡️'
+      content += `## ${emoji} Trend: ${dir.toUpperCase()}\n${result.improvementTrend.details}\n\n`
+      content += `> ${result.improvementTrend.motivationalLine}\n\n`
+    }
+
+    if (result.nonNegotiableScold) {
+      content += `## 🔒 Non-Negotiable Check\n${result.nonNegotiableScold.message}\n\n`
+    }
+
+    if (result.missedHabitsAnalysis?.length > 0) {
+      content += `## ❌ Missed Habits\n`
+      result.missedHabitsAnalysis.forEach((h, i) => {
+        content += `${i + 1}. **${h.habitName}**${h.isNonNegotiable ? ' 🔒' : ''}: ${h.whyItMatters}\n   💡 ${h.suggestion}\n`
+      })
+      content += '\n'
+    }
+
+    if (result.wisdomReminders?.length > 0) {
+      content += `## 📚 Wisdom Reminders\n`
+      result.wisdomReminders.forEach((w, i) => {
+        content += `${i + 1}. "${w.wisdom}"\n   → ${w.howToApplyToday}\n`
+      })
+      content += '\n'
+    }
+
+    if (result.topPriorities?.length > 0) {
+      content += `## 🎯 Top Priorities for Today\n`
+      content += result.topPriorities.map((p, i) => `${i + 1}. ${p}`).join('\n') + '\n\n'
+    }
+
+    if (result.closingMessage) {
+      content += `## 💪 ${result.closingMessage}\n`
+    }
+
+    const journalEntries = state.journal?.entries || []
+    const existingIdx = journalEntries.findIndex(e => e.date === today && e.source === 'ai-life-coach')
+    const payload = {
+      date: today,
+      title: `🧠 AI Life Coach — ${today}`,
+      content: content.trim(),
+      mood: 3,
+      energy: 3,
+      gratitude: '',
+      tags: ['ai-life-coach', 'auto-generated', 'daily-coaching'],
+      source: 'ai-life-coach',
+      aiSentiment: result.improvementTrend?.direction || 'Analysis',
+      aiRecommendation: result.topPriorities ? result.topPriorities.join('; ') : '',
+      updatedAt: new Date().toISOString(),
+    }
+
+    let updated
+    if (existingIdx > -1) {
+      updated = journalEntries.map((e, i) => i === existingIdx ? { ...e, ...payload } : e)
+    } else {
+      updated = [{ id: uuid(), ...payload, createdAt: new Date().toISOString() }, ...journalEntries]
+    }
+    setModule('journal', { ...state.journal, entries: updated })
+    setLifeCoachSaved(true)
+    showToast('Life Coach report saved to Journal ✓', 'success')
   }
 
   const fabActions = [
@@ -729,6 +991,39 @@ export default function Home() {
         {/* Smart Reminders */}
         <SmartReminders state={state} />
 
+        {/* ══ AI LIFE COACH BUTTON ══════════════════════ */}
+        <div
+          onClick={() => { setLifeCoachResult(null); setLifeCoachSaved(false); setShowLifeCoach(true); }}
+          style={{
+            padding: '18px 20px', borderRadius: '18px', cursor: 'pointer',
+            background: 'linear-gradient(135deg, rgba(139,92,246,0.12), rgba(236,72,153,0.08), rgba(59,130,246,0.06))',
+            border: '1px solid rgba(139,92,246,0.25)',
+            display: 'flex', alignItems: 'center', gap: '14px',
+            transition: 'all 0.3s ease',
+            boxShadow: '0 4px 20px rgba(139,92,246,0.08)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 30px rgba(139,92,246,0.15)' }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(139,92,246,0.08)' }}
+        >
+          <div style={{
+            width: '48px', height: '48px', borderRadius: '14px', flexShrink: 0,
+            background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 15px rgba(139,92,246,0.3)',
+          }}>
+            <Brain size={24} color="#fff" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '15px', fontWeight: '800', color: '#A78BFA', fontFamily: 'Syne, sans-serif', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              🧠 AI Life Coach
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px', lineHeight: '1.4' }}>
+              Habits • Study • Finance • Wisdom • Goals — Full life analysis with tough love
+            </div>
+          </div>
+          <ArrowRight size={18} color="#A78BFA" />
+        </div>
+
         {/* Weekly Summary Toggle + Card */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <button
@@ -1186,6 +1481,203 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* ══ AI LIFE COACH MODAL ══════════════════════ */}
+      <Modal isOpen={showLifeCoach} onClose={() => { setShowLifeCoach(false); setLifeCoachResult(null); setLifeCoachSaved(false); }} title="🧠 AI Life Coach — Full Life Analysis">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+          {!lifeCoachResult ? (
+            <>
+              <div style={{
+                padding: '16px', borderRadius: '14px',
+                background: 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(236,72,153,0.06), rgba(59,130,246,0.04))',
+                border: '1px solid rgba(139,92,246,0.2)',
+                fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.7',
+              }}>
+                <div style={{ fontSize: '15px', fontWeight: '800', color: '#A78BFA', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Brain size={16} /> What I'll Analyze
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px' }}>
+                  {['\u2705 Habits & Non-Negotiables', '\ud83d\udcda Study trends (7 days)', '\u23f1\ufe0f Timeline & waste time', '\ud83d\udcb0 Finance & spending', '\ud83d\udcdd Journal mood patterns', '\ud83e\udde0 Your own Wisdoms', '\ud83c\udfaf Goals progress', '\ud83d\udcaa Improvement trends'].map(item => (
+                    <div key={item} style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{item}</div>
+                  ))}
+                </div>
+              </div>
+              <Button onClick={runLifeCoach} disabled={lifeCoachLoading}
+                style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)', border: 'none', color: '#fff', padding: '14px', fontSize: '15px', fontWeight: '800' }}>
+                {lifeCoachLoading ? '⏳ Analyzing your entire life...' : '🧠 Analyze My Life'}
+              </Button>
+            </>
+          ) : null}
+
+          {lifeCoachResult?.error && (
+            <div style={{ padding: '12px', background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: '10px', fontSize: '13px', color: '#F43F5E' }}>
+              ⚠️ {lifeCoachResult.message}
+            </div>
+          )}
+
+          {lifeCoachResult && !lifeCoachResult.error && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+              {/* Overall Verdict */}
+              <div style={{
+                padding: '16px', borderRadius: '14px', textAlign: 'center',
+                background: 'linear-gradient(135deg, rgba(139,92,246,0.1), rgba(236,72,153,0.08))',
+                border: '1px solid rgba(139,92,246,0.25)',
+              }}>
+                <div style={{ fontSize: '15px', fontWeight: '800', color: '#A78BFA', lineHeight: '1.6' }}>
+                  {lifeCoachResult.overallVerdict}
+                </div>
+              </div>
+
+              {/* Improvement Trend */}
+              {lifeCoachResult.improvementTrend && (
+                <div style={{
+                  padding: '14px', borderRadius: '12px',
+                  background: lifeCoachResult.improvementTrend.direction === 'improving' ? 'rgba(16,185,129,0.06)' : lifeCoachResult.improvementTrend.direction === 'declining' ? 'rgba(239,68,68,0.06)' : 'rgba(245,158,11,0.06)',
+                  border: `1px solid ${lifeCoachResult.improvementTrend.direction === 'improving' ? 'rgba(16,185,129,0.2)' : lifeCoachResult.improvementTrend.direction === 'declining' ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)'}`,
+                }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px',
+                    color: lifeCoachResult.improvementTrend.direction === 'improving' ? '#10B981' : lifeCoachResult.improvementTrend.direction === 'declining' ? '#EF4444' : '#F59E0B',
+                  }}>
+                    <TrendingUp size={14} /> {lifeCoachResult.improvementTrend.direction === 'improving' ? '📈 Improving' : lifeCoachResult.improvementTrend.direction === 'declining' ? '📉 Declining' : '➡️ Stable'}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>{lifeCoachResult.improvementTrend.details}</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', fontStyle: 'italic', marginTop: '8px',
+                    color: lifeCoachResult.improvementTrend.direction === 'improving' ? '#10B981' : '#F59E0B',
+                  }}>
+                    💪 {lifeCoachResult.improvementTrend.motivationalLine}
+                  </div>
+                </div>
+              )}
+
+              {/* Non-Negotiable Scold */}
+              {lifeCoachResult.nonNegotiableScold && (
+                <div style={{
+                  padding: '14px', borderRadius: '12px',
+                  background: lifeCoachResult.nonNegotiableScold.hasMissed ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.06)',
+                  border: `1px solid ${lifeCoachResult.nonNegotiableScold.hasMissed ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.2)'}`,
+                }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px',
+                    color: lifeCoachResult.nonNegotiableScold.hasMissed ? '#EF4444' : '#10B981',
+                  }}>
+                    <Shield size={14} /> {lifeCoachResult.nonNegotiableScold.hasMissed ? '🔒 NON-NEGOTIABLE ALERT!' : '🔒 Non-Negotiables: All Clear!'}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', fontWeight: lifeCoachResult.nonNegotiableScold.hasMissed ? '600' : '400' }}>
+                    {lifeCoachResult.nonNegotiableScold.message}
+                  </div>
+                </div>
+              )}
+
+              {/* Missed Habits Analysis */}
+              {lifeCoachResult.missedHabitsAnalysis?.length > 0 && (
+                <div style={{ padding: '14px', borderRadius: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#F59E0B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                    ❌ Missed Habits — Why They Matter
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                    {lifeCoachResult.missedHabitsAnalysis.map((h, i) => (
+                      <div key={i} style={{
+                        padding: '10px', borderRadius: '10px',
+                        background: h.isNonNegotiable ? 'rgba(239,68,68,0.06)' : 'rgba(245,158,11,0.04)',
+                        border: `1px solid ${h.isNonNegotiable ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.15)'}`,
+                      }}>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {h.habitName}
+                          {h.isNonNegotiable && <span style={{ fontSize: '10px', fontWeight: '800', color: '#EF4444', background: 'rgba(239,68,68,0.12)', padding: '1px 6px', borderRadius: '4px' }}>🔒</span>}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>{h.whyItMatters}</div>
+                        <div style={{ fontSize: '12px', color: '#10B981', fontWeight: '600', marginTop: '4px' }}>💡 {h.suggestion}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Wisdom Reminders */}
+              {lifeCoachResult.wisdomReminders?.length > 0 && (
+                <div style={{ padding: '14px', borderRadius: '12px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#818CF8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <BookOpen size={14} /> 📚 Your Own Wisdoms — Follow These Today
+                  </div>
+                  {lifeCoachResult.wisdomReminders.map((w, i) => (
+                    <div key={i} style={{ marginBottom: '10px', padding: '10px', borderRadius: '8px', background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.1)' }}>
+                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#A78BFA', fontStyle: 'italic' }}>"✨ {w.wisdom}"</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>→ {w.howToApplyToday}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Study Coaching */}
+              {lifeCoachResult.studyCoaching && (
+                <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#3B82F6', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>📚 Study Coaching</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                    <strong>Status:</strong> {lifeCoachResult.studyCoaching.currentStatus}<br />
+                    <strong>Trend:</strong> {lifeCoachResult.studyCoaching.trendAnalysis}<br />
+                    <strong>Today's Target:</strong> {lifeCoachResult.studyCoaching.todayTarget}
+                  </div>
+                </div>
+              )}
+
+              {/* Finance Check */}
+              {lifeCoachResult.financeCheck && (
+                <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>💰 Finance Check</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                    {lifeCoachResult.financeCheck.status}<br />
+                    💡 {lifeCoachResult.financeCheck.tip}
+                  </div>
+                </div>
+              )}
+
+              {/* Top Priorities */}
+              {lifeCoachResult.topPriorities?.length > 0 && (
+                <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#F59E0B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Target size={14} /> 🎯 Top Priorities — Rest of Today
+                  </div>
+                  {lifeCoachResult.topPriorities.map((p, i) => (
+                    <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: '600' }}>{i + 1}. {p}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* Closing Message */}
+              {lifeCoachResult.closingMessage && (
+                <div style={{
+                  padding: '14px', borderRadius: '12px', textAlign: 'center',
+                  background: 'linear-gradient(135deg, rgba(139,92,246,0.1), rgba(236,72,153,0.08))',
+                  border: '1px solid rgba(139,92,246,0.25)',
+                }}>
+                  <div style={{ fontSize: '14px', color: '#A78BFA', fontWeight: '800', lineHeight: '1.6' }}>
+                    🚀 {lifeCoachResult.closingMessage}
+                  </div>
+                </div>
+              )}
+
+              {/* Saved indicator */}
+              {lifeCoachSaved && (
+                <div style={{ fontSize: '12px', color: '#10B981', fontWeight: '600', textAlign: 'center' }}>
+                  💾 Auto-saved to Journal as "AI Life Coach" entry ✓
+                </div>
+              )}
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Button onClick={() => { setShowLifeCoach(false); setLifeCoachResult(null); }} style={{ flex: 1 }}>Done</Button>
+                <Button variant="secondary" onClick={() => saveLifeCoachToJournal(lifeCoachResult)} disabled={!lifeCoachResult || lifeCoachResult.error}>
+                  💾 Save to Journal
+                </Button>
+                <Button variant="secondary" onClick={runLifeCoach}>
+                  Re-analyze
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <div
         style={{
