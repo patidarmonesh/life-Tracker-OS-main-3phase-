@@ -4,7 +4,7 @@ import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis } from 'recharts'
-import { Plus, Pencil, Mic, MicOff, MessageSquare, Send, Zap } from 'lucide-react'
+import { Plus, Pencil, Mic, MicOff, MessageSquare, Send, Zap, Target, Sparkles, TrendingUp } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -263,6 +263,11 @@ export default function TimeFlow() {
   const [quickAIParsed, setQuickAIParsed] = useState(null)
   const [isListening, setIsListening] = useState(false)
   const [quickAIChatHistory, setQuickAIChatHistory] = useState([])
+  const [showOptimizerModal, setShowOptimizerModal] = useState(false)
+  const [optimizerLoading, setOptimizerLoading] = useState(false)
+  const [optimizerResult, setOptimizerResult] = useState(null)
+  const [optimizerSaved, setOptimizerSaved] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
   const recognitionRef = useRef(null)
   const chatEndRef = useRef(null)
   const [form, setForm] = useState({
@@ -928,6 +933,193 @@ User says: ${userMsg}`
     setQuickAIParsed(null)
   }
 
+  // ── AI Time Optimizer ─────────────────────────────────────
+  async function runTimeOptimizer() {
+    if (dayEntries.length === 0) return
+    setOptimizerLoading(true)
+    setOptimizerResult(null)
+    setOptimizerSaved(false)
+    const apiKey = getGeminiApiKey()
+
+    if (!apiKey) {
+      setOptimizerLoading(false)
+      setOptimizerResult({ error: true, message: 'No Gemini API key found. Go to Settings → API Keys to add your key.' })
+      return
+    }
+
+    try {
+      const formattedTimeline = dayEntries.map(e => `- ${e.start} to ${e.end} (${e.durationMinutes} mins): ${e.name} [Category: ${e.category}, Waste: ${e.isWaste ? 'Yes' : 'No'}]`).join('\n')
+
+      const prompt = `You are a ruthless time-optimization coach. The user's PRIMARY GOAL is to MAXIMIZE STUDY TIME. Analyze their daily timeline and find every single minute that can be saved from non-study activities.
+
+For EACH non-study, non-sleep activity, suggest a realistic but aggressive time reduction. Be specific — give exact target minutes for tomorrow. Flag activities with:
+- 🔴 for major time wasters (>30 min saving possible)
+- 🟡 for moderate optimization (10-30 min saving)
+- 🟢 for already efficient (< 10 min saving)
+
+Here is their timeline for ${selectedDate}:
+${formattedTimeline}
+
+Return ONLY valid JSON, no markdown, no explanation:
+{
+  "currentStudyMins": number,
+  "potentialStudyMins": number,
+  "timeGainMins": number,
+  "flaggedActivities": [
+    {
+      "name": "activity name",
+      "category": "category",
+      "currentMins": number,
+      "suggestedMins": number,
+      "savingMins": number,
+      "flag": "🔴 or 🟡 or 🟢",
+      "tip": "specific actionable tip in Hinglish mix"
+    }
+  ],
+  "tomorrowScheduleTips": ["specific tip 1 in Hinglish", "specific tip 2"],
+  "quickWins": ["easiest changes that save the most time"],
+  "motivationalNote": "short motivational message in Hinglish",
+  "optimizedDayPlan": "brief description of how an optimized version of this day would look"
+}`
+
+      const res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3 },
+          }),
+        }
+      )
+      const data = await res.json()
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      const jsonMatch = raw.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0])
+        setOptimizerResult(parsed)
+        saveOptimizerToJournal(parsed, selectedDate)
+      } else {
+        setOptimizerResult({ error: true, message: 'Could not parse AI response. Try again.' })
+      }
+    } catch (err) {
+      console.error(err)
+      setOptimizerResult({ error: true, message: 'AI request failed. Check connection or Gemini key.' })
+    }
+    setOptimizerLoading(false)
+  }
+
+  function saveOptimizerToJournal(result, date) {
+    if (!result || result.error) return
+
+    let content = `## 📈 Time Optimization Report\n\n`
+    content += `**Current Study Time:** ${(result.currentStudyMins / 60).toFixed(1)}h → **Potential:** ${(result.potentialStudyMins / 60).toFixed(1)}h (+${(result.timeGainMins / 60).toFixed(1)}h gain)\n\n`
+
+    content += `## 🚩 Flagged Activities\n`
+    if (result.flaggedActivities?.length > 0) {
+      result.flaggedActivities.forEach((a, i) => {
+        content += `${i + 1}. ${a.flag || '🚩'} **${a.name}** (${a.category}): ${a.currentMins}min → ${a.suggestedMins}min (save ${a.savingMins}min)\n`
+        content += `   💡 ${a.tip}\n`
+      })
+      content += '\n'
+    }
+
+    content += `## ⏰ Tomorrow's Schedule Tips\n`
+    if (result.tomorrowScheduleTips?.length > 0) {
+      content += result.tomorrowScheduleTips.map((t, i) => `${i + 1}. ${t}`).join('\n') + '\n\n'
+    }
+
+    if (result.quickWins?.length > 0) {
+      content += `## ⚡ Quick Wins\n`
+      content += result.quickWins.map(w => `• ${w}`).join('\n') + '\n\n'
+    }
+
+    if (result.optimizedDayPlan) {
+      content += `## 🗓️ Optimized Day Plan\n${result.optimizedDayPlan}\n\n`
+    }
+
+    if (result.motivationalNote) {
+      content += `## 💪 Motivation\n${result.motivationalNote}\n`
+    }
+
+    const journalEntries = state.journal?.entries || []
+    const existingIndex = journalEntries.findIndex(
+      e => e.date === date && e.source === 'timeflow-ai-optimizer'
+    )
+
+    const payload = {
+      date,
+      title: `📈 How to Improve Next Day — ${date}`,
+      content: content.trim(),
+      mood: 3,
+      energy: 3,
+      gratitude: '',
+      tags: ['ai-optimizer', 'auto-generated', 'improvement-plan'],
+      source: 'timeflow-ai-optimizer',
+      aiSentiment: 'Action Plan',
+      aiRecommendation: result.tomorrowScheduleTips ? result.tomorrowScheduleTips.join('; ') : '',
+      updatedAt: new Date().toISOString(),
+    }
+
+    let updatedEntries
+    if (existingIndex > -1) {
+      updatedEntries = journalEntries.map((e, idx) =>
+        idx === existingIndex ? { ...e, ...payload } : e
+      )
+    } else {
+      updatedEntries = [{ id: uuid(), ...payload, createdAt: new Date().toISOString() }, ...journalEntries]
+    }
+
+    setModule('journal', { ...state.journal, entries: updatedEntries })
+    setOptimizerSaved(true)
+    showToast('Improvement plan saved to Journal ✓', 'success')
+  }
+
+  async function generateDetailNotes() {
+    if (!form.name && !form.category) return
+    setDetailLoading(true)
+    const apiKey = getGeminiApiKey()
+    if (!apiKey) {
+      showToast('No Gemini API key. Go to Settings → API Keys.', 'error')
+      setDetailLoading(false)
+      return
+    }
+
+    try {
+      const isWaste = form.isWaste || WASTE_CATEGORIES.includes(form.category)
+      const prompt = `You are a personal life-logging assistant. The user logged this activity in their daily timeline:
+
+Activity: "${form.name || form.category}"
+Category: ${form.category}
+Time: ${form.start} to ${form.end}
+Is Time Waste: ${isWaste ? 'Yes' : 'No'}
+
+Write a detailed 2-4 sentence note describing what likely happened during this time. Be specific and realistic. If it was a waste activity, mention what could have been done instead. Write in a casual Hinglish style (Hindi-English mix). Don't add any greeting or heading — just the note text directly.`
+
+      const res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.5 },
+          }),
+        }
+      )
+      const data = await res.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      if (text) {
+        setForm(f => ({ ...f, notes: text.trim() }))
+        showToast('AI notes generated ✓', 'success')
+      }
+    } catch {
+      showToast('AI detail generation failed', 'error')
+    }
+    setDetailLoading(false)
+  }
+
   // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -973,6 +1165,13 @@ User says: ${userMsg}`
             setShowAIModal(true);
           }}>
             ✨ Analyse
+          </Button>
+          <Button variant="secondary" onClick={() => {
+            setOptimizerResult(null);
+            setOptimizerSaved(false);
+            setShowOptimizerModal(true);
+          }} style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(236,72,153,0.1))', border: '1px solid rgba(139,92,246,0.3)', color: '#A78BFA' }}>
+            <Target size={14} /> Optimize
           </Button>
           <Button onClick={() => { resetForm(); setShowAddModal(true) }}>
             <Plus size={16} /> Add Entry
@@ -1161,8 +1360,27 @@ User says: ${userMsg}`
           </div>
           <div>
             <label style={labelStyle}>Notes (optional)</label>
-            <input style={inputStyle} placeholder="Any notes..." value={form.notes}
+            <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '60px', lineHeight: '1.5' }} placeholder="Any notes about this activity..." value={form.notes} rows={3}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            <button
+              onClick={generateDetailNotes}
+              disabled={detailLoading || (!form.name && !form.category)}
+              style={{
+                marginTop: '6px', padding: '7px 14px', borderRadius: '8px',
+                background: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(236,72,153,0.1))',
+                border: '1px solid rgba(139,92,246,0.3)', color: '#A78BFA',
+                fontSize: '12px', fontWeight: '600', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '5px', width: 'fit-content',
+                fontFamily: 'DM Sans, sans-serif',
+                opacity: detailLoading ? 0.6 : 1,
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { if (!detailLoading) e.currentTarget.style.background = 'linear-gradient(135deg, rgba(139,92,246,0.25), rgba(236,72,153,0.15))' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(236,72,153,0.1))' }}
+            >
+              <Sparkles size={12} />
+              {detailLoading ? 'AI soch raha hai...' : '✨ AI Detail Likho'}
+            </button>
           </div>
           <div>
             <label style={labelStyle}>Tags</label>
@@ -1567,6 +1785,169 @@ User says: ${userMsg}`
               <Send size={18} />
             </button>
           </div>
+        </div>
+      </Modal>
+
+      {/* ══ AI TIME OPTIMIZER MODAL ════════════════════════════════ */}
+      <Modal isOpen={showOptimizerModal} onClose={() => { setShowOptimizerModal(false); setOptimizerResult(null); setOptimizerSaved(false); }} title="🧠 AI Time Optimizer — Maximize Study Time">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+          {dayEntries.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: '40px', marginBottom: '8px' }}>📭</div>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)' }}>No timeline entries for this day</div>
+              <div style={{ fontSize: '12px', marginTop: '4px' }}>Pehle timeline me entries add kar, phir optimize kar.</div>
+            </div>
+          ) : !optimizerResult ? (
+            <>
+              <div style={{
+                padding: '14px', borderRadius: '12px',
+                background: 'linear-gradient(135deg, rgba(139,92,246,0.1), rgba(236,72,153,0.08))',
+                border: '1px solid rgba(139,92,246,0.2)',
+                fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6',
+              }}>
+                <strong style={{ color: '#A78BFA' }}>🧠 Time Optimizer</strong> — AI tera poora din analyze karega aur batayega kaha kaha time bacha sakta hai taaki <strong>study time maximize</strong> ho. Har activity ke liye specific time targets milenge for tomorrow.
+              </div>
+              <Button onClick={runTimeOptimizer} disabled={optimizerLoading}
+                style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)', border: 'none', color: '#fff' }}>
+                {optimizerLoading ? '⏳ Optimizing your day...' : '🧠 Optimize My Day'}
+              </Button>
+            </>
+          ) : null}
+
+          {optimizerResult?.error && (
+            <div style={{ padding: '12px', background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: '10px', fontSize: '13px', color: '#F43F5E' }}>
+              ⚠️ {optimizerResult.message}
+            </div>
+          )}
+
+          {optimizerResult && !optimizerResult.error && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+              {/* Study Time Comparison */}
+              <div style={{
+                padding: '16px', borderRadius: '12px',
+                background: 'linear-gradient(135deg, rgba(59,130,246,0.1), rgba(16,185,129,0.08))',
+                border: '1px solid rgba(59,130,246,0.2)',
+              }}>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <TrendingUp size={14} color="#3B82F6" /> Study Time Potential
+                </div>
+                <div style={{ marginBottom: '8px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>Current</div>
+                  <div style={{ height: '26px', borderRadius: '13px', background: 'rgba(59,130,246,0.12)', overflow: 'hidden', position: 'relative' }}>
+                    <div style={{ height: '100%', width: `${Math.min(100, ((optimizerResult.currentStudyMins || 0) / 720) * 100)}%`, background: 'linear-gradient(90deg, #3B82F6, #2563EB)', borderRadius: '13px', transition: 'width 1s ease' }} />
+                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+                      {((optimizerResult.currentStudyMins || 0) / 60).toFixed(1)}h
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#10B981', marginBottom: '4px', fontWeight: '600' }}>✨ Potential (After Optimization)</div>
+                  <div style={{ height: '26px', borderRadius: '13px', background: 'rgba(16,185,129,0.12)', overflow: 'hidden', position: 'relative' }}>
+                    <div style={{ height: '100%', width: `${Math.min(100, ((optimizerResult.potentialStudyMins || 0) / 720) * 100)}%`, background: 'linear-gradient(90deg, #10B981, #059669)', borderRadius: '13px', transition: 'width 1s ease' }} />
+                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+                      {((optimizerResult.potentialStudyMins || 0) / 60).toFixed(1)}h
+                    </span>
+                  </div>
+                </div>
+                <div style={{ marginTop: '10px', textAlign: 'center', fontSize: '14px', fontWeight: '800', color: '#10B981' }}>
+                  🚀 +{((optimizerResult.timeGainMins || 0) / 60).toFixed(1)}h more study time possible!
+                </div>
+              </div>
+
+              {/* Flagged Activities */}
+              {optimizerResult.flaggedActivities?.length > 0 && (
+                <div style={{ padding: '14px', borderRadius: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#EF4444', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
+                    🚩 Flagged Activities — Time Savings
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto' }}>
+                    {optimizerResult.flaggedActivities.map((a, i) => (
+                      <div key={i} style={{
+                        padding: '10px 12px', borderRadius: '10px',
+                        background: a.flag === '🔴' ? 'rgba(239,68,68,0.06)' : a.flag === '🟡' ? 'rgba(245,158,11,0.06)' : 'rgba(16,185,129,0.06)',
+                        border: `1px solid ${a.flag === '🔴' ? 'rgba(239,68,68,0.2)' : a.flag === '🟡' ? 'rgba(245,158,11,0.2)' : 'rgba(16,185,129,0.2)'}`,
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>{a.flag || '🚩'}</span> {a.name}
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '400' }}>({a.category})</span>
+                          </div>
+                          <div style={{ fontSize: '12px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color: '#10B981', background: 'rgba(16,185,129,0.12)', padding: '2px 8px', borderRadius: '6px' }}>
+                            -{a.savingMins}min
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                          <span style={{ color: '#EF4444', fontWeight: '600', fontFamily: 'JetBrains Mono, monospace' }}>{a.currentMins}min</span>
+                          <span>→</span>
+                          <span style={{ color: '#10B981', fontWeight: '600', fontFamily: 'JetBrains Mono, monospace' }}>{a.suggestedMins}min</span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>💡 {a.tip}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Wins */}
+              {optimizerResult.quickWins?.length > 0 && (
+                <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#F59E0B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>⚡ Quick Wins</div>
+                  {optimizerResult.quickWins.map((w, i) => (
+                    <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '3px' }}>• {w}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* Tomorrow Schedule Tips */}
+              {optimizerResult.tomorrowScheduleTips?.length > 0 && (
+                <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--accent-indigo)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>⏰ Tomorrow's Schedule Tips</div>
+                  {optimizerResult.tomorrowScheduleTips.map((t, i) => (
+                    <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: '500' }}>{i + 1}. {t}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* Optimized Day Plan */}
+              {optimizerResult.optimizedDayPlan && (
+                <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>🗓️ Optimized Day Plan</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>{optimizerResult.optimizedDayPlan}</div>
+                </div>
+              )}
+
+              {/* Motivational Note */}
+              {optimizerResult.motivationalNote && (
+                <div style={{
+                  padding: '12px', borderRadius: '10px', textAlign: 'center',
+                  background: 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(236,72,153,0.06))',
+                  border: '1px solid rgba(139,92,246,0.2)',
+                }}>
+                  <div style={{ fontSize: '13px', color: '#A78BFA', fontWeight: '600', fontStyle: 'italic' }}>💪 {optimizerResult.motivationalNote}</div>
+                </div>
+              )}
+
+              {/* Saved indicator */}
+              {optimizerSaved && (
+                <div style={{ fontSize: '12px', color: '#10B981', fontWeight: '600', textAlign: 'center', padding: '4px 0' }}>
+                  💾 Auto-saved to Journal as "How to Improve Next Day" ✓
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Button onClick={() => { setShowOptimizerModal(false); setOptimizerResult(null); setOptimizerSaved(false); }} style={{ flex: 1 }}>Done</Button>
+                <Button variant="secondary" onClick={() => saveOptimizerToJournal(optimizerResult, selectedDate)} disabled={!optimizerResult || optimizerResult.error}>
+                  💾 Save to Journal
+                </Button>
+                <Button variant="secondary" onClick={runTimeOptimizer}>
+                  Re-optimize
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
 
