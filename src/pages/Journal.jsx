@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useAppActions, useAppState } from '../context/appHooks'
-import { subDays } from 'date-fns'
+import { subDays, format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip,
   BarChart, Bar, CartesianGrid
 } from 'recharts'
-import { Plus, Search, Pencil } from 'lucide-react'
+import { Plus, Search, Pencil, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -48,6 +48,9 @@ export default function Journal() {
   const [editingEntry, setEditingEntry] = useState(null)
   const [search, setSearch] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [calendarMonth, setCalendarMonth] = useState(new Date())
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState(null)
+  const [expandedEntryId, setExpandedEntryId] = useState(null)
   const [selectedPrompt, setSelectedPrompt] = useState(PROMPTS[0])
   const [form, setForm] = useState({
     date: today,
@@ -288,9 +291,9 @@ export default function Journal() {
       </div>
 
       <div style={{ display: 'flex', gap: '4px', padding: '16px 24px 0', borderBottom: '1px solid var(--border)' }}>
-        {['entries', 'insights'].map(tab => (
+        {['entries', 'calendar', 'insights'].map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={tabStyle(activeTab === tab)}>
-            {tab === 'entries' ? 'Entries' : 'Insights'}
+            {tab === 'entries' ? 'Entries' : tab === 'calendar' ? '📅 Calendar' : 'Insights'}
           </button>
         ))}
       </div>
@@ -328,86 +331,445 @@ export default function Journal() {
               filteredEntries.map(entry => {
                 const moodObj = MOODS.find(m => m.value === entry.mood) || MOODS[2]
                 return (
-                  <Card key={entry.id}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <h3 style={{ fontSize: '16px', fontWeight: '700', margin: 0 }}>{entry.title}</h3>
-                          <span style={{ fontSize: '12px', padding: '3px 8px', borderRadius: '999px', background: `${moodObj.color}20`, color: moodObj.color }}>
-                            {moodObj.emoji} {moodObj.label}
-                          </span>
+                  <Card key={entry.id} style={{ borderRadius: '18px', overflow: 'hidden', border: '1px solid rgba(99,102,241,0.10)', padding: 0, transition: 'all 0.25s cubic-bezier(0.32, 0.72, 0, 1)' }}>
+                    {/* ── Entry Header ─────────────────────────────── */}
+                    <div style={{
+                      padding: '16px 18px 12px',
+                      background: 'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(139,92,246,0.04) 100%)',
+                      borderBottom: '1px solid rgba(99,102,241,0.08)',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, fontFamily: 'Syne, sans-serif', letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>{entry.title}</h3>
+                            <span style={{
+                              fontSize: '11px', padding: '3px 10px', borderRadius: '999px',
+                              background: `${moodObj.color}18`, color: moodObj.color,
+                              fontWeight: '700', border: `1px solid ${moodObj.color}30`,
+                            }}>
+                              {moodObj.emoji} {moodObj.label}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px', flexWrap: 'wrap' }}>
+                            <span style={{
+                              fontSize: '11px', fontWeight: '600', color: '#818CF8',
+                              background: 'rgba(99,102,241,0.08)', padding: '2px 8px',
+                              borderRadius: '6px', fontFamily: 'JetBrains Mono, monospace',
+                            }}>
+                              📅 {entry.date}
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Energy</span>
+                              <div style={{ display: 'flex', gap: '2px' }}>
+                                {[1,2,3,4,5].map(n => (
+                                  <div key={n} style={{
+                                    width: '14px', height: '6px', borderRadius: '3px',
+                                    background: n <= entry.energy ? '#F59E0B' : 'rgba(255,255,255,0.06)',
+                                    transition: 'background 0.2s',
+                                  }} />
+                                ))}
+                              </div>
+                              <span style={{ fontSize: '11px', color: '#F59E0B', fontWeight: '700', fontFamily: 'JetBrains Mono, monospace' }}>{entry.energy}/5</span>
+                            </div>
+                          </div>
                         </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                          {entry.date} • Energy {entry.energy}/5
-                        </div>
-                      </div>
 
-                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                        <button
-                          type="button"
-                          onClick={() => startEdit(entry)}
-                          aria-label="Edit entry"
-                          style={{
-                            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
-                            padding: 8, minHeight: 44, minWidth: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            WebkitTapHighlightColor: 'transparent',
-                          }}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <ConfirmDeleteButton onConfirm={() => deleteEntry(entry.id)} label="Delete journal entry" />
-                      </div>
-                    </div>
-
-                    <div style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.7', marginTop: '12px', whiteSpace: 'pre-wrap' }}>
-                      {entry.content}
-                    </div>
-
-                    {entry.aiSentiment && (
-                      <div style={{ marginTop: '10px', fontSize: '12px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.15)' }}>
-                        <div style={{ color: 'var(--accent-indigo)', fontWeight: '700', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Brain size={11} /> AI Sentiment: {entry.aiSentiment}
-                        </div>
-                        {entry.aiRecommendation && <p style={{ margin: '4px 0 0', color: 'var(--text-muted)' }}>{entry.aiRecommendation}</p>}
-                      </div>
-                    )}
-
-                    {entry.gratitude && (
-                      <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
-                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
-                          Gratitude
-                        </div>
-                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                          {entry.gratitude}
-                        </div>
-                      </div>
-                    )}
-
-                    {entry.tags?.length > 0 && (
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '12px' }}>
-                        {entry.tags.map(tag => (
-                          <span
-                            key={tag}
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          <button
+                            type="button"
+                            onClick={() => startEdit(entry)}
+                            aria-label="Edit entry"
                             style={{
-                              padding: '4px 10px',
-                              borderRadius: '999px',
-                              background: 'var(--bg-secondary)',
-                              border: '1px solid var(--border)',
-                              fontSize: '12px',
-                              color: 'var(--text-muted)',
+                              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', color: 'var(--text-muted)',
+                              padding: 6, minHeight: 32, minWidth: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              WebkitTapHighlightColor: 'transparent', transition: 'all 0.15s',
                             }}
                           >
-                            #{tag}
-                          </span>
-                        ))}
+                            <Pencil size={13} />
+                          </button>
+                          <ConfirmDeleteButton onConfirm={() => deleteEntry(entry.id)} label="Delete journal entry" />
+                        </div>
                       </div>
-                    )}
+                    </div>
+
+                    {/* ── Entry Content with smart rendering ──────── */}
+                    <div style={{ padding: '14px 18px 16px' }}>
+                      {(() => {
+                        const lines = entry.content.split('\n')
+                        const isLong = lines.length > 12
+                        const isExpanded = expandedEntryId === entry.id
+                        const visibleLines = isLong && !isExpanded ? lines.slice(0, 10) : lines
+
+                        // Group lines into sections based on ## headings
+                        const sections = []
+                        let currentSection = { heading: null, lines: [] }
+
+                        visibleLines.forEach((line, idx) => {
+                          const trimmed = line.trim()
+                          if (trimmed.startsWith('## ')) {
+                            if (currentSection.heading || currentSection.lines.length > 0) {
+                              sections.push({ ...currentSection })
+                            }
+                            currentSection = { heading: trimmed.replace('## ', ''), lines: [] }
+                          } else {
+                            currentSection.lines.push(trimmed)
+                          }
+                        })
+                        if (currentSection.heading || currentSection.lines.length > 0) {
+                          sections.push(currentSection)
+                        }
+
+                        // Assign colors to sections based on content
+                        const getSectionStyle = (heading) => {
+                          if (!heading) return { accent: '#6366F1', bg: 'rgba(99,102,241,0.04)', icon: '📝' }
+                          const h = heading.toLowerCase()
+                          if (h.includes('flag') || h.includes('waste') || h.includes('problem')) return { accent: '#EF4444', bg: 'rgba(239,68,68,0.05)', icon: '🚩' }
+                          if (h.includes('improve') || h.includes('tip') || h.includes('suggestion') || h.includes('save')) return { accent: '#10B981', bg: 'rgba(16,185,129,0.05)', icon: '💡' }
+                          if (h.includes('time') || h.includes('schedule') || h.includes('routine')) return { accent: '#F59E0B', bg: 'rgba(245,158,11,0.05)', icon: '⏰' }
+                          if (h.includes('study') || h.includes('focus') || h.includes('learn')) return { accent: '#3B82F6', bg: 'rgba(59,130,246,0.05)', icon: '📚' }
+                          if (h.includes('habit') || h.includes('non-negotiable')) return { accent: '#8B5CF6', bg: 'rgba(139,92,246,0.05)', icon: '🔒' }
+                          if (h.includes('goal') || h.includes('target') || h.includes('tomorrow')) return { accent: '#EC4899', bg: 'rgba(236,72,153,0.05)', icon: '🎯' }
+                          if (h.includes('summary') || h.includes('overview') || h.includes('analysis')) return { accent: '#06B6D4', bg: 'rgba(6,182,212,0.05)', icon: '📊' }
+                          return { accent: '#6366F1', bg: 'rgba(99,102,241,0.04)', icon: '✨' }
+                        }
+
+                        // Render inline bold/emoji text
+                        const renderInline = (text) => {
+                          const parts = text.split(/(\*\*[^*]+\*\*)/g)
+                          return parts.map((part, pi) => {
+                            if (part.startsWith('**') && part.endsWith('**')) {
+                              return <strong key={pi} style={{ color: 'var(--text-primary)', fontWeight: '700' }}>{part.slice(2, -2)}</strong>
+                            }
+                            return <span key={pi}>{part}</span>
+                          })
+                        }
+
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {sections.map((section, sIdx) => {
+                              const sStyle = getSectionStyle(section.heading)
+                              const nonEmptyLines = section.lines.filter(l => l.length > 0)
+
+                              if (section.heading) {
+                                return (
+                                  <div key={sIdx} style={{
+                                    borderRadius: '12px',
+                                    border: `1px solid ${sStyle.accent}18`,
+                                    background: sStyle.bg,
+                                    overflow: 'hidden',
+                                  }}>
+                                    {/* Section heading */}
+                                    <div style={{
+                                      padding: '8px 12px',
+                                      borderBottom: `1px solid ${sStyle.accent}12`,
+                                      display: 'flex', alignItems: 'center', gap: '6px',
+                                    }}>
+                                      <span style={{ fontSize: '14px' }}>{sStyle.icon}</span>
+                                      <span style={{
+                                        fontSize: '12px', fontWeight: '800', color: sStyle.accent,
+                                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                                        fontFamily: 'Syne, sans-serif',
+                                      }}>
+                                        {section.heading}
+                                      </span>
+                                    </div>
+
+                                    {/* Section body */}
+                                    <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                      {nonEmptyLines.map((line, li) => {
+                                        // Numbered item → mini card with left accent
+                                        if (/^\d+\.\s/.test(line)) {
+                                          const num = line.match(/^(\d+)\./)[1]
+                                          const text = line.replace(/^\d+\.\s*/, '')
+                                          return (
+                                            <div key={li} style={{
+                                              display: 'flex', alignItems: 'flex-start', gap: '8px',
+                                              padding: '6px 8px', borderRadius: '8px',
+                                              background: `${sStyle.accent}06`,
+                                              borderLeft: `3px solid ${sStyle.accent}40`,
+                                            }}>
+                                              <span style={{
+                                                fontSize: '11px', fontWeight: '800', color: sStyle.accent,
+                                                fontFamily: 'JetBrains Mono, monospace',
+                                                minWidth: '18px', flexShrink: 0,
+                                                background: `${sStyle.accent}15`, padding: '1px 4px',
+                                                borderRadius: '4px', textAlign: 'center',
+                                              }}>{num}</span>
+                                              <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{renderInline(text)}</span>
+                                            </div>
+                                          )
+                                        }
+                                        // Bullet or emoji line
+                                        if (line.startsWith('•') || line.startsWith('-') || line.startsWith('✅') || line.startsWith('🚩') || line.startsWith('⏰') || line.startsWith('💡') || line.startsWith('→') || line.startsWith('🎯') || line.startsWith('📌')) {
+                                          const cleanLine = line.replace(/^[•\-✅🚩⏰💡→🎯📌]\s*/, '')
+                                          const emoji = line.match(/^[•\-✅🚩⏰💡→🎯📌]/)?.[0] || '•'
+                                          return (
+                                            <div key={li} style={{
+                                              display: 'flex', alignItems: 'flex-start', gap: '6px',
+                                              padding: '4px 6px', fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: '1.5',
+                                            }}>
+                                              <span style={{ flexShrink: 0, fontSize: '12px' }}>{emoji}</span>
+                                              <span>{renderInline(cleanLine)}</span>
+                                            </div>
+                                          )
+                                        }
+                                        // Regular text
+                                        return (
+                                          <div key={li} style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: '1.6', padding: '1px 6px' }}>
+                                            {renderInline(line)}
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )
+                              }
+
+                              // Lines without a heading — render as plain styled text
+                              return (
+                                <div key={sIdx} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                  {nonEmptyLines.map((line, li) => {
+                                    if (/^\d+\.\s/.test(line)) {
+                                      const num = line.match(/^(\d+)\./)[1]
+                                      const text = line.replace(/^\d+\.\s*/, '')
+                                      return (
+                                        <div key={li} style={{
+                                          display: 'flex', alignItems: 'flex-start', gap: '8px',
+                                          padding: '5px 8px', borderRadius: '8px',
+                                          borderLeft: '3px solid rgba(99,102,241,0.25)',
+                                          background: 'rgba(99,102,241,0.03)',
+                                        }}>
+                                          <span style={{ fontSize: '11px', fontWeight: '700', color: '#818CF8', fontFamily: 'JetBrains Mono, monospace', minWidth: '16px' }}>{num}.</span>
+                                          <span style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{renderInline(text)}</span>
+                                        </div>
+                                      )
+                                    }
+                                    if (line.startsWith('•') || line.startsWith('-') || line.startsWith('✅') || line.startsWith('🚩') || line.startsWith('💡') || line.startsWith('→')) {
+                                      return (
+                                        <div key={li} style={{ display: 'flex', gap: '6px', padding: '3px 6px', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                                          <span style={{ flexShrink: 0 }}>•</span>
+                                          <span>{renderInline(line.replace(/^[•\-✅🚩💡→]\s*/, ''))}</span>
+                                        </div>
+                                      )
+                                    }
+                                    return <div key={li} style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', padding: '1px 0' }}>{renderInline(line)}</div>
+                                  })}
+                                </div>
+                              )
+                            })}
+
+                            {isLong && (
+                              <button
+                                onClick={() => setExpandedEntryId(isExpanded ? null : entry.id)}
+                                style={{
+                                  marginTop: '4px', padding: '6px 14px', borderRadius: '8px',
+                                  background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.06))',
+                                  border: '1px solid rgba(99,102,241,0.15)',
+                                  color: '#818CF8', fontSize: '12px', fontWeight: '700', cursor: 'pointer',
+                                  fontFamily: 'DM Sans, sans-serif', display: 'flex', alignItems: 'center',
+                                  gap: '4px', width: 'fit-content',
+                                }}
+                              >
+                                {isExpanded ? '▲ Show Less' : `▼ Show More (${lines.length - 10} more lines)`}
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })()}
+
+                      {/* ── AI Sentiment Badge ──────────────────────── */}
+                      {entry.aiSentiment && (
+                        <div style={{
+                          marginTop: '12px', fontSize: '12px', padding: '10px 12px', borderRadius: '10px',
+                          background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(139,92,246,0.04))',
+                          border: '1px solid rgba(99,102,241,0.12)',
+                        }}>
+                          <div style={{
+                            color: '#818CF8', fontWeight: '800', textTransform: 'uppercase', fontSize: '10px',
+                            letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '5px',
+                            fontFamily: 'Syne, sans-serif',
+                          }}>
+                            <Brain size={12} /> AI Sentiment: {entry.aiSentiment}
+                          </div>
+                          {entry.aiRecommendation && <p style={{ margin: '5px 0 0', color: 'var(--text-muted)', fontSize: '12px', lineHeight: '1.5' }}>{entry.aiRecommendation}</p>}
+                        </div>
+                      )}
+
+                      {/* ── Gratitude Section ──────────────────────── */}
+                      {entry.gratitude && (
+                        <div style={{
+                          marginTop: '12px', padding: '10px 12px', borderRadius: '10px',
+                          background: 'rgba(16,185,129,0.06)',
+                          border: '1px solid rgba(16,185,129,0.15)',
+                          borderLeft: '3px solid #10B981',
+                        }}>
+                          <div style={{ fontSize: '10px', fontWeight: '800', color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px', fontFamily: 'Syne, sans-serif' }}>
+                            🙏 Gratitude
+                          </div>
+                          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5', fontStyle: 'italic' }}>
+                            "{entry.gratitude}"
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Tags ─────────────────────────────────── */}
+                      {entry.tags?.length > 0 && (
+                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '12px' }}>
+                          {entry.tags.map(tag => (
+                            <span
+                              key={tag}
+                              style={{
+                                padding: '3px 10px',
+                                borderRadius: '999px',
+                                background: 'rgba(99,102,241,0.08)',
+                                border: '1px solid rgba(99,102,241,0.12)',
+                                fontSize: '11px',
+                                color: '#818CF8',
+                                fontWeight: '600',
+                              }}
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </Card>
                 )
               })
             )}
           </>
         )}
+
+        {activeTab === 'calendar' && (() => {
+          const monthStart = startOfMonth(calendarMonth)
+          const monthEnd = endOfMonth(calendarMonth)
+          const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd })
+          const startDayOfWeek = getDay(monthStart)
+          const entriesByDate = {}
+          entries.forEach(e => {
+            if (!entriesByDate[e.date]) entriesByDate[e.date] = []
+            entriesByDate[e.date].push(e)
+          })
+          const calEntries = calendarSelectedDate ? (entriesByDate[format(calendarSelectedDate, 'yyyy-MM-dd')] || []) : []
+
+          return (
+            <>
+              <Card style={{ padding: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <button onClick={() => setCalendarMonth(m => subMonths(m, 1))} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+                    <ChevronLeft size={16} />
+                  </button>
+                  <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '16px', color: 'var(--text-primary)' }}>
+                    {format(calendarMonth, 'MMMM yyyy')}
+                  </div>
+                  <button onClick={() => setCalendarMonth(m => addMonths(m, 1))} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px' }}>
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                    <div key={d} style={{ textAlign: 'center', fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', padding: '6px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{d}</div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+                  {Array.from({ length: startDayOfWeek }).map((_, i) => (
+                    <div key={`empty-${i}`} />
+                  ))}
+                  {daysInMonth.map(day => {
+                    const dk = format(day, 'yyyy-MM-dd')
+                    const dayEntries = entriesByDate[dk] || []
+                    const hasEntries = dayEntries.length > 0
+                    const isSelected = calendarSelectedDate && isSameDay(day, calendarSelectedDate)
+                    const isToday = dk === today
+                    const avgMood = hasEntries ? Math.round(dayEntries.reduce((a, e) => a + (e.mood || 3), 0) / dayEntries.length) : 0
+                    const moodObj = MOODS.find(m => m.value === avgMood)
+
+                    return (
+                      <div
+                        key={dk}
+                        onClick={() => setCalendarSelectedDate(isSelected ? null : day)}
+                        style={{
+                          position: 'relative', textAlign: 'center', padding: '10px 4px',
+                          borderRadius: '10px', cursor: 'pointer',
+                          background: isSelected ? 'rgba(99,102,241,0.15)' : hasEntries ? `${(moodObj?.color || '#6366F1')}08` : 'transparent',
+                          border: isSelected ? '2px solid var(--accent-indigo)' : isToday ? '2px solid rgba(99,102,241,0.3)' : '1px solid transparent',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        <div style={{ fontSize: '13px', fontWeight: isToday ? '800' : '500', color: isSelected ? 'var(--accent-indigo)' : isToday ? '#818CF8' : hasEntries ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
+                          {format(day, 'd')}
+                        </div>
+                        {hasEntries && (
+                          <div style={{ display: 'flex', justifyContent: 'center', gap: '2px', marginTop: '3px' }}>
+                            {dayEntries.length <= 3 ? dayEntries.map((e, idx) => (
+                              <div key={idx} style={{ width: '5px', height: '5px', borderRadius: '50%', background: (MOODS.find(m => m.value === e.mood) || MOODS[2]).color }} />
+                            )) : (
+                              <div style={{ fontSize: '9px', fontWeight: '700', color: moodObj?.color || '#6366F1' }}>{dayEntries.length}</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </Card>
+
+              {calendarSelectedDate && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Calendar size={16} color="var(--accent-indigo)" />
+                    {format(calendarSelectedDate, 'EEEE, MMMM d, yyyy')}
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '400' }}>({calEntries.length} {calEntries.length === 1 ? 'entry' : 'entries'})</span>
+                  </div>
+                  {calEntries.length === 0 ? (
+                    <Card style={{ padding: '24px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '30px', marginBottom: '6px' }}>📭</div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No entries on this day</div>
+                      <Button onClick={() => { setForm(f => ({ ...f, date: format(calendarSelectedDate, 'yyyy-MM-dd') })); setShowNewModal(true); }} style={{ marginTop: '10px' }}>
+                        <Plus size={14} /> Write Entry
+                      </Button>
+                    </Card>
+                  ) : calEntries.map(entry => {
+                    const moodObj = MOODS.find(m => m.value === entry.mood) || MOODS[2]
+                    return (
+                      <Card key={entry.id} style={{ border: '1px solid rgba(99,102,241,0.15)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <h3 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>{entry.title}</h3>
+                              <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', background: `${moodObj.color}20`, color: moodObj.color, fontWeight: '600' }}>
+                                {moodObj.emoji} {moodObj.label}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Energy {entry.energy}/5</div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                            <button onClick={() => startEdit(entry)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 8, minHeight: 44, minWidth: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Pencil size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.7', marginTop: '10px', whiteSpace: 'pre-wrap' }}>
+                          {entry.content}
+                        </div>
+                        {entry.tags?.length > 0 && (
+                          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '10px' }}>
+                            {entry.tags.map(tag => (
+                              <span key={tag} style={{ padding: '3px 8px', borderRadius: '999px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.15)', fontSize: '11px', color: '#818CF8' }}>#{tag}</span>
+                            ))}
+                          </div>
+                        )}
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )
+        })()}
 
         {activeTab === 'insights' && (
           <>
