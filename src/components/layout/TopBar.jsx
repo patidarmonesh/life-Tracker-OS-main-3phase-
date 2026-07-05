@@ -63,11 +63,11 @@ export default function TopBar({ isMobile = false }) {
       style={{
         height: isMobile ? 52 : 56,
         background: isMobile
-          ? 'rgba(17,24,39,0.85)'
-          : 'var(--bg-secondary)',
-        backdropFilter: isMobile ? 'blur(20px) saturate(180%)' : 'blur(10px)',
-        WebkitBackdropFilter: isMobile ? 'blur(20px) saturate(180%)' : 'blur(10px)',
-        borderBottom: '1px solid rgba(148,163,184,0.08)',
+          ? 'linear-gradient(180deg, rgba(17,24,39,0.92) 0%, rgba(10,15,30,0.88) 100%)'
+          : 'linear-gradient(90deg, var(--bg-secondary) 0%, rgba(15,23,42,0.98) 100%)',
+        backdropFilter: isMobile ? 'blur(24px) saturate(200%)' : 'blur(12px)',
+        WebkitBackdropFilter: isMobile ? 'blur(24px) saturate(200%)' : 'blur(12px)',
+        borderBottom: '1px solid rgba(99,102,241,0.06)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
