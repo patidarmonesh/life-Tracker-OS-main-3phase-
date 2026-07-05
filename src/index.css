@@ -87,14 +87,14 @@ input, button, a, select, textarea {
 
 /* ── Scrollbar ──────────────────────────────────────────── */
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148,163,184,0.2);
+  background: linear-gradient(180deg, rgba(99,102,241,0.25), rgba(139,92,246,0.2));
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148,163,184,0.35);
+  background: linear-gradient(180deg, rgba(99,102,241,0.4), rgba(139,92,246,0.35));
 }
 
 /* Hide scrollbar on mobile for cleaner feel */
@@ -399,3 +399,99 @@ html.theme-transitioning *::after {
     padding: 12px 10px !important;
   }
 }
+
+/* ── Premium Card Entrance Stagger ─────────────────────── */
+@keyframes cardSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Subtle glow on hover ──────────────────────────────── */
+.glow-hover:hover {
+  box-shadow: 0 0 20px rgba(99,102,241,0.12), 0 8px 32px rgba(0,0,0,0.15) !important;
+}
+
+/* ── Tab styles ────────────────────────────────────────── */
+.tab-active {
+  position: relative;
+}
+.tab-active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, #6366F1, #8B5CF6);
+}
+
+/* ── Journal rich text ─────────────────────────────────── */
+.journal-content h2,
+.journal-content h3 {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.journal-content strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.journal-content blockquote {
+  border-left: 3px solid var(--accent-indigo);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* ── Gradient text utility ─────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #6366F1, #EC4899, #8B5CF6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Premium input focus ───────────────────────────────── */
+input:focus, textarea:focus, select:focus {
+  border-color: rgba(99,102,241,0.4) !important;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.08) !important;
+}
+
+/* ── Smooth page transitions ───────────────────────────── */
+.page-content {
+  animation: cardSlideIn 0.3s var(--ease-out-expo);
+}
+
+/* ── Card shimmer loading ──────────────────────────────── */
+.shimmer-loading {
+  background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-card-hover) 50%, var(--bg-card) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ── Better mobile spacing ─────────────────────────────── */
+@media (max-width: 480px) {
+  h1 { font-size: 1.2rem !important; }
+}
+
+/* ── Animate pulse for live indicators ─────────────────── */
+@keyframes livePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+}
+.live-dot {
+  animation: livePulse 2s ease-in-out infinite;
+}
+
