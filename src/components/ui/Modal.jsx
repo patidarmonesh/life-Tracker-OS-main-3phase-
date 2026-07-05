@@ -41,9 +41,9 @@ export default function Modal({ isOpen, onClose, title, children }) {
       className="modal-backdrop"
       style={{
         position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.7)',
-        backdropFilter: 'blur(6px)',
-        WebkitBackdropFilter: 'blur(6px)',
+        background: 'rgba(0,0,0,0.65)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'center',
@@ -59,38 +59,42 @@ export default function Modal({ isOpen, onClose, title, children }) {
         onClick={e => e.stopPropagation()}
         className="modal-content"
         style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: '20px',
+          background: 'linear-gradient(180deg, var(--bg-card) 0%, rgba(15,23,42,0.98) 100%)',
+          border: '1px solid rgba(148,163,184,0.10)',
+          borderRadius: '22px',
           padding: '24px',
-          width: '100%', maxWidth: '480px',
+          width: '100%', maxWidth: '500px',
           margin: 'auto',
           maxHeight: 'none',
-          animation: 'modalFadeIn 0.25s ease',
+          animation: 'modalFadeIn 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
           outline: 'none',
+          boxShadow: '0 25px 80px rgba(0,0,0,0.4), 0 0 0 1px rgba(99,102,241,0.06)',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: '700', fontFamily: 'Syne, sans-serif' }}>{title}</h2>
+          <h2 style={{ fontSize: '17px', fontWeight: '800', fontFamily: 'Syne, sans-serif', letterSpacing: '-0.01em' }}>{title}</h2>
           <button
             onClick={onClose}
             aria-label="Close modal"
             style={{
-              background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer',
-              padding: '8px', borderRadius: '8px',
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',
+              color: 'var(--text-muted)', cursor: 'pointer',
+              padding: '8px', borderRadius: '10px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'color 0.2s, background 0.2s',
+              transition: 'all 0.2s ease',
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.color = 'var(--text-primary)'
-              e.currentTarget.style.background = 'var(--bg-secondary)'
+              e.currentTarget.style.color = '#F43F5E'
+              e.currentTarget.style.background = 'rgba(244,63,94,0.08)'
+              e.currentTarget.style.borderColor = 'rgba(244,63,94,0.2)'
             }}
             onMouseLeave={e => {
               e.currentTarget.style.color = 'var(--text-muted)'
-              e.currentTarget.style.background = 'none'
+              e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'
             }}
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
         {children}
