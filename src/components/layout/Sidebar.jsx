@@ -54,8 +54,8 @@ export default function Sidebar() {
     <aside style={{
       width: collapsed ? '68px' : '240px',
       minHeight: '100vh',
-      background: 'var(--bg-secondary)',
-      borderRight: '1px solid var(--border)',
+      background: 'linear-gradient(180deg, var(--bg-secondary) 0%, rgba(10,15,30,0.98) 100%)',
+      borderRight: '1px solid rgba(148,163,184,0.06)',
       display: 'flex',
       flexDirection: 'column',
       padding: collapsed ? '24px 8px' : '24px 12px',
@@ -65,6 +65,7 @@ export default function Sidebar() {
       transition: 'width 0.25s cubic-bezier(0.32, 0.72, 0, 1), padding 0.25s cubic-bezier(0.32, 0.72, 0, 1)',
       overflow: 'hidden',
       flexShrink: 0,
+      boxShadow: '4px 0 20px rgba(0,0,0,0.08)',
     }}>
       {/* Logo + Collapse toggle */}
       <div style={{
@@ -89,7 +90,10 @@ export default function Sidebar() {
               fontFamily: 'Syne, sans-serif',
               fontWeight: '800',
               fontSize: '18px',
-              color: 'var(--accent-indigo)',
+              background: 'linear-gradient(135deg, #6366F1, #EC4899)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
             }}>
               Life OS
             </span>
