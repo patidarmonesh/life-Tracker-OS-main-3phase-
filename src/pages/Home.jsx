@@ -713,10 +713,10 @@ Return ONLY valid JSON, no markdown:
                 fontWeight: 800,
                 margin: 0,
                 letterSpacing: '-0.04em',
-                maxWidth: '12ch',
+                maxWidth: '14ch',
               }}
             >
-              {greeting}, {displayName} {greetEmoji}
+              {greeting}, <span style={{ background: 'linear-gradient(135deg, #6366F1, #EC4899, #8B5CF6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{displayName}</span> {greetEmoji}
             </h1>
 
             <p
