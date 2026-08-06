@@ -1,18 +1,18 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAppActions, useAppState } from '../context/appHooks'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, subMonths } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, subMonths, addMonths, getDay, isToday as isDateToday } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { Plus, Pencil } from 'lucide-react'
+import { Plus, Pencil, ChevronLeft, ChevronRight, X, Brain, RefreshCw } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import ConfirmDeleteButton from '../components/ui/ConfirmDeleteButton'
 import TagInput from '../components/ui/TagInput'
 import { useToast } from '../context/toastContextCore'
-import { extractBillWithGemini, getGeminiApiKey } from '../services/geminiService'
-import { playSuccessSound, playWarningBeep } from '../hooks/useAudio'
+import { extractBillWithGemini, getGeminiApiKey, getFinancialInsights } from '../services/geminiService'
+import { playSuccessSound, playWarningBeep, playSubtleClick } from '../hooks/useAudio'
 import { hapticSuccess, hapticLight } from '../hooks/useHaptic'
 import {
   ensureBillsFolder,
@@ -146,6 +146,25 @@ export default function Finance() {
   const [billRemoved, setBillRemoved] = useState(false)
   const fileInputRef = useRef(null)
   const modalFileInputRef = useRef(null)
+
+  // Multi-upload & drag-drop state
+  const [uploadQueue, setUploadQueue] = useState([])
+  const [isDragging, setIsDragging] = useState(false)
+  const [processingIndex, setProcessingIndex] = useState(-1)
+
+  // Calendar state
+  const [calendarMonth, setCalendarMonth] = useState(new Date())
+
+  // Month tab navigation
+  const [viewMonth, setViewMonth] = useState(new Date())
+
+  // Yearly tab
+  const [viewYear, setViewYear] = useState(new Date().getFullYear())
+  const [expandedYearlyMonth, setExpandedYearlyMonth] = useState(null)
+
+  // AI Insights
+  const [aiInsights, setAiInsights] = useState(null)
+  const [aiInsightsLoading, setAiInsightsLoading] = useState(false)
 
   // SMS UPI Parser State
   const [showSMSModal, setShowSMSModal] = useState(false)
@@ -356,6 +375,87 @@ export default function Finance() {
   const pct = Math.min(100, (todayTotal / dailyBudget) * 100)
   const monthPct = Math.min(100, (monthTotal / monthlyBudget) * 100)
 
+  // View-month-specific data for month tab navigation
+  const {
+    viewMonthTotal,
+    viewMonthDonutData,
+    viewMonthDailyData,
+    viewMonthExpenses,
+    viewMonthAccountTotals,
+    viewMonthBudgetPct,
+  } = useMemo(() => {
+    const vm = viewMonth
+    const vmStart = format(startOfMonth(vm), 'yyyy-MM-dd')
+    const vmEnd = format(endOfMonth(vm), 'yyyy-MM-dd')
+    const totalsByCategory = {}
+    const totalsByAccount = {}
+    const totalsByDate = new Map()
+    const vmExpenses = []
+    let vmTotal = 0
+
+    expenses.forEach(expense => {
+      const amount = Number(expense.amount || 0)
+      const date = expense.date || ''
+      if (date >= vmStart && date <= vmEnd) {
+        vmExpenses.push(expense)
+        vmTotal += amount
+        totalsByCategory[expense.category] = (totalsByCategory[expense.category] || 0) + amount
+        const acct = expense.account || 'Unassigned'
+        totalsByAccount[acct] = (totalsByAccount[acct] || 0) + amount
+        totalsByDate.set(date, (totalsByDate.get(date) || 0) + amount)
+      }
+    })
+
+    const days = eachDayOfInterval({ start: startOfMonth(vm), end: endOfMonth(vm) })
+
+    return {
+      viewMonthTotal: vmTotal,
+      viewMonthDonutData: Object.entries(totalsByCategory)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value),
+      viewMonthDailyData: days.map(d => {
+        const key = format(d, 'yyyy-MM-dd')
+        return { day: format(d, 'd'), total: totalsByDate.get(key) || 0 }
+      }),
+      viewMonthExpenses: vmExpenses,
+      viewMonthAccountTotals: Object.entries(totalsByAccount)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value),
+      viewMonthBudgetPct: Math.min(100, (vmTotal / monthlyBudget) * 100),
+    }
+  }, [expenses, viewMonth, monthlyBudget])
+
+  // Full year data for yearly tab
+  const yearlyFullData = useMemo(() => {
+    const months = Array.from({ length: 12 }, (_, i) => {
+      const date = new Date(viewYear, i, 1)
+      const key = format(date, 'yyyy-MM')
+      return { key, month: format(date, 'MMM'), monthIndex: i, total: 0, expenses: [] }
+    })
+    const monthMap = new Map(months.map(m => [m.key, m]))
+
+    expenses.forEach(expense => {
+      const monthKey = (expense.date || '').slice(0, 7)
+      const bucket = monthMap.get(monthKey)
+      if (bucket) {
+        bucket.total += Number(expense.amount || 0)
+        bucket.expenses.push(expense)
+      }
+    })
+
+    return months
+  }, [expenses, viewYear])
+
+  // Calendar date totals
+  const calendarDateTotals = useMemo(() => {
+    const totals = new Map()
+    expenses.forEach(e => {
+      const date = e.date || ''
+      totals.set(date, (totals.get(date) || 0) + Number(e.amount || 0))
+    })
+    return totals
+  }, [expenses])
+
   function resetForm() {
     setBillRemoved(false)
     setPendingBillForExpense(null)
@@ -546,133 +646,165 @@ export default function Finance() {
     hapticLight()
   }
 
-  async function handleBillUpload(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  // Core bill processing function - reusable for single/multi upload
+  async function processOneBill(file) {
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    const fileType = inferMimeType(file.name, file.type)
+    const thumbnailDataUrl = await createImageThumbnail(file)
 
-    setUploadingBill(true)
+    const fallbackCategory = categories.includes('Miscellaneous')
+      ? 'Miscellaneous'
+      : categories[0] || 'Miscellaneous'
 
-    try {
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result)
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
-      const fileType = inferMimeType(file.name, file.type)
-      const thumbnailDataUrl = await createImageThumbnail(file)
-      
-      const fallbackCategory = categories.includes('Miscellaneous')
-        ? 'Miscellaneous'
-        : categories[0] || 'Miscellaneous'
+    let extractedText = 'AI extraction requires Gemini API key in Settings.'
+    let suggestedAmount = null
+    let suggestedCategory = fallbackCategory
+    let suggestedDescription = file.name
 
-      let extractedText = 'AI extraction requires Gemini API key in Settings.'
-      let suggestedAmount = null
-      let suggestedCategory = fallbackCategory
-      let suggestedDescription = file.name
-
-      if (geminiApiKey) {
-        try {
-          const base64Data = String(base64).split(',')[1]
-
-          const { rawResponse, parsed } = await extractBillWithGemini({
-            apiKey: geminiApiKey,
-            base64Data,
-            mimeType: file.type || 'image/jpeg',
-            allowedCategories: categories,
-          })
-
-          if (parsed) {
-            extractedText = parsed.rawText || rawResponse || 'No readable text found'
-            suggestedAmount =
-              parsed.totalAmount !== null &&
-              parsed.totalAmount !== undefined &&
-              !isNaN(Number(parsed.totalAmount))
-                ? Number(parsed.totalAmount)
-                : null
-
-            suggestedCategory = categories.includes(parsed.category)
-              ? parsed.category
-              : fallbackCategory
-
-            suggestedDescription = parsed.description || parsed.merchant || file.name
-          } else {
-            extractedText = rawResponse || 'No readable text found'
-          }
-        } catch (error) {
-          extractedText = error.message || 'Could not extract text. Check your Gemini API key.'
-        }
-      }
-
-      await ensureBillsFolder()
-      const billsFolderId = getBillsFolderId()
-
-      
-      let driveFileId = null
-      let driveFileUrl = null
-      let driveDownloadUrl = null
-      let driveSyncStatus = 'failed'
-
+    if (geminiApiKey) {
       try {
         const base64Data = String(base64).split(',')[1]
-
-        const uploaded = await uploadBase64FileToDrive({
-          fileName: file.name,
-          mimeType: fileType || 'application/octet-stream',
+        const { rawResponse, parsed } = await extractBillWithGemini({
+          apiKey: geminiApiKey,
           base64Data,
-          parentFolderId: billsFolderId,
+          mimeType: file.type || 'image/jpeg',
+          allowedCategories: categories,
         })
-
-        driveFileId = uploaded.id || null
-        driveFileUrl = uploaded.webViewLink || null
-        driveDownloadUrl = uploaded.webContentLink || null
-        driveSyncStatus = 'synced'
-      } catch (driveError) {
-        console.error('Drive upload failed:', driveError)
-        driveSyncStatus = 'failed'
+        if (parsed) {
+          extractedText = parsed.rawText || rawResponse || 'No readable text found'
+          suggestedAmount =
+            parsed.totalAmount !== null &&
+            parsed.totalAmount !== undefined &&
+            !isNaN(Number(parsed.totalAmount))
+              ? Number(parsed.totalAmount)
+              : null
+          suggestedCategory = categories.includes(parsed.category)
+            ? parsed.category
+            : fallbackCategory
+          suggestedDescription = parsed.description || parsed.merchant || file.name
+        } else {
+          extractedText = rawResponse || 'No readable text found'
+        }
+      } catch (error) {
+        extractedText = error.message || 'Could not extract text. Check your Gemini API key.'
       }
-
-      const newBill = {
-        id: uuid(),
-        fileName: file.name,
-        fileType,
-        thumbnailDataUrl,
-        base64: isImageBill({ fileName: file.name, fileType }) && !thumbnailDataUrl
-          ? String(base64)
-          : undefined,
-        extractedText,
-        suggestedAmount,
-        suggestedCategory,
-        suggestedDescription,
-        uploadedAt: new Date().toISOString(),
-        linkedExpenseId: null,
-        driveFileId,
-        driveFileUrl,
-        driveDownloadUrl,
-        driveSyncStatus,
-      }
-
-      const updatedBills = [newBill, ...bills]
-      saveBills(updatedBills)
-      setSelectedBill(newBill)
-
-      if (suggestedAmount) {
-        setPendingBillForExpense(newBill)
-        setForm(f => ({
-          ...f,
-          amount: String(suggestedAmount),
-          category: suggestedCategory,
-          description: suggestedDescription || '',
-        }))
-        setShowAddModal(true)
-      }
-    } catch (error) {
-      console.error('Bill upload failed:', error)
-      alert('Could not read this file.')
-    } finally {
-      setUploadingBill(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
     }
+
+    await ensureBillsFolder()
+    const billsFolderId = getBillsFolderId()
+
+    let driveFileId = null
+    let driveFileUrl = null
+    let driveDownloadUrl = null
+    let driveSyncStatus = 'failed'
+
+    try {
+      const base64Data = String(base64).split(',')[1]
+      const uploaded = await uploadBase64FileToDrive({
+        fileName: file.name,
+        mimeType: fileType || 'application/octet-stream',
+        base64Data,
+        parentFolderId: billsFolderId,
+      })
+      driveFileId = uploaded.id || null
+      driveFileUrl = uploaded.webViewLink || null
+      driveDownloadUrl = uploaded.webContentLink || null
+      driveSyncStatus = 'synced'
+    } catch (driveError) {
+      console.error('Drive upload failed:', driveError)
+      driveSyncStatus = 'failed'
+    }
+
+    const newBill = {
+      id: uuid(),
+      fileName: file.name,
+      fileType,
+      thumbnailDataUrl,
+      base64: isImageBill({ fileName: file.name, fileType }) && !thumbnailDataUrl
+        ? String(base64)
+        : undefined,
+      extractedText,
+      suggestedAmount,
+      suggestedCategory,
+      suggestedDescription,
+      uploadedAt: new Date().toISOString(),
+      linkedExpenseId: null,
+      driveFileId,
+      driveFileUrl,
+      driveDownloadUrl,
+      driveSyncStatus,
+    }
+
+    return { bill: newBill }
+  }
+
+  async function handleBillUpload(e) {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+
+    if (files.length === 1) {
+      // Single file - existing behavior
+      setUploadingBill(true)
+      try {
+        const result = await processOneBill(files[0])
+        const updatedBills = [result.bill, ...bills]
+        saveBills(updatedBills)
+        setSelectedBill(result.bill)
+        if (result.bill.suggestedAmount) {
+          setPendingBillForExpense(result.bill)
+          setForm(f => ({
+            ...f,
+            amount: String(result.bill.suggestedAmount),
+            category: result.bill.suggestedCategory,
+            description: result.bill.suggestedDescription || '',
+          }))
+          setShowAddModal(true)
+        }
+      } catch (err) {
+        console.error('Bill upload failed:', err)
+        showToast('Could not upload this bill.', 'error')
+      } finally {
+        setUploadingBill(false)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+      }
+      return
+    }
+
+    // Multiple files - batch queue
+    const queue = files.map((file, i) => ({ id: uuid(), file, status: 'queued', bill: null, index: i }))
+    setUploadQueue(queue)
+    setProcessingIndex(0)
+    setUploadingBill(true)
+
+    const updatedQueue = [...queue]
+    const newBills = []
+    for (let i = 0; i < queue.length; i++) {
+      setProcessingIndex(i)
+      updatedQueue[i] = { ...updatedQueue[i], status: 'processing' }
+      setUploadQueue([...updatedQueue])
+      try {
+        const result = await processOneBill(queue[i].file)
+        updatedQueue[i] = { ...updatedQueue[i], status: 'done', bill: result.bill }
+        newBills.push(result.bill)
+      } catch {
+        updatedQueue[i] = { ...updatedQueue[i], status: 'failed' }
+      }
+      setUploadQueue([...updatedQueue])
+    }
+    if (newBills.length > 0) {
+      saveBills([...newBills, ...bills])
+      showToast(`${newBills.length} bills uploaded! Click each to add expenses.`, 'success')
+      playSuccessSound()
+      hapticSuccess()
+    }
+    setProcessingIndex(-1)
+    setUploadingBill(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   async function handleModalBillUpload(e) {
@@ -682,104 +814,8 @@ export default function Finance() {
     setUploadingBill(true)
 
     try {
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result)
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
-      const fileType = inferMimeType(file.name, file.type)
-      const thumbnailDataUrl = await createImageThumbnail(file)
-      
-      const fallbackCategory = categories.includes('Miscellaneous')
-        ? 'Miscellaneous'
-        : categories[0] || 'Miscellaneous'
-
-      let extractedText = 'AI extraction requires Gemini API key in Settings.'
-      let suggestedAmount = null
-      let suggestedCategory = fallbackCategory
-      let suggestedDescription = file.name
-
-      if (geminiApiKey) {
-        try {
-          const base64Data = String(base64).split(',')[1]
-
-          const { rawResponse, parsed } = await extractBillWithGemini({
-            apiKey: geminiApiKey,
-            base64Data,
-            mimeType: file.type || 'image/jpeg',
-            allowedCategories: categories,
-          })
-
-          if (parsed) {
-            extractedText = parsed.rawText || rawResponse || 'No readable text found'
-            suggestedAmount =
-              parsed.totalAmount !== null &&
-              parsed.totalAmount !== undefined &&
-              !isNaN(Number(parsed.totalAmount))
-                ? Number(parsed.totalAmount)
-                : null
-
-            suggestedCategory = categories.includes(parsed.category)
-              ? parsed.category
-              : fallbackCategory
-
-            suggestedDescription = parsed.description || parsed.merchant || file.name
-          } else {
-            extractedText = rawResponse || 'No readable text found'
-          }
-        } catch (error) {
-          extractedText = error.message || 'Could not extract text. Check your Gemini API key.'
-        }
-      }
-
-      await ensureBillsFolder()
-      const billsFolderId = getBillsFolderId()
-
-      let driveFileId = null
-      let driveFileUrl = null
-      let driveDownloadUrl = null
-      let driveSyncStatus = 'failed'
-
-      try {
-        const base64Data = String(base64).split(',')[1]
-
-        const uploaded = await uploadBase64FileToDrive({
-          fileName: file.name,
-          mimeType: fileType || 'application/octet-stream',
-          base64Data,
-          parentFolderId: billsFolderId,
-        })
-
-        driveFileId = uploaded.id || null
-        driveFileUrl = uploaded.webViewLink || null
-        driveDownloadUrl = uploaded.webContentLink || null
-        driveSyncStatus = 'synced'
-      } catch (driveError) {
-        console.error('Drive upload failed:', driveError)
-        driveSyncStatus = 'failed'
-      }
-
-      const newBill = {
-        id: uuid(),
-        fileName: file.name,
-        fileType,
-        thumbnailDataUrl,
-        base64: isImageBill({ fileName: file.name, fileType }) && !thumbnailDataUrl
-          ? String(base64)
-          : undefined,
-        extractedText,
-        suggestedAmount,
-        suggestedCategory,
-        suggestedDescription,
-        uploadedAt: new Date().toISOString(),
-        linkedExpenseId: editingEntry?.id || null,
-        driveFileId,
-        driveFileUrl,
-        driveDownloadUrl,
-        driveSyncStatus,
-      }
-
+      const result = await processOneBill(file)
+      const newBill = { ...result.bill, linkedExpenseId: editingEntry?.id || null }
       const updatedBills = [newBill, ...bills]
       saveBills(updatedBills)
       setPendingBillForExpense(newBill)
@@ -787,9 +823,9 @@ export default function Finance() {
 
       setForm(f => ({
         ...f,
-        amount: f.amount && f.amount !== '0' && f.amount !== '' ? f.amount : String(suggestedAmount || ''),
-        category: f.category && f.category !== 'Food & Drinks' ? f.category : suggestedCategory,
-        description: f.description ? f.description : (suggestedDescription || ''),
+        amount: f.amount && f.amount !== '0' && f.amount !== '' ? f.amount : String(newBill.suggestedAmount || ''),
+        category: f.category && f.category !== 'Food & Drinks' ? f.category : newBill.suggestedCategory,
+        description: f.description ? f.description : (newBill.suggestedDescription || ''),
       }))
 
       showToast('Bill uploaded and attached! 🧾', 'success')
@@ -801,6 +837,66 @@ export default function Finance() {
     } finally {
       setUploadingBill(false)
       if (modalFileInputRef.current) modalFileInputRef.current.value = ''
+    }
+  }
+
+  // Drag and drop handlers
+  function handleDragOver(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+  function handleDragLeave(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+  function handleDrop(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf')
+    if (files.length > 0) {
+      handleBillUpload({ target: { files } })
+    }
+  }
+
+  // Clipboard paste handler
+  useEffect(() => {
+    if (activeTab !== 'bills') return
+    function handlePaste(e) {
+      const items = Array.from(e.clipboardData?.items || [])
+      const imageItems = items.filter(item => item.type.startsWith('image/'))
+      if (imageItems.length === 0) return
+      e.preventDefault()
+      const files = imageItems.map(item => item.getAsFile()).filter(Boolean)
+      if (files.length > 0) {
+        handleBillUpload({ target: { files } })
+        showToast('📋 Image pasted from clipboard!', 'success')
+      }
+    }
+    document.addEventListener('paste', handlePaste)
+    return () => document.removeEventListener('paste', handlePaste)
+  }, [activeTab, bills, categories, geminiApiKey])
+
+  // AI Financial Insights
+  async function fetchAIInsights() {
+    if (!geminiApiKey || aiInsightsLoading) return
+    setAiInsightsLoading(true)
+    try {
+      const result = await getFinancialInsights({
+        apiKey: geminiApiKey,
+        expenses,
+        monthlyBudget,
+        categories,
+      })
+      if (result) setAiInsights(result)
+      else showToast('Could not generate insights', 'warning')
+    } catch (err) {
+      console.error('AI insights error:', err)
+      showToast('Failed to load AI insights', 'error')
+    } finally {
+      setAiInsightsLoading(false)
     }
   }
 
@@ -926,42 +1022,128 @@ export default function Finance() {
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {activeTab === 'today' && (
           <>
-            {/* Inline Date Selector for Back Dates */}
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '10px',
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                  fontSize: '13px',
-                  fontFamily: 'DM Sans, sans-serif',
-                  outline: 'none',
-                }}
-              />
+            {/* Interactive Spending Calendar */}
+            <Card>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <button
+                  onClick={() => setCalendarMonth(prev => subMonths(prev, 1))}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '8px', display: 'flex', alignItems: 'center' }}
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '16px' }}>
+                    {format(calendarMonth, 'MMMM yyyy')}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCalendarMonth(prev => addMonths(prev, 1))}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '8px', display: 'flex', alignItems: 'center' }}
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+
+              {/* Day headers */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', marginBottom: '4px' }}>
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                  <div key={d} style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700', padding: '4px 0' }}>{d}</div>
+                ))}
+              </div>
+
+              {/* Calendar grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px' }}>
+                {(() => {
+                  const cmStart = startOfMonth(calendarMonth)
+                  const cmEnd = endOfMonth(calendarMonth)
+                  const days = eachDayOfInterval({ start: cmStart, end: cmEnd })
+                  const startPadding = getDay(cmStart)
+                  const cells = []
+
+                  for (let i = 0; i < startPadding; i++) {
+                    cells.push(<div key={`pad-${i}`} />)
+                  }
+
+                  days.forEach(day => {
+                    const dateKey = format(day, 'yyyy-MM-dd')
+                    const spent = calendarDateTotals.get(dateKey) || 0
+                    const isSelected = dateKey === selectedDate
+                    const isTodayDate = isDateToday(day)
+                    const hasSpending = spent > 0
+                    const spendRatio = spent / dailyBudget
+
+                    let bgColor = 'transparent'
+                    let amountColor = '#10B981'
+
+                    if (isSelected) {
+                      bgColor = 'rgba(99,102,241,0.25)'
+                    }
+                    if (hasSpending) {
+                      if (spendRatio >= 1) amountColor = '#F43F5E'
+                      else if (spendRatio >= 0.8) amountColor = '#F59E0B'
+                    }
+
+                    cells.push(
+                      <button
+                        key={dateKey}
+                        onClick={() => setSelectedDate(dateKey)}
+                        style={{
+                          padding: '6px 2px',
+                          borderRadius: '8px',
+                          border: isTodayDate ? '2px solid var(--accent-indigo)' : '1px solid transparent',
+                          background: bgColor,
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          minHeight: '52px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '2px',
+                          transition: 'all 0.15s',
+                          color: 'var(--text-primary)',
+                        }}
+                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(99,102,241,0.08)' }}
+                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
+                      >
+                        <span style={{ fontSize: '13px', fontWeight: isSelected || isTodayDate ? '800' : '500', color: isSelected ? 'var(--accent-indigo)' : 'var(--text-primary)' }}>
+                          {format(day, 'd')}
+                        </span>
+                        {hasSpending && (
+                          <span style={{ fontSize: '9px', fontWeight: '700', fontFamily: 'JetBrains Mono, monospace', color: amountColor, lineHeight: 1 }}>
+                            {spent >= 1000 ? `${(spent/1000).toFixed(1)}k` : Math.round(spent)}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })
+
+                  return cells
+                })()}
+              </div>
+
+              {/* Quick jump to today */}
               {selectedDate !== today && (
                 <button
-                  onClick={() => setSelectedDate(today)}
+                  onClick={() => { setSelectedDate(today); setCalendarMonth(new Date()) }}
                   style={{
-                    padding: '8px 14px',
-                    borderRadius: '10px',
+                    marginTop: '12px',
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '8px',
                     border: '1px solid var(--border)',
-                    background: 'rgba(99,102,241,0.12)',
-                    color: '#B9C2FF',
+                    background: 'rgba(99,102,241,0.08)',
+                    color: 'var(--accent-indigo)',
                     fontSize: '12px',
-                    fontWeight: 700,
+                    fontWeight: '700',
                     cursor: 'pointer',
-                    transition: 'all 0.15s ease',
+                    fontFamily: 'DM Sans, sans-serif',
                   }}
                 >
-                  Reset to Today
+                  ↩ Jump to Today
                 </button>
               )}
-            </div>
+            </Card>
 
             <Card>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '14px' }}>
@@ -1023,14 +1205,52 @@ export default function Finance() {
 
         {activeTab === 'month' && (
           <>
+            {/* Month Navigation */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <button
+                onClick={() => setViewMonth(prev => subMonths(prev, 1))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '8px', display: 'flex', alignItems: 'center' }}
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '16px' }}>
+                  {format(viewMonth, 'MMMM yyyy')}
+                </span>
+                {format(viewMonth, 'yyyy-MM') !== format(new Date(), 'yyyy-MM') && (
+                  <button
+                    onClick={() => setViewMonth(new Date())}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border)',
+                      background: 'rgba(99,102,241,0.1)',
+                      color: 'var(--accent-indigo)',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Current Month
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => setViewMonth(prev => addMonths(prev, 1))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '8px', display: 'flex', alignItems: 'center' }}
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
               {[
-                { label: 'Total Spent', value: formatCurrencyAmount(monthTotal, currencyCode), color: '#F43F5E' },
+                { label: 'Total Spent', value: formatCurrencyAmount(viewMonthTotal, currencyCode), color: '#F43F5E' },
                 { label: 'Monthly Budget', value: formatCurrencyAmount(monthlyBudget, currencyCode), color: '#3B82F6' },
                 {
-                  label: monthTotal <= monthlyBudget ? '✅ Saved' : '⚠️ Overspent',
-                  value: formatCurrencyAmount(Math.abs(monthlyBudget - monthTotal), currencyCode),
-                  color: monthTotal <= monthlyBudget ? '#10B981' : '#F43F5E',
+                  label: viewMonthTotal <= monthlyBudget ? '✅ Saved' : '⚠️ Overspent',
+                  value: formatCurrencyAmount(Math.abs(monthlyBudget - viewMonthTotal), currencyCode),
+                  color: viewMonthTotal <= monthlyBudget ? '#10B981' : '#F43F5E',
                 },
               ].map(({ label, value, color }) => (
                 <Card key={label} style={{ textAlign: 'center', padding: '16px' }}>
@@ -1040,11 +1260,11 @@ export default function Finance() {
               ))}
             </div>
 
-            {accountTotals.length > 0 && (
+            {viewMonthAccountTotals.length > 0 && (
               <Card>
                 <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '12px' }}>Spend by Account</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
-                  {accountTotals.map(({ name, value }) => (
+                  {viewMonthAccountTotals.map(({ name, value }) => (
                     <div
                       key={name}
                       style={{
@@ -1068,14 +1288,14 @@ export default function Finance() {
             <Card>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '13px', fontWeight: '600' }}>Monthly Budget Usage</span>
-                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{Math.round(monthPct)}%</span>
+                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{Math.round(viewMonthBudgetPct)}%</span>
               </div>
               <div style={{ height: '10px', background: 'var(--bg-secondary)', borderRadius: '5px', overflow: 'hidden' }}>
                 <div
                   style={{
                     height: '100%',
-                    width: `${monthPct}%`,
-                    background: monthPct >= 100 ? '#F43F5E' : monthPct >= 80 ? '#F59E0B' : '#10B981',
+                    width: `${viewMonthBudgetPct}%`,
+                    background: viewMonthBudgetPct >= 100 ? '#F43F5E' : viewMonthBudgetPct >= 80 ? '#F59E0B' : '#10B981',
                     borderRadius: '5px',
                     transition: 'width 0.6s ease',
                   }}
@@ -1083,14 +1303,14 @@ export default function Finance() {
               </div>
             </Card>
 
-            {donutData.length > 0 && (
+            {viewMonthDonutData.length > 0 && (
               <Card>
                 <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '16px' }}>Spending by Category</h3>
                 <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' }}>
                   <ResponsiveContainer width={180} height={180}>
                     <PieChart>
-                      <Pie data={donutData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={2}>
-                        {donutData.map((entry, i) => (
+                      <Pie data={viewMonthDonutData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={2}>
+                        {viewMonthDonutData.map((entry, i) => (
                           <Cell key={i} fill={CATEGORY_COLORS[entry.name] || '#6B7280'} />
                         ))}
                       </Pie>
@@ -1101,7 +1321,7 @@ export default function Finance() {
                     </PieChart>
                   </ResponsiveContainer>
                   <div style={{ flex: 1, minWidth: '150px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {donutData.slice(0, 6).map(({ name, value }) => (
+                    {viewMonthDonutData.slice(0, 6).map(({ name, value }) => (
                       <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: CATEGORY_COLORS[name] || '#6B7280', flexShrink: 0 }} />
                         <span style={{ fontSize: '12px', flex: 1, color: 'var(--text-secondary)' }}>{name}</span>
@@ -1114,9 +1334,9 @@ export default function Finance() {
             )}
 
             <Card>
-              <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '16px' }}>Daily Spending This Month</h3>
+              <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '16px' }}>Daily Spending</h3>
               <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={dailyData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
+                <BarChart data={viewMonthDailyData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
                   <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} interval={4} />
                   <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
                   <Tooltip
@@ -1128,9 +1348,68 @@ export default function Finance() {
               </ResponsiveContainer>
             </Card>
 
+            {/* AI Financial Insights */}
+            {geminiApiKey && (
+              <Card>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Brain size={16} /> AI Financial Insights
+                  </h3>
+                  <button
+                    onClick={fetchAIInsights}
+                    disabled={aiInsightsLoading}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-indigo)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: '700' }}
+                  >
+                    <RefreshCw size={14} style={{ animation: aiInsightsLoading ? 'spin 1s linear infinite' : 'none' }} />
+                    {aiInsightsLoading ? 'Analyzing...' : aiInsights ? 'Refresh' : 'Get Insights'}
+                  </button>
+                </div>
+                {aiInsightsLoading && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {[1,2,3].map(i => (
+                      <div key={i} style={{ height: '48px', borderRadius: '8px', background: 'var(--bg-secondary)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                    ))}
+                  </div>
+                )}
+                {aiInsights && !aiInsightsLoading && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {[
+                      { icon: '💡', label: 'Top Insight', text: aiInsights.topInsight, color: '#6366F1' },
+                      { icon: '💰', label: 'Savings Tip', text: aiInsights.savingsTip, color: '#10B981' },
+                      { icon: '⚠️', label: 'Category Alert', text: aiInsights.categoryAlert, color: '#F59E0B' },
+                      { icon: '📊', label: 'Weekly Pattern', text: aiInsights.weeklyPattern, color: '#3B82F6' },
+                      { icon: '🔮', label: 'Prediction', text: aiInsights.prediction, color: '#8B5CF6' },
+                    ].map(({ icon, label, text, color }) => (
+                      <div key={label} style={{ padding: '10px 14px', borderRadius: '10px', background: `${color}10`, border: `1px solid ${color}30`, display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                        <span style={{ fontSize: '18px', flexShrink: 0 }}>{icon}</span>
+                        <div>
+                          <div style={{ fontSize: '11px', fontWeight: '700', color: color, textTransform: 'uppercase', marginBottom: '2px' }}>{label}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{text}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {aiInsights.healthScore && (
+                      <div style={{ textAlign: 'center', padding: '12px', borderRadius: '10px', background: 'var(--bg-secondary)' }}>
+                        <div style={{ fontSize: '28px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color: aiInsights.healthScore >= 70 ? '#10B981' : aiInsights.healthScore >= 40 ? '#F59E0B' : '#F43F5E' }}>
+                          {aiInsights.healthScore}/100
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600' }}>Financial Health Score</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!aiInsights && !aiInsightsLoading && (
+                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: '28px', marginBottom: '6px' }}>🤖</div>
+                    <div style={{ fontSize: '12px' }}>Click &quot;Get Insights&quot; for AI-powered financial analysis</div>
+                  </div>
+                )}
+              </Card>
+            )}
+
             <Card>
               {(() => {
-                const filtered = accountFilter === 'all' ? monthExpenses : monthExpenses.filter(e => (e.account || 'Unassigned') === accountFilter)
+                const filtered = accountFilter === 'all' ? viewMonthExpenses : viewMonthExpenses.filter(e => (e.account || 'Unassigned') === accountFilter)
                 return (
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -1153,84 +1432,170 @@ export default function Finance() {
 
         {activeTab === 'yearly' && (
           <>
+            {/* Year navigation */}
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
+              <button
+                onClick={() => setViewYear(y => y - 1)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '8px', display: 'flex', alignItems: 'center' }}
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '20px' }}>{viewYear}</span>
+              <button
+                onClick={() => setViewYear(y => y + 1)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '8px', display: 'flex', alignItems: 'center' }}
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+
+            {/* 12-month bar chart */}
             <Card>
-              <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '16px' }}>Last 6 Months</h3>
+              <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '16px' }}>Monthly Spending</h3>
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={monthlyData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
-                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                <BarChart data={yearlyFullData.map(m => ({ month: m.month, total: m.total }))} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
                   <Tooltip
                     formatter={v => [formatCurrencyAmount(v, currencyCode), 'Spent']}
                     contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px' }}
                   />
-                  <Bar dataKey="total" fill="#6366F1" radius={[4, 4, 0, 0]} />
+                  <Bar
+                    dataKey="total"
+                    fill="#6366F1"
+                    radius={[4, 4, 0, 0]}
+                    cursor="pointer"
+                    onClick={(data, index) => setExpandedYearlyMonth(expandedYearlyMonth === index ? null : index)}
+                  />
                 </BarChart>
               </ResponsiveContainer>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '4px' }}>Click a bar to see transactions</div>
             </Card>
 
+            {/* Year analytics cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-              {[
-                {
-                  label: 'Monthly Average',
-                  value: formatCurrencyAmount(Math.round(monthlyData.reduce((a, m) => a + m.total, 0) / 6), currencyCode),
-                },
-                {
-                  label: '6-Month Total',
-                  value: formatCurrencyAmount(monthlyData.reduce((a, m) => a + m.total, 0), currencyCode),
-                },
-                {
-                  label: 'Best Month (lowest)',
-                  value:
-                    monthlyData
-                      .filter(m => m.total > 0)
-                      .reduce((a, m) => (m.total < a.total ? m : a), monthlyData.find(m => m.total > 0) || monthlyData[0])?.month || '-',
-                },
-                {
-                  label: 'Worst Month (highest)',
-                  value: monthlyData.reduce((a, m) => (m.total > a.total ? m : a), monthlyData[0])?.month || '-',
-                },
-              ].map(({ label, value }) => (
-                <Card key={label} style={{ padding: '16px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '20px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color: 'var(--accent-indigo)' }}>{value}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>{label}</div>
-                </Card>
-              ))}
+              {(() => {
+                const yearTotal = yearlyFullData.reduce((a, m) => a + m.total, 0)
+                const monthsWithData = yearlyFullData.filter(m => m.total > 0)
+                const avg = monthsWithData.length > 0 ? yearTotal / monthsWithData.length : 0
+                const best = monthsWithData.length > 0 ? monthsWithData.reduce((a, m) => m.total < a.total ? m : a, monthsWithData[0]) : null
+                const worst = monthsWithData.length > 0 ? monthsWithData.reduce((a, m) => m.total > a.total ? m : a, monthsWithData[0]) : null
+
+                return [
+                  { label: 'Year Total', value: formatCurrencyAmount(yearTotal, currencyCode), color: '#F43F5E' },
+                  { label: 'Monthly Average', value: formatCurrencyAmount(Math.round(avg), currencyCode), color: '#3B82F6' },
+                  { label: 'Best Month', value: best ? `${best.month} (${formatCurrencyAmount(best.total, currencyCode)})` : '-', color: '#10B981' },
+                  { label: 'Worst Month', value: worst ? `${worst.month} (${formatCurrencyAmount(worst.total, currencyCode)})` : '-', color: '#F59E0B' },
+                ].map(({ label, value, color }) => (
+                  <Card key={label} style={{ padding: '16px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '16px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color }}>{value}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>{label}</div>
+                  </Card>
+                ))
+              })()}
             </div>
+
+            {/* Drill-down when a month bar is clicked */}
+            {expandedYearlyMonth !== null && yearlyFullData[expandedYearlyMonth] && (
+              <Card>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px' }}>
+                    {yearlyFullData[expandedYearlyMonth].month} {viewYear} — Transactions
+                  </h3>
+                  <button
+                    onClick={() => setExpandedYearlyMonth(null)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px' }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Category breakdown for this month */}
+                {(() => {
+                  const mExpenses = yearlyFullData[expandedYearlyMonth].expenses
+                  const catTotals = {}
+                  mExpenses.forEach(e => { catTotals[e.category] = (catTotals[e.category] || 0) + Number(e.amount || 0) })
+                  const catData = Object.entries(catTotals).sort((a, b) => b[1] - a[1])
+
+                  return (
+                    <>
+                      {catData.length > 0 && (
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                          {catData.slice(0, 5).map(([cat, total]) => (
+                            <span key={cat} style={{ padding: '4px 10px', borderRadius: '20px', background: `${CATEGORY_COLORS[cat] || '#6B7280'}20`, color: CATEGORY_COLORS[cat] || '#6B7280', fontSize: '11px', fontWeight: '700' }}>
+                              {CATEGORY_EMOJI[cat] || '💰'} {cat}: {formatCurrencyAmount(total, currencyCode)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+                        {[...mExpenses]
+                          .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.time || '').localeCompare(String(a.time || '')))
+                          .map(e => (
+                            <ExpenseRow key={e.id} expense={e} onDelete={handleDelete} onEdit={startEdit} onViewBill={handleViewBill} showDate defaultCurrency={currencyCode} />
+                          ))}
+                        {mExpenses.length === 0 && (
+                          <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
+                            No transactions in {yearlyFullData[expandedYearlyMonth].month}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )
+                })()}
+              </Card>
+            )}
           </>
         )}
 
         {activeTab === 'bills' && (
           <>
-            <Card>
+            <Card
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
               <div
                 onClick={() => !uploadingBill && fileInputRef.current?.click()}
                 style={{
-                  border: '2px dashed var(--border-focus)',
+                  border: isDragging ? '2px solid var(--accent-indigo)' : '2px dashed var(--border-focus)',
                   borderRadius: '12px',
                   padding: '40px 24px',
                   textAlign: 'center',
                   cursor: uploadingBill ? 'wait' : 'pointer',
-                  background: 'rgba(99,102,241,0.04)',
+                  background: isDragging ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.04)',
                   transition: 'all 0.2s',
                 }}
                 onMouseEnter={e => {
-                  if (!uploadingBill) e.currentTarget.style.background = 'rgba(99,102,241,0.1)'
+                  if (!uploadingBill && !isDragging) e.currentTarget.style.background = 'rgba(99,102,241,0.1)'
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(99,102,241,0.04)'
+                  if (!isDragging) e.currentTarget.style.background = 'rgba(99,102,241,0.04)'
                 }}
               >
                 {uploadingBill ? (
                   <>
                     <div style={{ fontSize: '36px', marginBottom: '10px' }}>⏳</div>
-                    <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--accent-indigo)' }}>Extracting with AI...</div>
+                    <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--accent-indigo)' }}>
+                      {processingIndex >= 0 ? `Processing ${processingIndex + 1} of ${uploadQueue.length}...` : 'Extracting with AI...'}
+                    </div>
                     <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>Please wait</div>
+                  </>
+                ) : isDragging ? (
+                  <>
+                    <div style={{ fontSize: '40px', marginBottom: '12px' }}>📥</div>
+                    <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--accent-indigo)' }}>Drop files here!</div>
                   </>
                 ) : (
                   <>
                     <div style={{ fontSize: '40px', marginBottom: '12px' }}>🧾</div>
-                    <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>Upload a Bill or Receipt</div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Click to upload image (JPG, PNG) or PDF</div>
+                    <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>Upload Bills & Receipts</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                      Drag & drop, paste from clipboard, or click to browse
+                    </div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '4px' }}>
+                      Select multiple files at once • JPG, PNG, PDF
+                    </div>
                     <div
                       style={{
                         marginTop: '12px',
@@ -1247,8 +1612,56 @@ export default function Finance() {
                   </>
                 )}
               </div>
-              <input ref={fileInputRef} type="file" accept="image/*,application/pdf" style={{ display: 'none' }} onChange={handleBillUpload} />
+              <input ref={fileInputRef} type="file" accept="image/*,application/pdf" multiple style={{ display: 'none' }} onChange={handleBillUpload} />
             </Card>
+
+            {/* Batch Upload Queue */}
+            {uploadQueue.length > 0 && (
+              <Card>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px' }}>📋 Upload Queue</h3>
+                  <button
+                    onClick={() => setUploadQueue([])}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '12px', fontWeight: '600' }}
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {uploadQueue.map((item) => (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '18px' }}>
+                        {item.status === 'queued' ? '⏳' : item.status === 'processing' ? '🔄' : item.status === 'done' ? '✅' : '❌'}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '12px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.file.name}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          {item.status === 'queued' ? 'Waiting...' : item.status === 'processing' ? 'AI extracting...' : item.status === 'done' ? 'Ready — click to add expense' : 'Failed'}
+                        </div>
+                      </div>
+                      {item.status === 'done' && item.bill && (
+                        <button
+                          onClick={() => {
+                            setSelectedBill(item.bill)
+                            setPendingBillForExpense(item.bill)
+                            setForm(f => ({
+                              ...f,
+                              amount: String(item.bill.suggestedAmount || ''),
+                              category: item.bill.suggestedCategory || 'Miscellaneous',
+                              description: item.bill.suggestedDescription || item.bill.fileName || '',
+                            }))
+                            setShowAddModal(true)
+                          }}
+                          style={{ padding: '4px 10px', borderRadius: '6px', background: 'rgba(16,185,129,0.15)', border: 'none', color: '#10B981', fontSize: '11px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                          + Add Entry
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
 
             {bills.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
@@ -1820,6 +2233,27 @@ function BillPreview({ bill, height, contain = false }) {
   }, [bill])
 
   const isImage = isImageBill(bill) && previewSrc && !hasError
+  const isPdf = isPdfBill(bill) && previewSrc && !hasError
+
+  if (isPdf) {
+    return (
+      <div style={{ width: '100%', height: `${height}px`, borderRadius: '8px', overflow: 'hidden', marginBottom: '8px', position: 'relative' }}>
+        <iframe
+          src={previewSrc}
+          style={{ width: '100%', height: '100%', border: 'none', borderRadius: '8px' }}
+          title={bill?.fileName || 'PDF Preview'}
+        />
+        <a
+          href={previewSrc}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ position: 'absolute', top: '6px', right: '6px', padding: '4px 8px', borderRadius: '6px', background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: '10px', fontWeight: '700', textDecoration: 'none' }}
+        >
+          Open ↗
+        </a>
+      </div>
+    )
+  }
 
   if (!isImage) {
     return (
