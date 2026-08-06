@@ -335,3 +335,61 @@ Analyze the text and return ONLY valid JSON in this exact schema, do not add mar
   return extractJsonBlock(text)
 }
 
+export async function getFinancialInsights({ apiKey, expenses, monthlyBudget, categories }) {
+  const last30 = expenses.filter(e => {
+    const d = new Date(e.date)
+    const now = new Date()
+    return (now - d) / (1000 * 60 * 60 * 24) <= 30
+  })
+
+  const summary = {
+    totalSpent: last30.reduce((a, e) => a + Number(e.amount || 0), 0),
+    transactionCount: last30.length,
+    monthlyBudget,
+    categories: {},
+    weekdaySpend: 0,
+    weekendSpend: 0,
+    impulsiveTotal: last30.filter(e => e.isImpulsive).reduce((a, e) => a + Number(e.amount || 0), 0),
+  }
+
+  last30.forEach(e => {
+    const cat = e.category || 'Other'
+    summary.categories[cat] = (summary.categories[cat] || 0) + Number(e.amount || 0)
+    const day = new Date(e.date).getDay()
+    if (day === 0 || day === 6) summary.weekendSpend += Number(e.amount || 0)
+    else summary.weekdaySpend += Number(e.amount || 0)
+  })
+
+  const prompt = `
+You are an expert AI financial advisor analyzing personal spending data.
+Return ONLY valid JSON in this exact schema, do not add markdown wrapping or explanation:
+{
+  "topInsight": "Main observation about spending patterns (1-2 sentences)",
+  "savingsTip": "Actionable money-saving suggestion (1-2 sentences)",
+  "categoryAlert": "Which category needs attention and why (1 sentence)",
+  "weeklyPattern": "Weekday vs weekend spending observation (1 sentence)",
+  "prediction": "Projected month-end spend at current rate (1 sentence)",
+  "healthScore": number between 1-100 representing financial health
+}
+
+Spending data (last 30 days):
+${JSON.stringify(summary, null, 2)}
+`
+
+  const data = await geminiRequest({
+    apiKey,
+    contents: [
+      {
+        parts: [{ text: prompt }],
+      },
+    ],
+    generationConfig: { temperature: 0.3 },
+  })
+
+  const text =
+    data?.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('') || ''
+
+  return extractJsonBlock(text)
+}
+
+
