@@ -9,13 +9,17 @@
  *  - When the tab gets focus / comes back online, re-checks immediately.
  *  - Sets needsReconnect=true when the token is dead AND we have a session
  *    (user is "logged in" but token expired — not logged out).
+ *
+ * UPDATED: reconnect() now uses reconnectGoogle() which opens a popup
+ * ONCE with prompt:'' (auto-selects existing account). No more silent
+ * refresh attempts that caused repeated popup spam.
  */
 
 import { useCallback, useEffect, useState } from 'react'
 import {
   getStoredSession,
   getAccessToken,
-  refreshAccessToken,
+  reconnectGoogle,
 } from '../services/authService'
 
 const CHECK_INTERVAL_MS = 30_000 // 30 seconds
@@ -66,12 +70,11 @@ export function useTokenStatus() {
   const reconnect = useCallback(async () => {
     setIsReconnecting(true)
     try {
-      const token = await refreshAccessToken()
-      if (token) {
+      const result = await reconnectGoogle()
+      if (result?.accessToken) {
         setNeedsReconnect(false)
       }
-      // If still null, needsReconnect stays true — user will see banner
-      return !!token
+      return !!result?.accessToken
     } catch {
       return false
     } finally {
