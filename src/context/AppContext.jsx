@@ -23,7 +23,7 @@ import {
   clearDriveCache,
 } from '../services/driveService'
 import { stripGeminiKeyFromSettings } from '../services/geminiService'
-import { getAccessToken, refreshAccessToken } from '../services/authService'
+import { getAccessToken } from '../services/authService'
 import { useAuth } from './appContextCore'
 import { AppActionsContext, AppStateContext } from './appContextCore'
 import { useToast } from './toastContextCore'
@@ -927,17 +927,10 @@ export function AppProvider({ children }) {
       forceApply = false,
       mergeLocalRecords = !forceApply,
     } = {}) => {
-      let token = getAccessToken()
+      const token = getAccessToken()
 
-      // If token is expired, try silent refresh before giving up
-      if (!token) {
-        try {
-          token = await refreshAccessToken()
-        } catch {
-          // refresh failed, token stays null
-        }
-      }
-
+      // No token? Don't try to refresh (that opens a popup).
+      // Just notify the UI to show "Reconnect" button.
       if (!token) {
         if (isAuthenticated) {
           notifyDriveAuthNeeded()
