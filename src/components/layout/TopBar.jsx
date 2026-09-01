@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
-import { Cloud, CloudOff, Loader, CheckCircle, LogOut, Search } from 'lucide-react'
+import { Cloud, CloudOff, Loader, CheckCircle, LogOut, RefreshCw } from 'lucide-react'
 import { useAppState } from '../../context/appHooks'
 import { useAuth } from '../../context/appContextCore'
 
@@ -23,9 +23,10 @@ const PAGE_TITLES = {
 
 export default function TopBar({ isMobile = false }) {
   const state = useAppState()
-  const { user, logout } = useAuth()
+  const { user, logout, reconnect } = useAuth()
   const location = useLocation()
   const { syncStatus, lastSynced } = state
+  const [reconnecting, setReconnecting] = useState(false)
 
   const pageTitle = PAGE_TITLES[location.pathname] || 'Life OS'
 
@@ -115,25 +116,63 @@ export default function TopBar({ isMobile = false }) {
 
       {/* Right side — Sync + User */}
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flexShrink: 0 }}>
-        {/* Sync indicator */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
-            color: indicator.color,
-            fontSize: 12,
-            padding: isMobile ? '5px 8px' : '6px 10px',
-            borderRadius: 999,
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid var(--border)',
-            transition: 'all 0.3s ease',
-          }}
-          title={indicator.label}
-        >
-          <Icon size={13} className={indicator.spin ? 'animate-spin' : ''} />
-          {!isMobile ? <span>{indicator.label}</span> : null}
-        </div>
+        {/* Sync indicator — clickable Reconnect when auth expired */}
+        {syncStatus === 'auth_required' ? (
+          <button
+            type="button"
+            onClick={async () => {
+              if (reconnecting || !reconnect) return
+              setReconnecting(true)
+              try {
+                await reconnect()
+                // Reload to re-sync with fresh token
+                window.location.reload()
+              } catch (err) {
+                console.error('Reconnect failed:', err)
+              } finally {
+                setReconnecting(false)
+              }
+            }}
+            disabled={reconnecting}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              color: reconnecting ? '#f59e0b' : '#f97316',
+              fontSize: 12,
+              fontWeight: 600,
+              padding: isMobile ? '5px 10px' : '6px 12px',
+              borderRadius: 999,
+              background: 'rgba(249,115,22,0.1)',
+              border: '1px solid rgba(249,115,22,0.3)',
+              cursor: reconnecting ? 'not-allowed' : 'pointer',
+              transition: 'all 0.3s ease',
+            }}
+            title="Click to reconnect Google Drive"
+          >
+            <RefreshCw size={13} className={reconnecting ? 'animate-spin' : ''} />
+            {!isMobile ? <span>{reconnecting ? 'Connecting...' : '⚡ Reconnect'}</span> : null}
+          </button>
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              color: indicator.color,
+              fontSize: 12,
+              padding: isMobile ? '5px 8px' : '6px 10px',
+              borderRadius: 999,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid var(--border)',
+              transition: 'all 0.3s ease',
+            }}
+            title={indicator.label}
+          >
+            <Icon size={13} className={indicator.spin ? 'animate-spin' : ''} />
+            {!isMobile ? <span>{indicator.label}</span> : null}
+          </div>
+        )}
 
         {/* User avatar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 10 }}>
