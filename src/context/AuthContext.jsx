@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import {
   getStoredSession,
+  getAccessToken,
   initializeGoogleAuth,
   attemptAutoLogin,
   signInWithGoogle,
   signOutGoogle,
+  reconnectGoogle,
   onTokenRefresh,
   startTokenRefreshWatcher,
   installTokenRefreshListeners,
@@ -27,15 +29,15 @@ export function AuthProvider({ children }) {
         setIsLoading(true)
         setAuthError('')
 
-        // ── Step 1: Restore session from localStorage ──────────────────────
+        // ── Step 1: Restore session from localStorage (NO network call) ───
+        // This is instant — no popup, no Google API call.
         const session = getStoredSession()
         if (session?.user && mounted) {
           setUser(session.user)
         }
 
-        // ── Step 2: Initialize the GIS tokenClient FIRST ───────────────────
-        // This MUST complete before any token operations are attempted,
-        // otherwise the tokenClient is null and all requests silently fail.
+        // ── Step 2: Initialize the GIS tokenClient ────────────────────────
+        // Just loads the script, does NOT trigger any popup or auth flow.
         try {
           await initializeGoogleAuth()
         } catch (googleError) {
@@ -48,50 +50,31 @@ export function AuthProvider({ children }) {
           // Don't bail out — the user can still use the app with cached data
         }
 
-        // ── Step 3: Attempt auto-login ─────────────────────────────────────
-        // Uses a multi-strategy approach:
-        //   1. Silent token refresh (existing session still valid)
-        //   2. Google One Tap auto-select (returning user, no click needed)
-        //   3. Falls back to manual login if both fail
-        let autoResult = null
+        // ── Step 3: Check stored session validity (NO popup) ──────────────
+        // attemptAutoLogin() now ONLY checks localStorage — no network call,
+        // no One Tap, no silent refresh, no popup. Instant.
         const isLoggedOut = localStorage.getItem('lifeos_logged_out') === 'true'
 
-        if (!isLoggedOut) {
-          autoResult = await Promise.race([
-            attemptAutoLogin(),
-            new Promise((resolve) => setTimeout(() => {
-              console.warn('[AuthContext] Boot: auto-login timed out after 6 seconds')
-              resolve(null)
-            }, 6000))
-          ])
-        } else {
-          console.log('[AuthContext] Boot: User is explicitly logged out, skipping auto-login')
-        }
+        if (!isLoggedOut && mounted) {
+          const autoResult = await attemptAutoLogin()
 
-        if (autoResult && mounted) {
-          if (autoResult.token) {
-            // Full auto-login success — we have both identity and Drive access
-            if (autoResult.user) setUser(autoResult.user)
-            console.log(`[AuthContext] Boot: auto-login succeeded via ${autoResult.strategy}`)
-            
-            try {
-              localStorage.removeItem('lifeos_logged_out')
-            } catch {}
-
-            // Start the 30-second watcher loop for proactive token refresh
-            startTokenRefreshWatcher()
-            installTokenRefreshListeners()
-          } else if (autoResult.user) {
-            // Partial success — One Tap identified the user but Drive token
-            // needs a consent popup. Set user so UI shows who they are,
-            // but they'll need to click "Continue with Google" for Drive access.
-            setUser(autoResult.user)
-            console.warn('[AuthContext] Boot: user identified but Drive token needs manual consent')
+          if (autoResult) {
+            if (autoResult.token) {
+              // Valid token — fully logged in, Drive sync will work
+              if (autoResult.user) setUser(autoResult.user)
+              console.log(`[AuthContext] Boot: session restored (token valid)`)
+              try {
+                localStorage.removeItem('lifeos_logged_out')
+              } catch {}
+            } else if (autoResult.user) {
+              // Token expired but user profile exists — show user as logged in
+              // Drive sync will fail and show "Reconnect" banner (no popup!)
+              setUser(autoResult.user)
+              console.log('[AuthContext] Boot: session restored (token expired, Reconnect needed)')
+            }
           }
-        } else if (session?.user && mounted) {
-          // Auto-login failed but we have a cached user — keep showing them
-          // but they'll need to re-authenticate when Drive calls fail
-          console.warn('[AuthContext] Boot: auto-login failed — cached user kept, may need re-login')
+        } else if (isLoggedOut) {
+          console.log('[AuthContext] Boot: User is explicitly logged out')
         }
 
         if (mounted) setIsAuthReady(true)
@@ -108,17 +91,16 @@ export function AuthProvider({ children }) {
 
     boot()
 
-    // Listen for silent token refreshes to log them (could also update UI here)
+    // Listen for token acquisitions (from login or reconnect)
     const unsubscribe = onTokenRefresh(({ token }) => {
       if (mounted && token) {
-        console.log('[AuthContext] Token silently refreshed ✓')
+        console.log('[AuthContext] Token acquired ✓')
       }
     })
 
     return () => {
       mounted = false
       unsubscribe()
-      removeTokenRefreshListeners()
     }
   }, [])
 
@@ -133,8 +115,6 @@ export function AuthProvider({ children }) {
         try {
           localStorage.removeItem('lifeos_logged_out')
         } catch {}
-        // signInWithGoogle already calls startTokenRefreshWatcher()
-        installTokenRefreshListeners()
       }
 
       return session?.user ?? null
@@ -147,13 +127,30 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // ── Reconnect: user-initiated re-auth when token has expired ──────────
+  // This opens a popup ONCE. Uses prompt:'' so Google auto-selects the
+  // existing account — usually the popup opens and closes in ~1 second.
+  const reconnect = useCallback(async () => {
+    try {
+      setAuthError('')
+      const session = await reconnectGoogle()
+      if (session?.user) {
+        setUser(session.user)
+      }
+      return session
+    } catch (error) {
+      console.error('[AuthContext] Reconnect failed:', error)
+      setAuthError(error.message || 'Reconnect failed')
+      throw error
+    }
+  }, [])
+
   const logout = () => {
     try {
       localStorage.setItem('lifeos_logged_out', 'true')
     } catch {}
-    signOutGoogle()   // clears session + stops watcher + disables auto-select
-    disableAutoSelect()  // extra safety: prevent One Tap auto-login loop
-    removeTokenRefreshListeners()
+    signOutGoogle()   // clears session
+    disableAutoSelect()
     setUser(null)
     setAuthError('')
     localStorage.removeItem('lifeos_drive_folder_id')
@@ -165,13 +162,14 @@ export function AuthProvider({ children }) {
       user,
       login,
       logout,
+      reconnect,
       isLoading,
       isAuthReady,
       authError,
       isAuthenticated: !!user,
       setAuthError,
     }),
-    [user, isLoading, isAuthReady, authError]
+    [user, isLoading, isAuthReady, authError, reconnect]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
