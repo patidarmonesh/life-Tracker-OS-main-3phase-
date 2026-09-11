@@ -207,7 +207,20 @@ export const scheduleTokenRefresh = startTokenRefreshWatcher
 // Not needed anymore.
 
 export function installTokenRefreshListeners() {
-  // no-op — kept for backward compatibility
+  // When user returns to the tab, try to silently refresh an expired token
+  const handleVisibility = async () => {
+    if (document.visibilityState !== 'visible') return
+    const session = getStoredSession()
+    if (!session?.user) return
+    if (!isTokenExpired(session.tokenExpiresAt)) return
+    // Token expired — try silent reconnect
+    const result = await trySilentReconnect(session.user)
+    if (result) {
+      console.log('[authService] Silent reconnect on tab focus succeeded')
+    }
+  }
+  document.addEventListener('visibilitychange', handleVisibility)
+  return () => document.removeEventListener('visibilitychange', handleVisibility)
 }
 
 export function removeTokenRefreshListeners() {
@@ -236,13 +249,73 @@ export async function attemptAutoLogin() {
     return { strategy: 'stored-session', token: session.accessToken, user: session.user }
   }
 
-  // Token expired but we have user profile — return user so app shows them
-  // as "logged in" but Drive sync will need reconnect
+  // Token expired but we have user profile — try silent reconnect first
   if (session.user) {
+    try {
+      const result = await trySilentReconnect(session.user)
+      if (result) {
+        return { strategy: 'silent-reconnect', token: result.accessToken, user: result.user }
+      }
+    } catch {
+      // Silent reconnect failed — fall through to expired-session
+    }
+
+    // Couldn't reconnect silently — return user so app shows them
+    // as "logged in" but Drive sync will need manual reconnect
     return { strategy: 'expired-session', token: null, user: session.user }
   }
 
   return null
+}
+
+/**
+ * Try to get a new access token silently.
+ * Uses prompt:'' which auto-selects the existing Google account.
+ * The popup opens briefly and auto-closes if the user has an active Google session.
+ * Returns null if it fails (user needs to manually click Reconnect).
+ */
+async function trySilentReconnect(existingUser) {
+  try {
+    await initializeGoogleAuth()
+  } catch {
+    return null
+  }
+
+  return new Promise((resolve) => {
+    // Set a timeout — if popup doesn't resolve in 8 seconds, give up
+    const timeout = setTimeout(() => resolve(null), 8000)
+
+    tokenClient.callback = async (response) => {
+      clearTimeout(timeout)
+      if (response?.error) {
+        resolve(null)
+        return
+      }
+      try {
+        const token     = response.access_token
+        const expiresIn = Number(response.expires_in || 3600)
+        // Reuse existing user profile to avoid extra API call
+        const user = existingUser || await fetchGoogleUserProfile(token)
+        persistSession(token, user, expiresIn)
+        notifyTokenRefresh(token)
+        resolve({ accessToken: token, user })
+      } catch {
+        resolve(null)
+      }
+    }
+
+    try {
+      // prompt:'' auto-selects the previously used account
+      // login_hint helps Google identify the right account faster
+      tokenClient.requestAccessToken({
+        prompt: '',
+        login_hint: existingUser?.email || '',
+      })
+    } catch {
+      clearTimeout(timeout)
+      resolve(null)
+    }
+  })
 }
 
 // ─── Disable Auto-Select (for sign-out) ───────────────────────────────────────

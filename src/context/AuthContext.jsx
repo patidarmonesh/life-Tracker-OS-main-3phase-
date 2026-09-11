@@ -98,9 +98,13 @@ export function AuthProvider({ children }) {
       }
     })
 
+    // Install visibility listener for auto-reconnect on tab focus
+    const cleanupListeners = installTokenRefreshListeners()
+
     return () => {
       mounted = false
       unsubscribe()
+      if (typeof cleanupListeners === 'function') cleanupListeners()
     }
   }, [])
 

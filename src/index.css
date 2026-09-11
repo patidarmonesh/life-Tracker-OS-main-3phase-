@@ -737,3 +737,9 @@ input, textarea, select {
     animation: slideUpSheet 0.3s var(--ease-out-expo) !important;
   }
 }
+
+/* ── Spin animation ────────────────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
