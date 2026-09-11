@@ -644,7 +644,7 @@ Return format:
 User's day: ${freeText}`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
         {
           method: 'POST',
           headers: {
@@ -710,7 +710,7 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
 }`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
         {
           method: 'POST',
           headers: {
@@ -844,7 +844,7 @@ Return ONLY valid JSON, no markdown:
 }`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
         {
           method: 'POST',
           headers: {
@@ -977,7 +977,7 @@ Return ONLY valid JSON, no markdown:
 User says: ${userMsg}`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -1115,7 +1115,7 @@ Return ONLY valid JSON, no markdown, no explanation:
 }`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -1230,7 +1230,7 @@ Is Time Waste: ${isWaste ? 'Yes' : 'No'}
 Write a detailed 2-4 sentence note describing what likely happened during this time. Be specific and realistic. If it was a waste activity, mention what could have been done instead. Write in a casual Hinglish style (Hindi-English mix). Don't add any greeting or heading — just the note text directly.`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
