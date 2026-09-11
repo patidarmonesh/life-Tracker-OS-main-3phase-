@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { fetchPublicFileData, SHAREABLE_MODULES } from '../services/shareService'
-import { format, subDays, addDays } from 'date-fns'
+import { format, subDays, addDays, parseISO } from 'date-fns'
 import {
   Wallet, BookOpen, CheckSquare, Heart, Clock, FileText, Brain, Target, AlertCircle,
   ChevronLeft, ChevronRight, Bot, Sparkles, Send, CalendarDays, Loader2
@@ -28,7 +28,7 @@ export default function SharedDashboard() {
   const [meta, setMeta] = useState({ name: '', modules: [] })
   const [lastUpdated, setLastUpdated] = useState(null)
   // Calendar + AI state
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [selectedDate, setSelectedDate] = useState(() => format(new Date(), 'yyyy-MM-dd'))
   const [showCalendar, setShowCalendar] = useState(false)
   const [aiAnalysis, setAiAnalysis] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
@@ -122,7 +122,7 @@ export default function SharedDashboard() {
     )
   }
 
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
 
   const renderModuleCard = (modKey) => {
     const modData = data[modKey]
@@ -231,7 +231,7 @@ export default function SharedDashboard() {
       // Get dates that have entries (for calendar dots)
       const datesWithEntries = new Set(allEntries.map(e => e.date))
       const isToday = selectedDate === todayStr
-      const selDateObj = new Date(selectedDate + 'T00:00:00')
+      const selDateObj = parseISO(selectedDate)
 
       // AI analysis function — tries server proxy first, then direct API
       const runAIAnalysis = async (customQ = '') => {
