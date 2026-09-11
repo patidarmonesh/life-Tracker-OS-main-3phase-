@@ -48,7 +48,8 @@ export default function SharedDashboard() {
         }
         setData(results)
       } catch (err) {
-        setError('Failed to load shared data. The user may have revoked access.')
+        console.error('Shared dashboard fetch error:', err)
+        setError(err.message || 'Failed to load shared data. The link may be invalid or access was revoked.')
       } finally {
         setLoading(false)
       }
