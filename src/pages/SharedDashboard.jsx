@@ -61,6 +61,19 @@ export default function SharedDashboard() {
         setData(results)
         setLastUpdated(new Date())
         setError(null)
+        
+        // Auto-select the latest date that has entries if timeflow is included
+        if (!isRefresh && results.timeflow?.entries?.length > 0) {
+          const allDates = results.timeflow.entries.map(e => e.date).sort()
+          const latestDate = allDates[allDates.length - 1]
+          if (latestDate && latestDate > format(new Date(), 'yyyy-MM-dd')) {
+             // Only auto-update if they are viewing from the past or they have entries from the future/today
+             // Actually, always select the latest date! It's much better to see the latest activity than a blank page.
+             setSelectedDate(latestDate)
+          } else if (latestDate) {
+             setSelectedDate(latestDate)
+          }
+        }
       } catch (err) {
         console.error('Shared dashboard fetch error:', err)
         if (!isRefresh) {
@@ -247,47 +260,55 @@ export default function SharedDashboard() {
             : `Analyze ${meta.name}'s day (${selectedDate}):\n\n${timeline}\n\nGive a brief analysis (3-4 bullet points max) covering:\n1. What went well\n2. What could improve\n3. One specific actionable suggestion\n\nKeep it concise, friendly, and specific. Reference actual activities by name. Use emojis.`
 
           let text = ''
+          const localApiKey = getGeminiApiKey()
 
-          // Approach 1: Server-side proxy (works on any device, key is on server)
-          try {
-            const proxyRes = await fetch('/api/gemini-proxy', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ prompt }),
-            })
-            const proxyData = await proxyRes.json()
-            if (proxyRes.ok && proxyData.text) {
-              text = proxyData.text
-            } else if (proxyRes.status !== 500) {
-              // 500 = key not configured on server, try direct
-              setAiAnalysis('❌ ' + (proxyData.error || 'AI analysis failed'))
-              return
-            }
-          } catch {
-            // Proxy unavailable — fall through to direct call
-          }
-
-          // Approach 2: Direct API call (works when user has key in localStorage)
-          if (!text) {
-            const apiKey = getGeminiApiKey()
-            if (!apiKey) {
-              setAiAnalysis('⚠️ AI not available. Set GEMINI_API_KEY in Vercel env vars for shared page AI.')
-              return
-            }
-            const res = await fetch(
-              'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3 } })
+          // Approach 1: If user has a local key, try direct API call first (fixes auth errors for logged-in users viewing shared links)
+          if (localApiKey) {
+            try {
+              const res = await fetch(
+                'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'x-goog-api-key': localApiKey },
+                  body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3 } })
+                }
+              )
+              const json = await res.json()
+              if (res.ok && json.candidates?.[0]?.content?.parts?.[0]?.text) {
+                text = json.candidates[0].content.parts[0].text
               }
-            )
-            const json = await res.json()
-            if (!res.ok) { setAiAnalysis('❌ ' + (json?.error?.message || `API error ${res.status}`)); return }
-            text = json?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+            } catch (err) {
+              console.error('Direct AI failed:', err)
+            }
           }
 
-          if (!text) { setAiAnalysis('⚠️ AI returned empty response. Try rephrasing.'); return }
+          // Approach 2: Server-side proxy (for public visitors without a local key)
+          if (!text) {
+            try {
+              const proxyRes = await fetch('/api/gemini-proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt }),
+              })
+              const proxyData = await proxyRes.json()
+              if (proxyRes.ok && proxyData.text) {
+                text = proxyData.text
+              } else if (proxyRes.status !== 500) {
+                // 500 = key not configured on server, ignore and fallback
+                setAiAnalysis('❌ ' + (proxyData.error || 'AI analysis failed'))
+                return
+              }
+            } catch (err) {
+              console.error('Proxy AI failed:', err)
+            }
+          }
+
+          // If still no text, it means both failed or no keys are configured
+          if (!text) {
+            setAiAnalysis('⚠️ AI not available. Add an API key in Settings or Vercel env vars.')
+            return
+          }
+
           setAiAnalysis(text)
         } catch (err) {
           setAiAnalysis('❌ Failed: ' + err.message)

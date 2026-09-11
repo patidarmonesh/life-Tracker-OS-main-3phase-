@@ -280,7 +280,7 @@ export default function TimeFlow() {
     mood: 3, productivityScore: 3, isWaste: false, notes: '', tags: [],
   })
 
-  const allEntries = state.timeflow.entries || EMPTY_ARRAY
+  const allEntries = state.timeflow?.entries || EMPTY_ARRAY
 
   const allTags = useMemo(() => [...new Set(allEntries.flatMap(e => e.tags || []))], [allEntries])
   const dayEntries = useMemo(
