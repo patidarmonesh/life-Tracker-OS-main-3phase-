@@ -232,6 +232,27 @@ function LiveClock({ productiveMins, wasteMins, unloggedMins }) {
   )
 }
 
+function StatCard({ label, value, color }) {
+  return (
+    <div style={{
+      padding: '16px',
+      borderRadius: '16px',
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '6px',
+    }}>
+      <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        {label}
+      </div>
+      <div style={{ fontSize: '20px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color }}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────
 export default function TimeFlow() {
   const state = useAppState()

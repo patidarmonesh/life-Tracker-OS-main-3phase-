@@ -111,19 +111,6 @@ export default function YearInReview() {
     hapticMedium()
   }, [currentSlide])
 
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'ArrowRight') {
-        handleNext()
-      } else if (e.key === 'ArrowLeft') {
-        handlePrev()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [currentSlide])
-
   const totalSlides = 6
 
   const handleNext = () => {
@@ -142,6 +129,19 @@ export default function YearInReview() {
       setCurrentSlide(c => c - 1)
     }
   }
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowRight') {
+        handleNext()
+      } else if (e.key === 'ArrowLeft') {
+        handlePrev()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentSlide])
 
   // Slide content renderers
   const renderSlide = () => {
