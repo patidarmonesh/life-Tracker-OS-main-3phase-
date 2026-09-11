@@ -23,6 +23,7 @@ export default function SharedDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [meta, setMeta] = useState({ name: '', modules: [] })
+  const [lastUpdated, setLastUpdated] = useState(null)
 
   useEffect(() => {
     const params = new URLSearchParams(location.search)
@@ -38,8 +39,9 @@ export default function SharedDashboard() {
 
     setMeta({ name, modules: modulesParam })
 
-    const fetchAll = async () => {
+    const fetchAll = async (isRefresh = false) => {
       try {
+        if (!isRefresh) setLoading(true)
         const results = {}
         for (let i = 0; i < ids.length; i++) {
           const modKey = modulesParam[i]
@@ -47,15 +49,23 @@ export default function SharedDashboard() {
           results[modKey] = fileData
         }
         setData(results)
+        setLastUpdated(new Date())
+        setError(null)
       } catch (err) {
         console.error('Shared dashboard fetch error:', err)
-        setError(err.message || 'Failed to load shared data. The link may be invalid or access was revoked.')
+        if (!isRefresh) {
+          setError(err.message || 'Failed to load shared data. The link may be invalid or access was revoked.')
+        }
       } finally {
         setLoading(false)
       }
     }
 
     fetchAll()
+
+    // Auto-refresh every 60 seconds
+    const interval = setInterval(() => fetchAll(true), 60000)
+    return () => clearInterval(interval)
   }, [location])
 
   if (loading) {
@@ -121,11 +131,11 @@ export default function SharedDashboard() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Today's Spend</span>
-            <span style={{ color: 'var(--text-primary)', fontSize: 24, fontWeight: 700 }}>${todaySpend.toFixed(2)}</span>
+            <span style={{ color: 'var(--text-primary)', fontSize: 24, fontWeight: 700 }}>₹{todaySpend.toFixed(0)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Daily Budget</span>
-            <span style={{ color: 'var(--text-primary)', fontSize: 16 }}>${budget.toFixed(2)}</span>
+            <span style={{ color: 'var(--text-primary)', fontSize: 16 }}>₹{budget.toFixed(0)}</span>
           </div>
         </div>
       )
@@ -193,20 +203,146 @@ export default function SharedDashboard() {
     }
 
     if (modKey === 'timeflow') {
-      const todayLogs = modData.logs?.filter(l => l.date === todayStr) || []
-      const productiveMins = todayLogs.filter(l => l.type === 'productive').reduce((acc, l) => acc + l.duration, 0)
-      const wasteMins = todayLogs.filter(l => l.type === 'waste').reduce((acc, l) => acc + l.duration, 0)
-      
+      const CATEGORY_COLORS = {
+        'Sleep': '#8B5CF6', 'Morning Routine': '#F59E0B', 'Exercise': '#10B981',
+        'Study': '#3B82F6', 'Deep Work': '#1D4ED8', 'Meals': '#F97316',
+        'Social Media': '#EF4444', 'Entertainment': '#EC4899', 'Travel': '#06B6D4',
+        'Self-Care': '#84CC16', 'Waste Time': '#DC2626', 'Other': '#6B7280',
+        'Talk with Dost': '#A78BFA', 'Freelance': '#10B981',
+      }
+      const allEntries = modData.entries || []
+      const todayEntries = allEntries
+        .filter(e => e.date === todayStr)
+        .sort((a, b) => (a.start || '').localeCompare(b.start || ''))
+      const productiveMins = todayEntries.filter(e => !e.isWaste).reduce((a, e) => a + (Number(e.durationMinutes) || 0), 0)
+      const wasteMins = todayEntries.filter(e => e.isWaste).reduce((a, e) => a + (Number(e.durationMinutes) || 0), 0)
+      const totalMins = productiveMins + wasteMins
+
       content = (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Productive Time</span>
-            <span style={{ color: '#10B981', fontSize: 20, fontWeight: 700 }}>{Math.floor(productiveMins/60)}h {productiveMins%60}m</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Stats Row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+            {[
+              { label: 'Productive', value: `${Math.floor(productiveMins/60)}h ${productiveMins%60}m`, color: '#10B981' },
+              { label: 'Wasted', value: `${Math.floor(wasteMins/60)}h ${wasteMins%60}m`, color: '#EF4444' },
+              { label: 'Logged', value: `${todayEntries.length} entries`, color: '#6366F1' },
+            ].map(s => (
+              <div key={s.label} style={{
+                padding: '10px 8px', borderRadius: '12px', textAlign: 'center',
+                background: `${s.color}10`, border: `1px solid ${s.color}25`,
+              }}>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: s.color, fontFamily: 'JetBrains Mono, monospace' }}>{s.value}</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
+              </div>
+            ))}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Wasted Time</span>
-            <span style={{ color: '#EF4444', fontSize: 20, fontWeight: 700 }}>{Math.floor(wasteMins/60)}h {wasteMins%60}m</span>
+
+          {/* Progress Bar */}
+          {totalMins > 0 && (
+            <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
+              <div style={{ width: `${(productiveMins/totalMins)*100}%`, background: '#10B981', transition: 'width 0.5s ease' }} />
+              <div style={{ width: `${(wasteMins/totalMins)*100}%`, background: '#EF4444', transition: 'width 0.5s ease' }} />
+            </div>
+          )}
+
+          {/* Timeline Header */}
+          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'Syne, sans-serif', borderBottom: '1px solid rgba(148,163,184,0.08)', paddingBottom: '8px' }}>
+            Timeline — Today
           </div>
+
+          {/* Timeline Entries */}
+          {todayEntries.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: '28px', marginBottom: '6px' }}>📋</div>
+              <div style={{ fontSize: '13px' }}>No entries logged for today</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0px' }}>
+              {todayEntries.map((entry, idx) => {
+                const catColor = CATEGORY_COLORS[entry.category] || '#6B7280'
+                const hrs = Math.floor((entry.durationMinutes || 0) / 60)
+                const mins = (entry.durationMinutes || 0) % 60
+                const durationStr = hrs > 0 ? `${hrs}.${Math.round(mins/6)}h` : `${mins}m`
+
+                return (
+                  <div key={entry.id || idx} style={{ display: 'flex', gap: '12px', position: 'relative' }}>
+                    {/* Time column */}
+                    <div style={{ width: '42px', flexShrink: 0, textAlign: 'right', paddingTop: '14px' }}>
+                      <span style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-muted)', fontWeight: 600 }}>
+                        {entry.start}
+                      </span>
+                    </div>
+
+                    {/* Dot + Line */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '16px', flexShrink: 0 }}>
+                      <div style={{
+                        width: '10px', height: '10px', borderRadius: '50%',
+                        background: catColor, marginTop: '16px', flexShrink: 0,
+                        boxShadow: `0 0 8px ${catColor}40`,
+                      }} />
+                      {idx < todayEntries.length - 1 && (
+                        <div style={{ width: '2px', flex: 1, background: 'rgba(148,163,184,0.1)', minHeight: '20px' }} />
+                      )}
+                    </div>
+
+                    {/* Entry Card */}
+                    <div style={{
+                      flex: 1, marginBottom: '4px', padding: '12px 14px',
+                      borderRadius: '14px',
+                      background: entry.isWaste
+                        ? 'rgba(239,68,68,0.06)'
+                        : 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${entry.isWaste ? 'rgba(239,68,68,0.15)' : 'rgba(148,163,184,0.08)'}`,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>
+                            {entry.name}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '11.5px', color: catColor, fontWeight: 600, fontStyle: 'italic' }}>
+                              {entry.category}
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                              • {entry.start}–{entry.end} • {durationStr}
+                            </span>
+                            {entry.isWaste && (
+                              <span style={{ fontSize: '10px', color: '#EF4444', fontWeight: 700, background: 'rgba(239,68,68,0.1)', padding: '1px 6px', borderRadius: '4px' }}>
+                                • waste ⚠️
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Productivity dots */}
+                        <div style={{ display: 'flex', gap: '3px', paddingTop: '4px', flexShrink: 0 }}>
+                          {[1,2,3,4,5].map(n => (
+                            <div key={n} style={{
+                              width: '7px', height: '7px', borderRadius: '50%',
+                              background: n <= (entry.productivityScore || 0)
+                                ? (entry.isWaste ? '#EF4444' : catColor)
+                                : 'rgba(148,163,184,0.15)',
+                            }} />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Notes */}
+                      {entry.notes && (
+                        <div style={{
+                          marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)',
+                          fontStyle: 'italic', lineHeight: 1.5,
+                          borderTop: '1px solid rgba(148,163,184,0.06)', paddingTop: '6px',
+                        }}>
+                          {entry.notes}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )
     }
@@ -324,6 +460,11 @@ export default function SharedDashboard() {
             <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
               Live snapshot of selected modules
             </span>
+            {lastUpdated && (
+              <span style={{ color: 'var(--text-muted)', fontSize: 11, display: 'block', marginTop: '4px' }}>
+                Updated {lastUpdated.toLocaleTimeString()} • auto-refreshes every 60s
+              </span>
+            )}
           </div>
           <div style={{
             background: 'rgba(99,102,241,0.1)',
@@ -339,13 +480,19 @@ export default function SharedDashboard() {
           </div>
         </header>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-          gap: 16
-        }}>
-          {meta.modules.map(mod => renderModuleCard(mod))}
-        </div>
+        {/* Full-width modules (timeline) */}
+        {meta.modules.filter(m => m === 'timeflow').map(mod => renderModuleCard(mod))}
+
+        {/* Grid modules */}
+        {meta.modules.filter(m => m !== 'timeflow').length > 0 && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: 16
+          }}>
+            {meta.modules.filter(m => m !== 'timeflow').map(mod => renderModuleCard(mod))}
+          </div>
+        )}
 
         <footer style={{
           marginTop: 'auto',
