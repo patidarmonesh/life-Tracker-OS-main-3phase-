@@ -233,10 +233,8 @@ export default function SharedDashboard() {
       const isToday = selectedDate === todayStr
       const selDateObj = new Date(selectedDate + 'T00:00:00')
 
-      // AI analysis function
+      // AI analysis function — tries server proxy first, then direct API
       const runAIAnalysis = async (customQ = '') => {
-        const apiKey = getGeminiApiKey()
-        if (!apiKey) { setAiAnalysis('⚠️ AI analysis not available — no Gemini API key found. The app owner needs to set one in Settings.'); return }
         setAiLoading(true)
         setAiAnalysis('')
         try {
@@ -248,34 +246,51 @@ export default function SharedDashboard() {
             ? `Here is ${meta.name}'s time log for ${selectedDate}:\n\n${timeline}\n\nQuestion from their accountability partner: ${customQ}\n\nAnswer in 2-3 short paragraphs. Be specific with times and activities. Use a friendly tone.`
             : `Analyze ${meta.name}'s day (${selectedDate}):\n\n${timeline}\n\nGive a brief analysis (3-4 bullet points max) covering:\n1. What went well\n2. What could improve\n3. One specific actionable suggestion\n\nKeep it concise, friendly, and specific. Reference actual activities by name. Use emojis.`
 
-          const res = await fetch(
-            'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
-            {
+          let text = ''
+
+          // Approach 1: Server-side proxy (works on any device, key is on server)
+          try {
+            const proxyRes = await fetch('/api/gemini-proxy', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey,
-              },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.3 },
-              })
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt }),
+            })
+            const proxyData = await proxyRes.json()
+            if (proxyRes.ok && proxyData.text) {
+              text = proxyData.text
+            } else if (proxyRes.status !== 500) {
+              // 500 = key not configured on server, try direct
+              setAiAnalysis('❌ ' + (proxyData.error || 'AI analysis failed'))
+              return
             }
-          )
-          const json = await res.json()
-          if (!res.ok) {
-            setAiAnalysis('❌ API Error: ' + (json?.error?.message || `Status ${res.status}`))
-            return
+          } catch {
+            // Proxy unavailable — fall through to direct call
           }
-          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
+
+          // Approach 2: Direct API call (works when user has key in localStorage)
           if (!text) {
-            const reason = json?.candidates?.[0]?.finishReason || 'unknown'
-            setAiAnalysis(`⚠️ AI returned empty response (reason: ${reason}). Try rephrasing your question.`)
-            return
+            const apiKey = getGeminiApiKey()
+            if (!apiKey) {
+              setAiAnalysis('⚠️ AI not available. Set GEMINI_API_KEY in Vercel env vars for shared page AI.')
+              return
+            }
+            const res = await fetch(
+              'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3 } })
+              }
+            )
+            const json = await res.json()
+            if (!res.ok) { setAiAnalysis('❌ ' + (json?.error?.message || `API error ${res.status}`)); return }
+            text = json?.candidates?.[0]?.content?.parts?.[0]?.text || ''
           }
+
+          if (!text) { setAiAnalysis('⚠️ AI returned empty response. Try rephrasing.'); return }
           setAiAnalysis(text)
         } catch (err) {
-          setAiAnalysis('❌ Failed to get AI analysis: ' + err.message)
+          setAiAnalysis('❌ Failed: ' + err.message)
         } finally {
           setAiLoading(false)
         }
