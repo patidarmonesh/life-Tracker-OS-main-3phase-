@@ -4,7 +4,7 @@ import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis } from 'recharts'
-import { Plus, Pencil, Mic, MicOff, MessageSquare, Send, Zap, Target, Sparkles, TrendingUp, Camera, ImageIcon } from 'lucide-react'
+import { Plus, Pencil, Mic, MicOff, MessageSquare, Send, Zap, Target, Sparkles, TrendingUp, Camera, ImageIcon, Copy, Check, Upload } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -271,6 +271,7 @@ export default function TimeFlow() {
   const [diaryImage, setDiaryImage] = useState(null)
   const [diaryImagePreview, setDiaryImagePreview] = useState(null)
   const [diaryLoading, setDiaryLoading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const recognitionRef = useRef(null)
   const diaryFileRef = useRef(null)
   const chatEndRef = useRef(null)
@@ -767,11 +768,10 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
   }
 
   // ── Diary Photo Scanner (Handwriting → Time Entries) ────
-  function handleDiaryImageSelect(e) {
-    const file = e.target.files?.[0]
+  const handleDiaryFile = useCallback((file) => {
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      showToast('Please select an image file', 'error')
+    if (!file.type || !file.type.startsWith('image/')) {
+      showToast('Please select or paste a valid image file', 'error')
       return
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -779,8 +779,43 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
       return
     }
     setDiaryImage(file)
-    setDiaryImagePreview(URL.createObjectURL(file))
+    setDiaryImagePreview(prev => {
+      if (prev) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(file)
+    })
+    setAiResult(null)
+    setIsSaved(false)
+  }, [showToast])
+
+  function handleDiaryImageSelect(e) {
+    const file = e.target.files?.[0]
+    if (file) handleDiaryFile(file)
+    e.target.value = ''
   }
+
+  // Handle clipboard paste (Ctrl+V) when modal is open and on photo tab
+  useEffect(() => {
+    if (!showAIModal || aiModalTab !== 'photo') return
+
+    const handlePaste = (e) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (const item of items) {
+        if (item.type && item.type.startsWith('image/')) {
+          const file = item.getAsFile()
+          if (file) {
+            e.preventDefault()
+            handleDiaryFile(file)
+            showToast('Photo pasted from clipboard! 📋', 'success')
+            break
+          }
+        }
+      }
+    }
+
+    window.addEventListener('paste', handlePaste)
+    return () => window.removeEventListener('paste', handlePaste)
+  }, [showAIModal, aiModalTab, handleDiaryFile, showToast])
 
   async function processDiaryPhoto() {
     if (!diaryImage) return
@@ -1291,6 +1326,21 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
             <Zap size={14} /> AI Quick Add
           </Button>
           <Button variant="secondary" onClick={() => {
+            setAiResult(null)
+            setIsSaved(false)
+            setDiaryImage(null)
+            setDiaryImagePreview(null)
+            setAiModalTab('photo')
+            setShowAIModal(true)
+          }} style={{
+            display: 'flex', alignItems: 'center', gap: '5px',
+            background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(6,182,212,0.1))',
+            border: '1px solid rgba(16,185,129,0.3)',
+            color: '#10B981', fontWeight: '700'
+          }}>
+            <Camera size={14} /> 📷 Diary Photo
+          </Button>
+          <Button variant="secondary" onClick={() => {
             setAiResult(null);
             setIsSaved(false);
             setAiModalTab(dayEntries.length > 0 ? 'auto' : 'text');
@@ -1338,24 +1388,17 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
         ))}
       </div>
 
-      <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ padding: '16px 24px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-        {/* ══ DAY VIEW ══════════════════════════════════════ */}
+        {/* ══ DAY VIEW ═══════════════════════════════════════ */}
         {activeTab === 'day' && <>
 
-          {/* Summary bar */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-            {[
-              { label: 'Productive', value: `${(productiveMins/60).toFixed(1)}h`, color: '#3B82F6' },
-              { label: 'Waste', value: `${(wasteMins/60).toFixed(1)}h`, color: '#EF4444' },
-              { label: 'Sleep', value: `${(sleepMins/60).toFixed(1)}h`, color: '#8B5CF6' },
-              { label: 'Unlogged', value: `${(unloggedMins/60).toFixed(1)}h`, color: 'var(--text-muted)' },
-            ].map(({ label, value, color }) => (
-              <Card key={label} style={{ padding: '14px', textAlign: 'center' }}>
-                <div style={{ fontSize: '18px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color }}>{value}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{label}</div>
-              </Card>
-            ))}
+          {/* Stats row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+            <StatCard label="Productive" value={`${(productiveMins/60).toFixed(1)}h`} color="#10B981" />
+            <StatCard label="Waste Time" value={`${(wasteMins/60).toFixed(1)}h`} color="#EF4444" />
+            <StatCard label="Sleep" value={`${(sleepMins/60).toFixed(1)}h`} color="#8B5CF6" />
+            <StatCard label="Logged" value={`${dayEntries.length} entries`} color="#3B82F6" />
           </div>
 
           {/* Timeline */}
@@ -1364,10 +1407,30 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
               Timeline — {selectedDate === today ? 'Today' : selectedDate}
             </h3>
             {dayEntries.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+              <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--text-muted)' }}>
                 <div style={{ fontSize: '40px', marginBottom: '10px' }}>📋</div>
                 <div style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '15px' }}>No entries for this day</div>
-                <div style={{ fontSize: '13px', marginTop: '4px' }}>Use "Analyse with AI" to log your day in plain text, or add entries manually</div>
+                <div style={{ fontSize: '13px', marginTop: '4px' }}>Upload your diary photo, write in plain text, or add entries manually</div>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '14px', flexWrap: 'wrap' }}>
+                  <Button variant="secondary" onClick={() => {
+                    setAiResult(null)
+                    setIsSaved(false)
+                    setDiaryImage(null)
+                    setDiaryImagePreview(null)
+                    setAiModalTab('photo')
+                    setShowAIModal(true)
+                  }} style={{ fontSize: '12px', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '5px', color: '#10B981', border: '1px solid rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.08)' }}>
+                    <Camera size={13} /> 📷 Upload Diary Photo
+                  </Button>
+                  <Button variant="secondary" onClick={() => {
+                    setAiResult(null)
+                    setIsSaved(false)
+                    setAiModalTab('text')
+                    setShowAIModal(true)
+                  }} style={{ fontSize: '12px', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    ✍️ Text Log
+                  </Button>
+                </div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
@@ -1642,54 +1705,116 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
               />
 
               {!diaryImagePreview ? (
-                /* Upload Area */
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button
-                    onClick={() => {
-                      // For camera on mobile
-                      if (diaryFileRef.current) {
-                        diaryFileRef.current.setAttribute('capture', 'environment')
-                        diaryFileRef.current.click()
-                      }
-                    }}
-                    style={{
-                      flex: 1, padding: '24px 16px', borderRadius: '14px',
-                      border: '2px dashed rgba(99,102,241,0.3)',
-                      background: 'rgba(99,102,241,0.06)',
-                      color: 'var(--accent-indigo)',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-                      cursor: 'pointer', transition: 'all 0.2s ease',
-                    }}
-                  >
-                    <Camera size={28} />
-                    <span style={{ fontSize: '13px', fontWeight: 700 }}>Take Photo</span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Open camera</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      // For gallery selection
-                      if (diaryFileRef.current) {
-                        diaryFileRef.current.removeAttribute('capture')
-                        diaryFileRef.current.click()
-                      }
-                    }}
-                    style={{
-                      flex: 1, padding: '24px 16px', borderRadius: '14px',
-                      border: '2px dashed rgba(139,92,246,0.3)',
-                      background: 'rgba(139,92,246,0.06)',
-                      color: '#A78BFA',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-                      cursor: 'pointer', transition: 'all 0.2s ease',
-                    }}
-                  >
-                    <ImageIcon size={28} />
-                    <span style={{ fontSize: '13px', fontWeight: 700 }}>Gallery</span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Choose image</span>
-                  </button>
+                /* Drag & Drop + Buttons Area */
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const file = e.dataTransfer?.files?.[0];
+                    if (file) handleDiaryFile(file);
+                  }}
+                  style={{
+                    padding: '24px 16px',
+                    borderRadius: '16px',
+                    border: isDragging ? '2px dashed #10B981' : '2px dashed rgba(99,102,241,0.35)',
+                    background: isDragging ? 'rgba(16,185,129,0.1)' : 'rgba(99,102,241,0.04)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '14px',
+                    textAlign: 'center',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <div style={{
+                    width: '52px', height: '52px', borderRadius: '50%',
+                    background: isDragging ? 'rgba(16,185,129,0.2)' : 'rgba(99,102,241,0.12)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: isDragging ? '#10B981' : 'var(--accent-indigo)',
+                  }}>
+                    <Upload size={24} />
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                      {isDragging ? 'Drop photo here to upload!' : 'Drag & Drop photo or Paste (Ctrl + V)'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Notebook pages, handwritten notes, planners, or screenshots
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px', width: '100%', maxWidth: '360px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (diaryFileRef.current) {
+                          diaryFileRef.current.setAttribute('capture', 'environment')
+                          diaryFileRef.current.click()
+                        }
+                      }}
+                      style={{
+                        flex: 1, padding: '10px 14px', borderRadius: '10px',
+                        border: '1px solid rgba(99,102,241,0.3)',
+                        background: 'rgba(99,102,241,0.1)',
+                        color: 'var(--accent-indigo)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      <Camera size={16} /> Take Photo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (diaryFileRef.current) {
+                          diaryFileRef.current.removeAttribute('capture')
+                          diaryFileRef.current.click()
+                        }
+                      }}
+                      style={{
+                        flex: 1, padding: '10px 14px', borderRadius: '10px',
+                        border: '1px solid rgba(139,92,246,0.3)',
+                        background: 'rgba(139,92,246,0.1)',
+                        color: '#A78BFA',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      <ImageIcon size={16} /> Choose File
+                    </button>
+                  </div>
+
+                  <div style={{
+                    fontSize: '11px', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)',
+                    padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(148,163,184,0.08)'
+                  }}>
+                    📋 <strong>Tip:</strong> Copy any photo / screenshot to clipboard and press <kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 5px', borderRadius: '4px', fontFamily: 'monospace' }}>Ctrl + V</kbd> to paste directly!
+                  </div>
                 </div>
               ) : (
                 /* Image Preview */
-                <div style={{ position: 'relative' }}>
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const file = e.dataTransfer?.files?.[0];
+                    if (file) handleDiaryFile(file);
+                  }}
+                  style={{
+                    position: 'relative',
+                    borderRadius: '12px',
+                    outline: isDragging ? '2px dashed #10B981' : 'none',
+                  }}
+                >
                   <img
                     src={diaryImagePreview}
                     alt="Diary page"
@@ -1712,9 +1837,13 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
                     ✕
                   </button>
                   <div style={{
-                    marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)',
                   }}>
-                    {diaryImage?.name} · {(diaryImage?.size / 1024).toFixed(0)} KB
+                    <span>{diaryImage?.name || 'Pasted Image'} · {((diaryImage?.size || 0) / 1024).toFixed(0)} KB</span>
+                    <span style={{ color: 'var(--accent-indigo)', cursor: 'pointer', fontWeight: 600 }} onClick={() => diaryFileRef.current?.click()}>
+                      Change Photo
+                    </span>
                   </div>
                 </div>
               )}
@@ -1731,17 +1860,34 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
                   padding: '12px', borderRadius: '10px',
                   background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)',
                 }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-indigo)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    📝 Transcribed Handwriting
-                    {aiResult.confidence && (
-                      <span style={{
-                        fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
-                        background: aiResult.confidence === 'high' ? 'rgba(16,185,129,0.15)' : aiResult.confidence === 'medium' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
-                        color: aiResult.confidence === 'high' ? '#10B981' : aiResult.confidence === 'medium' ? '#F59E0B' : '#EF4444',
-                      }}>
-                        {aiResult.confidence} confidence
-                      </span>
-                    )}
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-indigo)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      📝 Transcribed Handwriting
+                      {aiResult.confidence && (
+                        <span style={{
+                          fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
+                          background: aiResult.confidence === 'high' ? 'rgba(16,185,129,0.15)' : aiResult.confidence === 'medium' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
+                          color: aiResult.confidence === 'high' ? '#10B981' : aiResult.confidence === 'medium' ? '#F59E0B' : '#EF4444',
+                        }}>
+                          {aiResult.confidence} confidence
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(aiResult.rawText)
+                        showToast('Transcribed handwriting copied! 📋', 'success')
+                      }}
+                      style={{
+                        background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)',
+                        borderRadius: '6px', padding: '3px 8px', color: 'var(--accent-indigo)',
+                        fontSize: '11px', fontWeight: '600', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: '4px',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      <Copy size={11} /> Copy Text
+                    </button>
                   </div>
                   <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
                     {aiResult.rawText}
@@ -1792,8 +1938,26 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
               {/* Activities preview */}
               {(aiModalTab === 'text' || aiModalTab === 'photo') && aiResult.activities?.length > 0 && (
                 <div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
-                    Extracted {aiResult.activities?.length || 0} Activities
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Extracted {aiResult.activities?.length || 0} Activities
+                    </div>
+                    <button
+                      onClick={() => {
+                        const formatted = aiResult.activities.map(a => `${a.start} - ${a.end}: ${a.name} (${a.category})`).join('\n')
+                        navigator.clipboard.writeText(formatted)
+                        showToast('Extracted timeline copied! 📋', 'success')
+                      }}
+                      style={{
+                        background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)',
+                        borderRadius: '6px', padding: '2px 8px', color: 'var(--accent-indigo)',
+                        fontSize: '11px', fontWeight: '600', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: '4px',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      <Copy size={11} /> Copy Timeline
+                    </button>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '160px', overflowY: 'auto' }}>
                     {aiResult.activities?.map((a, i) => (
@@ -1860,12 +2024,34 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {(aiModalTab === 'text' || aiModalTab === 'photo') && aiResult.activities?.length > 0 ? (
-                  <Button onClick={importAIEntries} style={{ flex: 1 }}>✅ Import to Timeline</Button>
+                  <Button onClick={importAIEntries} style={{ flex: '1 1 140px' }}>✅ Import to Timeline</Button>
                 ) : (
-                  <Button onClick={() => { setShowAIModal(false); setAiResult(null); setIsSaved(false); clearDiaryImage(); }} style={{ flex: 1 }}>Done</Button>
+                  <Button onClick={() => { setShowAIModal(false); setAiResult(null); setIsSaved(false); clearDiaryImage(); }} style={{ flex: '1 1 100px' }}>Done</Button>
                 )}
+                <Button variant="secondary" onClick={() => {
+                  let textToCopy = ''
+                  if (aiResult.rawText) {
+                    textToCopy += `--- Transcribed Diary ---\n${aiResult.rawText}\n\n`
+                  }
+                  if (aiResult.activities?.length) {
+                    textToCopy += `--- Activities ---\n` + aiResult.activities.map(a => `${a.start} - ${a.end}: ${a.name} [${a.category}]`).join('\n') + '\n\n'
+                  }
+                  if (aiResult.shortSummary) {
+                    textToCopy += `--- Summary ---\n${aiResult.shortSummary}\n\n`
+                  }
+                  if (aiResult.detailedAnalysis) {
+                    textToCopy += `--- Analysis ---\n${aiResult.detailedAnalysis}\n\n`
+                  }
+                  if (aiResult.tomorrowActions?.length) {
+                    textToCopy += `--- Action Plan ---\n` + aiResult.tomorrowActions.map((act, i) => `${i+1}. ${act}`).join('\n')
+                  }
+                  navigator.clipboard.writeText(textToCopy.trim())
+                  showToast('All extracted details copied! 📋', 'success')
+                }} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Copy size={13} /> Copy All
+                </Button>
                 <Button variant="secondary" onClick={() => saveAnalysisToJournal(aiResult, selectedDate)} disabled={!aiResult || aiResult.error}>
                   💾 Save to Journal
                 </Button>
