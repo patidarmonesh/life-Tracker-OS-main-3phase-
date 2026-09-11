@@ -18,7 +18,7 @@ const iconMap = {
   goals: Target
 }
 
-const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY || ''
+import { getGeminiApiKey } from '../services/geminiService'
 
 export default function SharedDashboard() {
   const location = useLocation()
@@ -235,7 +235,8 @@ export default function SharedDashboard() {
 
       // AI analysis function
       const runAIAnalysis = async (customQ = '') => {
-        if (!GEMINI_KEY) { setAiAnalysis('⚠️ AI analysis not available (no API key configured)'); return }
+        const apiKey = getGeminiApiKey()
+        if (!apiKey) { setAiAnalysis('⚠️ AI analysis not available — no Gemini API key found. The app owner needs to set one in Settings.'); return }
         setAiLoading(true)
         setAiAnalysis('')
         try {
@@ -248,15 +249,30 @@ export default function SharedDashboard() {
             : `Analyze ${meta.name}'s day (${selectedDate}):\n\n${timeline}\n\nGive a brief analysis (3-4 bullet points max) covering:\n1. What went well\n2. What could improve\n3. One specific actionable suggestion\n\nKeep it concise, friendly, and specific. Reference actual activities by name. Use emojis.`
 
           const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+            'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
             {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+              headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': apiKey,
+              },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.3 },
+              })
             }
           )
           const json = await res.json()
-          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || 'No analysis available'
+          if (!res.ok) {
+            setAiAnalysis('❌ API Error: ' + (json?.error?.message || `Status ${res.status}`))
+            return
+          }
+          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
+          if (!text) {
+            const reason = json?.candidates?.[0]?.finishReason || 'unknown'
+            setAiAnalysis(`⚠️ AI returned empty response (reason: ${reason}). Try rephrasing your question.`)
+            return
+          }
           setAiAnalysis(text)
         } catch (err) {
           setAiAnalysis('❌ Failed to get AI analysis: ' + err.message)
