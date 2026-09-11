@@ -316,7 +316,7 @@ export default function AppShell({ children }) {
   }
 
   const renderFAB = () => {
-    const bottomPos = isMobile ? '88px' : '24px'
+    const bottomPos = isMobile ? '82px' : '28px'
     const rightPos = isMobile ? '16px' : '24px'
 
     const actions = [
@@ -358,6 +358,8 @@ export default function AppShell({ children }) {
             gap: '8px',
             marginBottom: '8px',
             animation: 'fadeInUp 0.2s ease-out forwards',
+            maxHeight: 'calc(100dvh - 200px)',
+            overflowY: 'auto',
           }}>
             {actions.map((act, index) => {
               const Icon = act.icon
@@ -427,8 +429,8 @@ export default function AppShell({ children }) {
             setQuickAddOpen(!quickAddOpen);
           }}
           style={{
-            width: '56px',
-            height: '56px',
+            width: isMobile ? '52px' : '56px',
+            height: isMobile ? '52px' : '56px',
             borderRadius: '50%',
             background: 'linear-gradient(135deg, var(--accent-indigo) 0%, #4F46E5 100%)',
             border: 'none',
@@ -830,7 +832,7 @@ export default function AppShell({ children }) {
           flex: 1,
           overflowY: 'auto',
           WebkitOverflowScrolling: 'touch',
-          paddingBottom: 'calc(72px + env(safe-area-inset-bottom))',
+          paddingBottom: 'calc(76px + env(safe-area-inset-bottom))',
           paddingLeft: 'env(safe-area-inset-left)',
           paddingRight: 'env(safe-area-inset-right)',
         }}>
@@ -856,7 +858,7 @@ export default function AppShell({ children }) {
         <TopBar isMobile={false} />
         <ReconnectBanner />
         {renderFloatingWisdom()}
-        <main style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+        <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
           <div className="page-enter">
             {children}
           </div>

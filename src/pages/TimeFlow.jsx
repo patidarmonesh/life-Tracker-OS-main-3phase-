@@ -4,7 +4,7 @@ import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis } from 'recharts'
-import { Plus, Pencil, Mic, MicOff, MessageSquare, Send, Zap, Target, Sparkles, TrendingUp } from 'lucide-react'
+import { Plus, Pencil, Mic, MicOff, MessageSquare, Send, Zap, Target, Sparkles, TrendingUp, Camera, ImageIcon } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -268,7 +268,11 @@ export default function TimeFlow() {
   const [optimizerResult, setOptimizerResult] = useState(null)
   const [optimizerSaved, setOptimizerSaved] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [diaryImage, setDiaryImage] = useState(null)
+  const [diaryImagePreview, setDiaryImagePreview] = useState(null)
+  const [diaryLoading, setDiaryLoading] = useState(false)
   const recognitionRef = useRef(null)
+  const diaryFileRef = useRef(null)
   const chatEndRef = useRef(null)
   const [form, setForm] = useState({
     name: '', category: defaultCategory, start: '09:00', end: '10:00',
@@ -760,6 +764,134 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
     setShowAIModal(false)
     setFreeText('')
     setAiResult(null)
+  }
+
+  // ── Diary Photo Scanner (Handwriting → Time Entries) ────
+  function handleDiaryImageSelect(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select an image file', 'error')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Image too large (max 10MB)', 'error')
+      return
+    }
+    setDiaryImage(file)
+    setDiaryImagePreview(URL.createObjectURL(file))
+  }
+
+  async function processDiaryPhoto() {
+    if (!diaryImage) return
+    setDiaryLoading(true)
+    setAiResult(null)
+    setIsSaved(false)
+
+    const apiKey = getGeminiApiKey()
+    if (!apiKey) {
+      setDiaryLoading(false)
+      setAiResult({ error: true, message: 'No Gemini API key found. Go to Settings → API Keys.' })
+      return
+    }
+
+    try {
+      // Convert image to base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result.split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(diaryImage)
+      })
+
+      const categoryList = categories.join('|')
+      const prompt = `You are an expert at reading handwritten text from diary/notebook photos. The user has uploaded a photo of their handwritten daily diary/schedule/time log.
+
+TASK: Carefully read ALL the handwritten text in this image and extract structured time entries from it.
+
+The handwriting may be in Hindi, English, or Hinglish (Hindi-English mix). It might contain:
+- Time ranges like "6am-7am", "2 bje se 4 bje", "10:00-12:00"
+- Activities like "padhai ki", "gym gaya", "lunch", "reels dekhe", "coding", "office work"
+- Notes, moods, or reflections
+
+IMPORTANT RULES:
+1. Read EVERY line of handwriting carefully, even if messy
+2. Convert all time references to 24-hour HH:MM format
+3. If only one time is mentioned (e.g., "7am wake up"), estimate a reasonable duration
+4. Categorize each activity into one of: ${categoryList}
+5. Mark waste activities (Social Media, Entertainment, aimless scrolling) as isWaste: true
+6. If you can read any additional notes/reflections, include them
+
+Return ONLY valid JSON, no markdown:
+{
+  "activities": [
+    {
+      "start": "HH:MM",
+      "end": "HH:MM",
+      "name": "activity name (keep user's original language)",
+      "category": "one of: ${categoryList}",
+      "productivityScore": 1-5,
+      "isWaste": boolean,
+      "notes": "any additional notes from the handwriting"
+    }
+  ],
+  "rawText": "The full transcribed text from the handwriting, preserving original language",
+  "insights": ["insight about their day based on what was written"],
+  "shortSummary": "Brief summary of the day based on diary content",
+  "dayScore": 1-10,
+  "totalActivitiesFound": number,
+  "confidence": "high" or "medium" or "low"
+}`
+
+      const res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: prompt },
+                {
+                  inlineData: {
+                    mimeType: diaryImage.type,
+                    data: base64,
+                  }
+                }
+              ]
+            }],
+            generationConfig: { temperature: 0.2 },
+          }),
+        }
+      )
+
+      const data = await res.json()
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      const jsonMatch = raw.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0])
+        setAiResult(parsed)
+        if (parsed.activities?.length > 0) {
+          showToast(`📷 Found ${parsed.activities.length} entries from your diary!`, 'success')
+        }
+      } else {
+        setAiResult({ error: true, message: 'Could not read the handwriting. Try a clearer photo.' })
+      }
+    } catch (err) {
+      console.error(err)
+      setAiResult({ error: true, message: 'Failed to process image. Check your API key and connection.' })
+    }
+    setDiaryLoading(false)
+  }
+
+  function clearDiaryImage() {
+    setDiaryImage(null)
+    if (diaryImagePreview) URL.revokeObjectURL(diaryImagePreview)
+    setDiaryImagePreview(null)
+    if (diaryFileRef.current) diaryFileRef.current.value = ''
   }
 
   // ── AI Quick Add (Chat/Voice) ───────────────────────────
@@ -1398,32 +1530,46 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
       </Modal>
 
       {/* ══ AI ANALYSE MODAL ═══════════════════════════════════ */}
-      <Modal isOpen={showAIModal} onClose={() => { setShowAIModal(false); setAiResult(null); setFreeText(''); setIsSaved(false); }} title="✨ Day Analysis with AI">
+      <Modal isOpen={showAIModal} onClose={() => { setShowAIModal(false); setAiResult(null); setFreeText(''); setIsSaved(false); clearDiaryImage(); }} title="✨ Day Analysis with AI">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
           {/* Modal Tabs */}
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
             <button
               onClick={() => { setAiResult(null); setAiModalTab('auto'); setIsSaved(false); }}
               style={{
-                flex: 1, padding: '10px', border: 'none', background: 'transparent',
+                flex: 1, padding: '10px 6px', border: 'none', background: 'transparent',
                 borderBottom: aiModalTab === 'auto' ? '2px solid var(--accent-indigo)' : '2px solid transparent',
                 color: aiModalTab === 'auto' ? 'var(--accent-indigo)' : 'var(--text-muted)',
-                fontWeight: aiModalTab === 'auto' ? '700' : '400', fontSize: '13px', cursor: 'pointer',
+                fontWeight: aiModalTab === 'auto' ? '700' : '400', fontSize: '12px', cursor: 'pointer',
+                whiteSpace: 'nowrap',
               }}
             >
-              📊 Auto-Analyze Timeline
+              📊 Auto-Analyze
             </button>
             <button
               onClick={() => { setAiResult(null); setAiModalTab('text'); setIsSaved(false); }}
               style={{
-                flex: 1, padding: '10px', border: 'none', background: 'transparent',
+                flex: 1, padding: '10px 6px', border: 'none', background: 'transparent',
                 borderBottom: aiModalTab === 'text' ? '2px solid var(--accent-indigo)' : '2px solid transparent',
                 color: aiModalTab === 'text' ? 'var(--accent-indigo)' : 'var(--text-muted)',
-                fontWeight: aiModalTab === 'text' ? '700' : '400', fontSize: '13px', cursor: 'pointer',
+                fontWeight: aiModalTab === 'text' ? '700' : '400', fontSize: '12px', cursor: 'pointer',
+                whiteSpace: 'nowrap',
               }}
             >
-              ✍️ Plain Text Log Parser
+              ✍️ Text Parser
+            </button>
+            <button
+              onClick={() => { setAiResult(null); setAiModalTab('photo'); setIsSaved(false); }}
+              style={{
+                flex: 1, padding: '10px 6px', border: 'none', background: 'transparent',
+                borderBottom: aiModalTab === 'photo' ? '2px solid var(--accent-indigo)' : '2px solid transparent',
+                color: aiModalTab === 'photo' ? 'var(--accent-indigo)' : 'var(--text-muted)',
+                fontWeight: aiModalTab === 'photo' ? '700' : '400', fontSize: '12px', cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              📷 Diary Photo
             </button>
           </div>
 
@@ -1477,6 +1623,134 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
             </div>
           )}
 
+          {aiModalTab === 'photo' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '12px', borderRadius: '10px', lineHeight: '1.6' }}>
+                📷 Upload a photo of your <strong>handwritten diary/schedule</strong> and AI will read your handwriting and extract time entries automatically.
+                <br /><br />
+                <span style={{ color: 'var(--accent-amber)', fontWeight: '600' }}>Works with:</span> Notebooks, daily planners, to-do lists, handwritten schedules in Hindi or English
+              </div>
+
+              {/* Hidden file input */}
+              <input
+                ref={diaryFileRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleDiaryImageSelect}
+                style={{ display: 'none' }}
+              />
+
+              {!diaryImagePreview ? (
+                /* Upload Area */
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    onClick={() => {
+                      // For camera on mobile
+                      if (diaryFileRef.current) {
+                        diaryFileRef.current.setAttribute('capture', 'environment')
+                        diaryFileRef.current.click()
+                      }
+                    }}
+                    style={{
+                      flex: 1, padding: '24px 16px', borderRadius: '14px',
+                      border: '2px dashed rgba(99,102,241,0.3)',
+                      background: 'rgba(99,102,241,0.06)',
+                      color: 'var(--accent-indigo)',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                      cursor: 'pointer', transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <Camera size={28} />
+                    <span style={{ fontSize: '13px', fontWeight: 700 }}>Take Photo</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Open camera</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      // For gallery selection
+                      if (diaryFileRef.current) {
+                        diaryFileRef.current.removeAttribute('capture')
+                        diaryFileRef.current.click()
+                      }
+                    }}
+                    style={{
+                      flex: 1, padding: '24px 16px', borderRadius: '14px',
+                      border: '2px dashed rgba(139,92,246,0.3)',
+                      background: 'rgba(139,92,246,0.06)',
+                      color: '#A78BFA',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                      cursor: 'pointer', transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <ImageIcon size={28} />
+                    <span style={{ fontSize: '13px', fontWeight: 700 }}>Gallery</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Choose image</span>
+                  </button>
+                </div>
+              ) : (
+                /* Image Preview */
+                <div style={{ position: 'relative' }}>
+                  <img
+                    src={diaryImagePreview}
+                    alt="Diary page"
+                    style={{
+                      width: '100%', maxHeight: '250px', objectFit: 'contain',
+                      borderRadius: '12px', border: '1px solid var(--border)',
+                      background: 'var(--bg-secondary)',
+                    }}
+                  />
+                  <button
+                    onClick={clearDiaryImage}
+                    style={{
+                      position: 'absolute', top: '8px', right: '8px',
+                      width: '28px', height: '28px', borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.7)', border: 'none',
+                      color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', fontSize: '14px',
+                    }}
+                  >
+                    ✕
+                  </button>
+                  <div style={{
+                    marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center',
+                  }}>
+                    {diaryImage?.name} · {(diaryImage?.size / 1024).toFixed(0)} KB
+                  </div>
+                </div>
+              )}
+
+              {diaryImagePreview && !aiResult && (
+                <Button onClick={processDiaryPhoto} disabled={diaryLoading}>
+                  {diaryLoading ? '🔍 Reading your handwriting...' : '📷 Scan & Extract Entries'}
+                </Button>
+              )}
+
+              {/* Transcribed Text */}
+              {aiResult?.rawText && !aiResult.error && (
+                <div style={{
+                  padding: '12px', borderRadius: '10px',
+                  background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)',
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-indigo)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    📝 Transcribed Handwriting
+                    {aiResult.confidence && (
+                      <span style={{
+                        fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
+                        background: aiResult.confidence === 'high' ? 'rgba(16,185,129,0.15)' : aiResult.confidence === 'medium' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
+                        color: aiResult.confidence === 'high' ? '#10B981' : aiResult.confidence === 'medium' ? '#F59E0B' : '#EF4444',
+                      }}>
+                        {aiResult.confidence} confidence
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
+                    {aiResult.rawText}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {aiResult?.error && (
             <div style={{ padding: '12px', background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: '10px', fontSize: '13px', color: '#F43F5E' }}>
               ⚠️ {aiResult.message}
@@ -1516,7 +1790,7 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
               )}
 
               {/* Activities preview */}
-              {aiModalTab === 'text' && aiResult.activities?.length > 0 && (
+              {(aiModalTab === 'text' || aiModalTab === 'photo') && aiResult.activities?.length > 0 && (
                 <div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
                     Extracted {aiResult.activities?.length || 0} Activities
@@ -1587,10 +1861,10 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
               )}
 
               <div style={{ display: 'flex', gap: '8px' }}>
-                {aiModalTab === 'text' && aiResult.activities?.length > 0 ? (
+                {(aiModalTab === 'text' || aiModalTab === 'photo') && aiResult.activities?.length > 0 ? (
                   <Button onClick={importAIEntries} style={{ flex: 1 }}>✅ Import to Timeline</Button>
                 ) : (
-                  <Button onClick={() => { setShowAIModal(false); setAiResult(null); setIsSaved(false); }} style={{ flex: 1 }}>Done</Button>
+                  <Button onClick={() => { setShowAIModal(false); setAiResult(null); setIsSaved(false); clearDiaryImage(); }} style={{ flex: 1 }}>Done</Button>
                 )}
                 <Button variant="secondary" onClick={() => saveAnalysisToJournal(aiResult, selectedDate)} disabled={!aiResult || aiResult.error}>
                   💾 Save to Journal
@@ -1598,6 +1872,8 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
                 <Button variant="secondary" onClick={() => {
                   if (aiModalTab === 'auto') {
                     runAutoTimelineAnalysis()
+                  } else if (aiModalTab === 'photo') {
+                    processDiaryPhoto()
                   } else {
                     analyseWithAI()
                   }

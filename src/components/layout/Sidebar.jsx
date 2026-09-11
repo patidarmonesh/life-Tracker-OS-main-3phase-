@@ -176,15 +176,15 @@ export default function Sidebar() {
                 whiteSpace: 'nowrap',
               })}
               onMouseEnter={e => {
-                const bg = e.currentTarget.style.background
-                if (!bg.includes('18')) {
+                if (!e.currentTarget.style.background.includes('18')) {
                   e.currentTarget.style.background = 'var(--bg-card)'
+                  e.currentTarget.style.boxShadow = '0 0 12px rgba(99,102,241,0.08)'
                 }
               }}
               onMouseLeave={e => {
-                const bg = e.currentTarget.style.background
-                if (bg === 'var(--bg-card)') {
+                if (e.currentTarget.style.background === 'var(--bg-card)') {
                   e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.boxShadow = 'none'
                 }
               }}
             >

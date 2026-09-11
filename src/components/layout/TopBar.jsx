@@ -73,7 +73,7 @@ export default function TopBar({ isMobile = false }) {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: isMobile
-          ? '0 16px 0 16px'
+          ? '0 12px'
           : '0 20px',
         paddingTop: isMobile ? 'env(safe-area-inset-top)' : '0',
         position: 'sticky',
@@ -115,7 +115,7 @@ export default function TopBar({ isMobile = false }) {
       </div>
 
       {/* Right side — Sync + User */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 12, flexShrink: 0 }}>
         {/* Sync indicator — clickable Reconnect when auth expired */}
         {syncStatus === 'auth_required' ? (
           <button

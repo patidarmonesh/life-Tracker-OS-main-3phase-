@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   User, Target, KeyRound, Bell, Palette, Database,
-  Info, Upload, Download, Trash2, Plus, X, Check, Wallet, HardDriveDownload, AlertTriangle, Volume2
+  Info, Upload, Download, Trash2, Plus, X, Check, Wallet, HardDriveDownload, AlertTriangle, Volume2, Share2, Link, Copy, ShieldOff
 } from 'lucide-react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import Card from '../components/ui/Card'
@@ -11,6 +11,7 @@ import { useToast } from '../context/toastContextCore'
 import { getCurrencySymbol, normalizeCurrency } from '../utils/currency'
 import { playSuccessSound, playWarningBeep, playNoticeChime, playSubtleClick } from '../hooks/useAudio'
 import { hapticSuccess, hapticWarning, hapticMedium, hapticLight } from '../hooks/useHaptic'
+import { SHAREABLE_MODULES, makeFilePublic, revokePublicAccess, generateShareLink, getShareConfig } from '../services/shareService'
 
 const AVATARS = ['🧠', '🚀', '💻', '📚', '🎯', '🔥', '⚡', '🌙', '🏋️', '🎵', '🪴', '🧩']
 const DEFAULT_EXPENSE_CATEGORIES = [
@@ -41,6 +42,12 @@ export default function Settings() {
   const [apiStatus, setApiStatus] = useState('')
   const [newAccountName, setNewAccountName] = useState('')
   const [newAccountType, setNewAccountType] = useState('Bank')
+
+  // Share feature state
+  const [shareModules, setShareModules] = useState(() => SHAREABLE_MODULES.map(m => m.key))
+  const [shareLink, setShareLink] = useState(() => getShareConfig()?.link || '')
+  const [shareLoading, setShareLoading] = useState(false)
+  const [isShared, setIsShared] = useState(() => !!getShareConfig()?.link)
 
   const settings = state.settings || {}
   const profile = settings.profile || {
@@ -918,6 +925,199 @@ export default function Settings() {
           }}>
             <AlertTriangle size={14} />
             Importing will replace your current data. Export a backup first.
+          </div>
+        </Card>
+
+        {/* ─── Share My Data ───────────────────────── */}
+        <Card style={{
+          padding: '22px',
+          borderRadius: '20px',
+          background: 'rgba(15,23,42,0.5)',
+          border: '1px solid rgba(148,163,184,0.10)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 12,
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.18), rgba(236,72,153,0.12))',
+              display: 'grid', placeItems: 'center',
+            }}>
+              <Share2 size={18} color="#A78BFA" />
+            </div>
+            <div>
+              <h2 style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: '17px', margin: 0 }}>
+                📤 Share My Data
+              </h2>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '3px 0 0' }}>
+                Share a read-only view with others — no login needed
+              </p>
+            </div>
+          </div>
+
+          {/* Module Selection */}
+          <div style={{ marginBottom: '14px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'block' }}>
+              Select Modules to Share
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px' }}>
+              {SHAREABLE_MODULES.map(mod => {
+                const isSelected = shareModules.includes(mod.key)
+                return (
+                  <button
+                    key={mod.key}
+                    onClick={() => {
+                      playSubtleClick()
+                      setShareModules(prev =>
+                        isSelected ? prev.filter(k => k !== mod.key) : [...prev, mod.key]
+                      )
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      padding: '8px 10px', borderRadius: '10px',
+                      border: `1px solid ${isSelected ? 'rgba(99,102,241,0.35)' : 'var(--border)'}`,
+                      background: isSelected ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
+                      color: isSelected ? '#A5B4FC' : 'var(--text-secondary)',
+                      fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <span>{mod.icon}</span>
+                    <span>{mod.label}</span>
+                    {isSelected && <Check size={12} />}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Generate / Revoke buttons */}
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <Button
+              disabled={shareLoading || shareModules.length === 0}
+              onClick={async () => {
+                setShareLoading(true)
+                try {
+                  // Get file IDs from the Drive cache
+                  const fileIdCache = JSON.parse(localStorage.getItem('lifeos_drive_file_ids') || '{}')
+                  const selectedModules = SHAREABLE_MODULES.filter(m => shareModules.includes(m.key))
+                  const fileIds = []
+                  const moduleKeys = []
+
+                  for (const mod of selectedModules) {
+                    const fileId = fileIdCache[mod.fileName]
+                    if (fileId) {
+                      await makeFilePublic(fileId)
+                      fileIds.push(fileId)
+                      moduleKeys.push(mod.key)
+                    }
+                  }
+
+                  if (fileIds.length === 0) {
+                    showToast('No Drive files found. Sync your data first.', 'warning')
+                    setShareLoading(false)
+                    return
+                  }
+
+                  const userName = profile.name || 'Life OS User'
+                  const link = generateShareLink(fileIds, moduleKeys, userName)
+                  setShareLink(link)
+                  setIsShared(true)
+                  playSuccessSound()
+                  hapticSuccess()
+                  showToast(`Shared ${fileIds.length} modules! Link ready to copy 📤`, 'success')
+                } catch (err) {
+                  showToast('Failed to generate share link: ' + err.message, 'error')
+                  playWarningBeep()
+                } finally {
+                  setShareLoading(false)
+                }
+              }}
+              style={{
+                background: 'linear-gradient(135deg, #6366F1, #8B5CF6)', border: 'none', color: '#fff',
+                padding: '12px 18px', fontSize: '13px', fontWeight: 700,
+              }}
+            >
+              <Link size={14} />
+              {shareLoading ? 'Generating...' : isShared ? 'Regenerate Link' : 'Generate Share Link'}
+            </Button>
+
+            {isShared && (
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  setShareLoading(true)
+                  try {
+                    const fileIdCache = JSON.parse(localStorage.getItem('lifeos_drive_file_ids') || '{}')
+                    const config = getShareConfig()
+                    const fileIds = config?.fileIds || []
+                    for (const fid of fileIds) {
+                      await revokePublicAccess(fid)
+                    }
+                    localStorage.removeItem('lifeos_share_config')
+                    setShareLink('')
+                    setIsShared(false)
+                    playSuccessSound()
+                    hapticSuccess()
+                    showToast('Access revoked — files are private again 🔒', 'success')
+                  } catch (err) {
+                    showToast('Failed to revoke: ' + err.message, 'error')
+                  } finally {
+                    setShareLoading(false)
+                  }
+                }}
+                style={{ padding: '12px 18px', fontSize: '13px', fontWeight: 700 }}
+              >
+                <ShieldOff size={14} />
+                Revoke Access
+              </Button>
+            )}
+          </div>
+
+          {/* Share Link Display */}
+          {shareLink && (
+            <div style={{
+              marginTop: '14px', padding: '12px', borderRadius: '12px',
+              background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)',
+            }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', display: 'block' }}>
+                📋 Your Share Link (anyone with this link can view)
+              </label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  readOnly
+                  value={shareLink}
+                  onClick={e => e.target.select()}
+                  style={{
+                    flex: 1, padding: '8px 12px', borderRadius: '8px',
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                    color: 'var(--text-primary)', fontSize: '12px', fontFamily: 'JetBrains Mono, monospace',
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareLink)
+                    playSubtleClick()
+                    hapticLight()
+                    showToast('Link copied to clipboard! 📋', 'success')
+                  }}
+                  style={{
+                    padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(16,185,129,0.3)',
+                    background: 'rgba(16,185,129,0.1)', color: '#10B981',
+                    fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                  }}
+                >
+                  <Copy size={13} /> Copy
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div style={{
+            marginTop: '12px', padding: '10px 12px', borderRadius: '10px',
+            background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)',
+            fontSize: '12px', color: '#93C5FD', lineHeight: 1.6,
+          }}>
+            💡 The other person just opens the link in any browser — no Google login required. You can revoke access anytime to make your files private again.
           </div>
         </Card>
 

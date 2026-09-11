@@ -541,6 +541,9 @@ Return ONLY valid JSON, no markdown:
         sub: `${formatCurrencyAmount(dailyBudget, currency)} daily budget`,
         color: todaySpend > dailyBudget ? '#FB7185' : '#34D399',
         to: '/finance',
+        progress: dailyBudget > 0 ? Math.min(100, Math.round((todaySpend / dailyBudget) * 100)) : 0,
+        progressColor: todaySpend > dailyBudget ? '#FB7185' : '#34D399',
+        invertProgress: true,
       },
       {
         icon: '📚',
@@ -549,6 +552,8 @@ Return ONLY valid JSON, no markdown:
         sub: `${(studyGoalMins / 60).toFixed(1)}h goal`,
         color: '#60A5FA',
         to: '/study',
+        progress: studyGoalMins > 0 ? Math.min(100, Math.round((studyMins / studyGoalMins) * 100)) : 0,
+        progressColor: '#60A5FA',
       },
       {
         icon: '📱',
@@ -558,6 +563,9 @@ Return ONLY valid JSON, no markdown:
         color:
           wasteMins > (preferences.dailyWasteLimit || 2) * 60 ? '#FB7185' : '#34D399',
         to: '/timeflow',
+        progress: ((preferences.dailyWasteLimit || 2) * 60) > 0 ? Math.min(100, Math.round((wasteMins / ((preferences.dailyWasteLimit || 2) * 60)) * 100)) : 0,
+        progressColor: wasteMins > (preferences.dailyWasteLimit || 2) * 60 ? '#FB7185' : '#F59E0B',
+        invertProgress: true,
       },
       {
         icon: '🏃',
@@ -566,6 +574,8 @@ Return ONLY valid JSON, no markdown:
         sub: `${(preferences.dailyStepGoal || 10000).toLocaleString()} goal`,
         color: '#F472B6',
         to: '/health',
+        progress: (preferences.dailyStepGoal || 10000) > 0 ? Math.min(100, Math.round(((todayHealth.steps || 0) / (preferences.dailyStepGoal || 10000)) * 100)) : 0,
+        progressColor: '#F472B6',
       },
       {
         icon: '🔥',
@@ -579,9 +589,11 @@ Return ONLY valid JSON, no markdown:
         icon: '😴',
         label: 'Sleep',
         value: `${(Number(todayHealth.sleepHours) || 0).toFixed(1)}h`,
-        sub: 'last night',
+        sub: `${preferences.sleepGoal || 8}h goal`,
         color: '#A78BFA',
         to: '/health',
+        progress: (preferences.sleepGoal || 8) > 0 ? Math.min(100, Math.round(((Number(todayHealth.sleepHours) || 0) / (preferences.sleepGoal || 8)) * 100)) : 0,
+        progressColor: '#A78BFA',
       },
       {
         icon: '💧',
@@ -590,6 +602,8 @@ Return ONLY valid JSON, no markdown:
         sub: `${waterGoal} ml goal`,
         color: '#60A5FA',
         to: '/health',
+        progress: waterGoal > 0 ? Math.min(100, Math.round((todayWaterTotal / waterGoal) * 100)) : 0,
+        progressColor: todayWaterTotal >= waterGoal ? '#10B981' : '#60A5FA',
       },
     ],
     [
@@ -600,6 +614,7 @@ Return ONLY valid JSON, no markdown:
       wasteMins,
       preferences.dailyWasteLimit,
       preferences.dailyStepGoal,
+      preferences.sleepGoal,
       todayHealth.steps,
       todayHealth.sleepHours,
       bestStreak,
@@ -625,7 +640,7 @@ Return ONLY valid JSON, no markdown:
   }, [showConfetti]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div style={{ padding: '0 0 24px', maxWidth: '1120px', margin: '0 auto', position: 'relative' }}>
+    <div className="page-enter" style={{ padding: '0 0 24px', maxWidth: '1120px', margin: '0 auto', position: 'relative' }}>
       {/* Confetti overlay */}
       {showConfetti && (
         <div
@@ -656,7 +671,7 @@ Return ONLY valid JSON, no markdown:
           ))}
         </div>
       )}
-      <div style={{ padding: '28px 24px 12px' }}>
+      <div style={{ padding: isCompactHero ? '20px 16px 10px' : '28px 24px 12px' }}>
         <section
           style={{
             position: 'relative',
@@ -664,7 +679,7 @@ Return ONLY valid JSON, no markdown:
             borderRadius: '28px',
             padding: isCompactHero ? '22px' : '28px',
             display: 'grid',
-            gridTemplateColumns: isCompactHero ? '1fr' : 'minmax(0, 1.45fr) minmax(250px, 320px)',
+            gridTemplateColumns: isCompactHero ? '1fr' : 'minmax(0, 1.45fr) minmax(220px, 300px)',
             gap: '24px',
             alignItems: 'center',
             background:
@@ -863,7 +878,7 @@ Return ONLY valid JSON, no markdown:
         </section>
       </div>
 
-      <div style={{ padding: '8px 24px 20px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+      <div className="stagger-in" style={{ padding: isCompactHero ? '8px 16px 20px' : '8px 24px 20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
         {/* AI Alert Chips */}
         {alertChips.length > 0 && (
@@ -914,7 +929,7 @@ Return ONLY valid JSON, no markdown:
             </span>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px', width: '100%' }}>
             {[1, 2, 3, 4, 5].map((lvl) => {
               const config = {
                 1: { emoji: '😴', label: 'Exhausted', color: '#3B82F6' },
@@ -931,7 +946,6 @@ Return ONLY valid JSON, no markdown:
                   type="button"
                   onClick={() => setEnergyLevel(lvl)}
                   style={{
-                    flex: '1 1 70px',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -1054,16 +1068,17 @@ Return ONLY valid JSON, no markdown:
         <section
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-            gap: '14px',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))',
+            gap: '12px',
           }}
         >
-          {metrics.map(({ icon, label, value, sub, color, to }) => (
+          {metrics.map(({ icon, label, value, sub, color, to, progress, progressColor }) => (
             <Card
               key={label}
               onClick={() => navigate(to)}
+              className="metric-card-hover"
               style={{
-                padding: '18px',
+                padding: '16px',
                 cursor: 'pointer',
                 borderRadius: '18px',
                 background: 'rgba(15,23,42,0.48)',
@@ -1080,7 +1095,18 @@ Return ONLY valid JSON, no markdown:
                 }}
               >
                 <div style={{ fontSize: '22px' }}>{icon}</div>
-                <ArrowRight size={16} color="var(--text-muted)" />
+                {progress !== undefined && (
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: progress >= 100 ? '#10B981' : 'var(--text-muted)',
+                    padding: '2px 6px',
+                    borderRadius: '6px',
+                    background: progress >= 100 ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
+                  }}>
+                    {progress}%
+                  </span>
+                )}
               </div>
 
               <div
@@ -1089,7 +1115,7 @@ Return ONLY valid JSON, no markdown:
                   fontWeight: 800,
                   fontFamily: 'JetBrains Mono, monospace',
                   color,
-                  marginTop: '16px',
+                  marginTop: '14px',
                 }}
               >
                 {value}
@@ -1102,6 +1128,26 @@ Return ONLY valid JSON, no markdown:
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
                 {sub}
               </div>
+
+              {/* Progress bar */}
+              {progress !== undefined && (
+                <div style={{
+                  height: '4px',
+                  borderRadius: '999px',
+                  background: 'rgba(255,255,255,0.06)',
+                  overflow: 'hidden',
+                  marginTop: '10px',
+                }}>
+                  <div style={{
+                    width: `${Math.min(100, progress)}%`,
+                    height: '100%',
+                    borderRadius: '999px',
+                    background: progressColor || color,
+                    transition: 'width 0.6s ease',
+                  }} />
+                </div>
+              )}
+
               {label === 'Water Log' && (
                 <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }} onClick={e => e.stopPropagation()}>
                    <button
@@ -1153,6 +1199,151 @@ Return ONLY valid JSON, no markdown:
         >
           <BadgeGrid />
         </Card>
+
+        {/* ── Today's Timeline Mini-View ────────────────── */}
+        {todayTimeEntries.length > 0 && (
+          <Card
+            style={{
+              padding: '16px 18px',
+              borderRadius: '18px',
+              background: 'rgba(15,23,42,0.48)',
+              border: '1px solid rgba(148,163,184,0.10)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: '15px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                ⏱️ Today's Timeline
+              </h3>
+              <button
+                onClick={() => navigate('/timeflow')}
+                style={{ fontSize: '11px', color: 'var(--accent-indigo)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                View All →
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {todayTimeEntries.slice(0, 4).map((entry, i) => (
+                <div
+                  key={entry.id || i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '8px 10px',
+                    borderRadius: '10px',
+                    background: entry.isWaste ? 'rgba(244,63,94,0.06)' : 'rgba(16,185,129,0.04)',
+                    border: `1px solid ${entry.isWaste ? 'rgba(244,63,94,0.12)' : 'rgba(148,163,184,0.08)'}`,
+                  }}
+                >
+                  <div style={{
+                    width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
+                    background: entry.isWaste ? '#FB7185' : '#34D399',
+                  }} />
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, flexShrink: 0, minWidth: '42px' }}>
+                    {entry.startTime || entry.time || '--:--'}
+                  </span>
+                  <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {entry.activity || entry.category || 'Activity'}
+                  </span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, flexShrink: 0 }}>
+                    {entry.durationMinutes ? `${entry.durationMinutes}m` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {/* ── Today's Journal Preview ──────────────────── */}
+        {(() => {
+          const todayJournal = (state.journal?.entries || []).find(e => e.date === today)
+          if (!todayJournal) return null
+          return (
+            <Card
+              onClick={() => navigate('/journal')}
+              className="metric-card-hover"
+              style={{
+                padding: '16px 18px',
+                borderRadius: '18px',
+                background: 'rgba(15,23,42,0.48)',
+                border: '1px solid rgba(148,163,184,0.10)',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                <span style={{ fontSize: '18px' }}>📝</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {todayJournal.title || 'Journal Entry'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Mood: {'😐😟🙂😊😄'.split(/(?=.)/u)[todayJournal.mood - 1] || '🙂'} {todayJournal.mood}/5
+                    {todayJournal.energy ? ` · Energy: ${todayJournal.energy}/5` : ''}
+                  </div>
+                </div>
+                <ArrowRight size={14} color="var(--text-muted)" />
+              </div>
+              <p style={{
+                fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0,
+                overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+              }}>
+                {todayJournal.content?.replace(/[#*>\[\]`]/g, '').slice(0, 200) || 'No content'}
+              </p>
+            </Card>
+          )
+        })()}
+
+        {/* ── Weekly Quick Stats Row ───────────────────── */}
+        {(() => {
+          const last7days = Array.from({ length: 7 }, (_, i) => {
+            const d = new Date()
+            d.setDate(d.getDate() - i)
+            return d.toISOString().split('T')[0]
+          })
+          const weekJournals = (state.journal?.entries || []).filter(e => last7days.includes(e.date)).length
+          const weekStudyMins = (state.study?.sessions || [])
+            .filter(s => last7days.includes(s.date))
+            .reduce((a, s) => a + (Number(s.durationMinutes) || 0), 0)
+          const weekSpend = (state.finance?.expenses || [])
+            .filter(e => last7days.includes(e.date))
+            .reduce((a, e) => a + (Number(e.amount) || 0), 0)
+          const weekHabitDone = (state.habits?.dailyLogs || [])
+            .filter(l => last7days.includes(l.date) && l.status === 'done').length
+
+          return (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+              gap: '10px',
+            }}>
+              {[
+                { icon: '📝', label: 'Journals', value: weekJournals, sub: 'this week', color: '#8B5CF6' },
+                { icon: '📚', label: 'Study', value: `${(weekStudyMins / 60).toFixed(1)}h`, sub: 'this week', color: '#60A5FA' },
+                { icon: '💸', label: 'Spending', value: formatCurrencyAmount(weekSpend, currency), sub: 'this week', color: '#FB7185' },
+                { icon: '✅', label: 'Habits Done', value: weekHabitDone, sub: 'this week', color: '#10B981' },
+              ].map(stat => (
+                <div
+                  key={stat.label}
+                  style={{
+                    padding: '14px',
+                    borderRadius: '14px',
+                    background: 'rgba(15,23,42,0.48)',
+                    border: '1px solid rgba(148,163,184,0.08)',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div style={{ fontSize: '16px', marginBottom: '6px' }}>{stat.icon}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'JetBrains Mono, monospace', color: stat.color }}>
+                    {stat.value}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 600 }}>
+                    {stat.label} · {stat.sub}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
 
         <div
           style={{

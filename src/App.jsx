@@ -36,6 +36,7 @@ const ReadingTracker = lazy(() => import('./pages/ReadingTracker'))
 const Meditation = lazy(() => import('./pages/Meditation'))
 const YearInReview = lazy(() => import('./pages/YearInReview'))
 const FocusMode = lazy(() => import('./pages/FocusMode'))
+const SharedDashboard = lazy(() => import('./pages/SharedDashboard'))
 
 
 function LoadingScreen() {
@@ -149,6 +150,11 @@ function AppRoutes() {
       <Route path="/meditations" element={<ShellPage><Meditation /></ShellPage>} />
       <Route path="/wrapped" element={<ShellPage><YearInReview /></ShellPage>} />
       <Route path="/focus" element={<ShellPage><FocusMode /></ShellPage>} />
+      <Route path="/shared" element={
+        <Suspense fallback={<LoadingScreen />}>
+          <SharedDashboard />
+        </Suspense>
+      } />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

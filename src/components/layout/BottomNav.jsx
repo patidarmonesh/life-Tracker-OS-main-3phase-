@@ -112,9 +112,9 @@ export default function BottomNav() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.55)',
-            backdropFilter: 'blur(4px)',
-            WebkitBackdropFilter: 'blur(4px)',
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             zIndex: 150,
             WebkitTapHighlightColor: 'transparent',
             animation: 'modalBackdropFadeIn 0.2s ease',
@@ -135,9 +135,9 @@ export default function BottomNav() {
             left: 0,
             right: 0,
             zIndex: 160,
-            background: 'var(--bg-card)',
+            background: 'rgba(15,23,42,0.98)',
             borderTop: '1px solid rgba(148,163,184,0.12)',
-            borderRadius: '24px 24px 0 0',
+            borderRadius: '22px 22px 0 0',
             padding: '8px 16px calc(16px + env(safe-area-inset-bottom))',
             animation: 'drawerSlideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
             boxShadow: '0 -20px 60px rgba(0,0,0,0.3)',
@@ -146,12 +146,11 @@ export default function BottomNav() {
           {/* Drag handle */}
           <div
             style={{
-              width: 40,
+              width: 36,
               height: 4,
               borderRadius: 2,
-              background: 'var(--text-muted)',
-              margin: '4px auto 12px',
-              opacity: 0.5,
+              background: 'rgba(148,163,184,0.3)',
+              margin: '0 auto 14px',
             }}
           />
 
@@ -193,8 +192,8 @@ export default function BottomNav() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: 10,
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: 8,
             }}
           >
             {moreTabs.map(({ to, icon: Icon, label, color }) => {
@@ -211,7 +210,7 @@ export default function BottomNav() {
                     justifyContent: 'center',
                     gap: 6,
                     padding: '14px 6px',
-                    minHeight: 72,
+                    minHeight: 66,
                     borderRadius: 16,
                     border: `1px solid ${isActive ? (color || 'var(--accent-indigo)') + '44' : 'var(--border)'}`,
                     background: isActive
@@ -219,7 +218,7 @@ export default function BottomNav() {
                       : 'rgba(255,255,255,0.03)',
                     color: isActive ? (color || 'var(--accent-indigo)') : 'var(--text-secondary)',
                     cursor: 'pointer',
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: 600,
                     WebkitTapHighlightColor: 'transparent',
                     transition: 'all 0.15s ease',
@@ -241,11 +240,11 @@ export default function BottomNav() {
           bottom: 0,
           left: 0,
           right: 0,
-          height: 64,
-          background: 'linear-gradient(180deg, rgba(17,24,39,0.88) 0%, rgba(10,15,30,0.95) 100%)',
-          backdropFilter: 'blur(24px) saturate(200%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(200%)',
-          borderTop: '1px solid rgba(99,102,241,0.06)',
+          height: 66,
+          background: 'rgba(10,15,30,0.92)',
+          backdropFilter: 'blur(20px) saturate(1.5)',
+          WebkitBackdropFilter: 'blur(20px) saturate(1.5)',
+          borderTop: '1px solid rgba(148,163,184,0.06)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-around',
@@ -278,20 +277,16 @@ export default function BottomNav() {
           >
             {({ isActive }) => (
               <>
-                {/* Active indicator pill — Material 3 style */}
-                {isActive && (
-                  <div style={{
-                    position: 'absolute',
-                    top: 2,
-                    width: 32,
-                    height: 3,
-                    borderRadius: 3,
-                    background: 'var(--accent-indigo)',
-                    animation: 'fadeSlideIn 0.2s ease',
-                  }} />
-                )}
                 <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
                 <span>{label}</span>
+                {isActive && (
+                  <div style={{
+                    width: '4px', height: '4px', borderRadius: '50%',
+                    background: 'var(--accent-indigo)',
+                    marginTop: '3px',
+                    boxShadow: '0 0 8px rgba(99,102,241,0.6)',
+                  }} />
+                )}
               </>
             )}
           </NavLink>
@@ -322,20 +317,16 @@ export default function BottomNav() {
             WebkitTapHighlightColor: 'transparent',
           }}
         >
-          {/* Active indicator for More */}
-          {(isMoreActive && !drawerOpen) && (
-            <div style={{
-              position: 'absolute',
-              top: 2,
-              width: 32,
-              height: 3,
-              borderRadius: 3,
-              background: 'var(--accent-indigo)',
-              animation: 'fadeSlideIn 0.2s ease',
-            }} />
-          )}
           <MoreHorizontal size={20} strokeWidth={isMoreActive || drawerOpen ? 2.5 : 2} />
           <span>{currentMorePage ? currentMorePage.label : 'More'}</span>
+          {(isMoreActive || drawerOpen) && (
+            <div style={{
+              width: '4px', height: '4px', borderRadius: '50%',
+              background: 'var(--accent-indigo)',
+              marginTop: '3px',
+              boxShadow: '0 0 8px rgba(99,102,241,0.6)',
+            }} />
+          )}
         </button>
       </nav>
     </>
