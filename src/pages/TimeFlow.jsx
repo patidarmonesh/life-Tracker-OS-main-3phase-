@@ -788,7 +788,40 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
       })
       .filter(e => e.durationMinutes > 0)
 
-    setModule('timeflow', { ...state.timeflow, entries: [...allEntries.filter(e => e.date !== selectedDate), ...newEntries] })
+    // ── MERGE: Keep existing entries, only add non-overlapping new ones ──
+    const existingToday = allEntries.filter(e => e.date === selectedDate)
+    const entriesOtherDays = allEntries.filter(e => e.date !== selectedDate)
+
+    // Helper: convert "HH:MM" to minutes since midnight
+    const toMins = (t) => {
+      if (!t) return 0
+      const [h, m] = t.split(':').map(Number)
+      return h * 60 + m
+    }
+
+    // Check if two time ranges overlap (more than 10 min overlap = duplicate)
+    const isOverlapping = (a, b) => {
+      const aStart = toMins(a.start), aEnd = toMins(a.end)
+      const bStart = toMins(b.start), bEnd = toMins(b.end)
+      const overlapStart = Math.max(aStart, bStart)
+      const overlapEnd = Math.min(aEnd, bEnd)
+      return (overlapEnd - overlapStart) > 10 // >10 min overlap = same entry
+    }
+
+    // Filter out new entries that overlap with existing entries
+    const genuinelyNew = newEntries.filter(newEntry =>
+      !existingToday.some(existing => isOverlapping(existing, newEntry))
+    )
+
+    if (genuinelyNew.length === 0 && newEntries.length > 0) {
+      showToast('All entries already exist in your timeline!', 'info')
+    } else if (genuinelyNew.length < newEntries.length) {
+      showToast(`✅ Added ${genuinelyNew.length} new entries (${newEntries.length - genuinelyNew.length} duplicates skipped)`, 'success')
+    } else {
+      showToast(`✅ Imported ${genuinelyNew.length} entries to timeline!`, 'success')
+    }
+
+    setModule('timeflow', { ...state.timeflow, entries: [...entriesOtherDays, ...existingToday, ...genuinelyNew] })
     setShowAIModal(false)
     setFreeText('')
     setAiResult(null)
