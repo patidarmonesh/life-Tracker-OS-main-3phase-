@@ -1,53 +1,70 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
+import { hapticLight } from '../../hooks/useHaptic'
 
 export default function Modal({ isOpen, onClose, title, children }) {
   const backdropRef = useRef(null)
   const contentRef = useRef(null)
+  const [rendered, setRendered] = useState(false)
+  const [closing, setClosing] = useState(false)
+
+  const handleClose = useCallback(() => {
+    hapticLight()
+    setClosing(true)
+    setTimeout(() => {
+      setClosing(false)
+      setRendered(false)
+      document.body.style.overflow = ''
+      onClose?.()
+    }, 220)
+  }, [onClose])
 
   const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Escape') onClose?.()
-  }, [onClose])
+    if (e.key === 'Escape') handleClose()
+  }, [handleClose])
 
   useEffect(() => {
     if (isOpen) {
+      setRendered(true)
+      setClosing(false)
       document.addEventListener('keydown', handleKeyDown)
       document.body.style.overflow = 'hidden'
       return () => {
         document.removeEventListener('keydown', handleKeyDown)
-        document.body.style.overflow = ''
       }
     }
   }, [isOpen, handleKeyDown])
 
   useEffect(() => {
-    if (isOpen && contentRef.current) {
+    if (rendered && !closing && contentRef.current) {
       contentRef.current.focus()
     }
-  }, [isOpen])
+  }, [rendered, closing])
 
-  if (!isOpen) return null
+  if (!rendered && !isOpen) return null
 
   return (
     <div
       ref={backdropRef}
-      onClick={onClose}
+      onClick={handleClose}
       role="dialog"
       aria-modal="true"
       aria-label={title}
       className="modal-backdrop"
       style={{
         position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.6)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
+        background: closing ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,0.6)',
+        backdropFilter: closing ? 'blur(0px)' : 'blur(16px)',
+        WebkitBackdropFilter: closing ? 'blur(0px)' : 'blur(16px)',
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'center',
         zIndex: 1000,
         padding: '20px 16px',
         overflowY: 'auto',
-        animation: 'modalBackdropFadeIn 0.25s ease',
+        opacity: closing ? 0 : 1,
+        transition: 'all 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
+        animation: closing ? 'none' : 'modalBackdropFadeIn 0.25s ease',
       }}
     >
       <div
@@ -63,10 +80,13 @@ export default function Modal({ isOpen, onClose, title, children }) {
           width: '100%', maxWidth: '500px',
           margin: 'auto',
           maxHeight: 'none',
-          animation: 'modalFadeIn 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
           outline: 'none',
-          boxShadow: '0 25px 80px rgba(0,0,0,0.45), 0 0 0 1px rgba(99,102,241,0.04)',
+          boxShadow: '0 25px 80px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
           WebkitTapHighlightColor: 'transparent',
+          transform: closing ? 'scale(0.95) translateY(12px)' : 'scale(1) translateY(0)',
+          opacity: closing ? 0 : 1,
+          transition: 'all 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
+          animation: closing ? 'none' : 'modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
         {/* Header */}
@@ -77,7 +97,7 @@ export default function Modal({ isOpen, onClose, title, children }) {
         }}>
           <h2 style={{ fontSize: '16px', fontWeight: '800', fontFamily: 'Syne, sans-serif', letterSpacing: '-0.01em', margin: 0 }}>{title}</h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="Close modal"
             style={{
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',

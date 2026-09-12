@@ -611,12 +611,11 @@ export default function SharedDashboard() {
         gap: 24,
         flex: 1
       }}>
-        <header style={{
+        <header className="glass-card-premium" style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          paddingBottom: 24,
-          borderBottom: '1px solid rgba(148,163,184,0.10)'
+          padding: 24
         }}>
           <div>
             <h1 style={{ fontFamily: 'Syne', margin: '0 0 8px 0', fontSize: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -632,7 +631,7 @@ export default function SharedDashboard() {
             )}
           </div>
           <div style={{
-            background: 'rgba(99,102,241,0.1)',
+            background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.15))',
             color: 'var(--accent-indigo)',
             padding: '4px 12px',
             borderRadius: 100,

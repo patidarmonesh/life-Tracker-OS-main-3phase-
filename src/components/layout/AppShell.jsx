@@ -8,7 +8,7 @@ import CommandPalette from '../ui/CommandPalette'
 import PWAInstallPrompt from '../ui/PWAInstallPrompt'
 import ReconnectBanner from '../ui/ReconnectBanner'
 import { useAppState, useAppActions } from '../../context/appHooks'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Sparkles, Plus, DollarSign, Clock, CheckSquare, Brain, X, Droplet, Mic, MicOff } from 'lucide-react'
 import { useToast } from '../../context/toastContextCore'
 import { playSuccessSound, playSubtleClick, playWarningBeep } from '../../hooks/useAudio'
@@ -25,6 +25,7 @@ export default function AppShell({ children }) {
   )
   const state = useAppState()
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
@@ -836,7 +837,7 @@ export default function AppShell({ children }) {
           paddingLeft: 'env(safe-area-inset-left)',
           paddingRight: 'env(safe-area-inset-right)',
         }}>
-          <div className="page-enter">
+          <div className="page-enter" key={location.pathname}>
             {children}
           </div>
         </main>
@@ -859,7 +860,7 @@ export default function AppShell({ children }) {
         <ReconnectBanner />
         {renderFloatingWisdom()}
         <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
-          <div className="page-enter">
+          <div className="page-enter" key={location.pathname}>
             {children}
           </div>
         </main>

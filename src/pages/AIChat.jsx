@@ -1238,65 +1238,125 @@ export default function AIChat() {
         )}
 
         {messages.length > 0 &&
-          messages.map(msg => {
+          messages.map((msg, idx) => {
             const isUser = msg.role === 'user'
 
             return (
               <div
                 key={msg.id}
+                className="ai-message-enter"
                 style={{
                   alignSelf: isUser ? 'flex-end' : 'flex-start',
-                  maxWidth: '78%',
-                  background: isUser ? 'var(--accent-indigo)' : 'var(--bg-card)',
-                  color: isUser ? '#fff' : 'var(--text-primary)',
-                  border: isUser ? 'none' : '1px solid var(--border)',
-                  borderRadius: '16px',
-                  padding: '12px 14px',
+                  maxWidth: isUser ? '78%' : '88%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: isUser ? 'flex-end' : 'flex-start',
                 }}
               >
+                {/* Sender label */}
                 <div
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    marginBottom: '6px',
-                    fontSize: '12px',
-                    opacity: 0.9,
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    color: 'var(--text-muted)',
+                    marginBottom: '5px',
+                    paddingLeft: isUser ? 0 : '4px',
+                    paddingRight: isUser ? '4px' : 0,
                   }}
                 >
-                  {isUser ? <User size={13} /> : <Bot size={13} />}
-                  <span>{isUser ? 'You' : 'Life OS AI'}</span>
+                  {isUser ? 'You' : '🤖 Life OS Copilot'}
                 </div>
 
+                {/* Bubble */}
                 <div
                   style={{
-                    fontSize: '14px',
-                    lineHeight: '1.6',
-                    whiteSpace: 'pre-wrap',
+                    background: isUser
+                      ? 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)'
+                      : 'rgba(26, 34, 53, 0.85)',
+                    color: '#F8FAFC',
+                    border: isUser ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                    padding: '14px 16px',
+                    backdropFilter: isUser ? 'none' : 'blur(16px)',
+                    WebkitBackdropFilter: isUser ? 'none' : 'blur(16px)',
+                    boxShadow: isUser
+                      ? '0 4px 14px rgba(99,102,241,0.25)'
+                      : '0 4px 16px rgba(0,0,0,0.2)',
                   }}
                 >
-                  {msg.content}
+                  <div
+                    style={{
+                      fontSize: '13.5px',
+                      lineHeight: '1.65',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {msg.content}
+                  </div>
                 </div>
+
+                {/* Copy action for AI messages */}
+                {!isUser && (
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(msg.content)
+                      showToast('Copied!', 'success')
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      fontSize: '11px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      padding: '4px 8px',
+                      marginTop: '4px',
+                      borderRadius: '6px',
+                      transition: 'color 0.15s ease',
+                    }}
+                  >
+                    📋 Copy
+                  </button>
+                )}
               </div>
             )
           })}
 
         {loading && (
           <div
+            className="ai-message-enter"
             style={{
               alignSelf: 'flex-start',
-              maxWidth: '78%',
-              background: 'var(--bg-card)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border)',
-              borderRadius: '16px',
-              padding: '12px 14px',
+              maxWidth: '88%',
             }}
           >
-            <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '6px' }}>
-              Life OS AI
+            <div
+              style={{
+                fontSize: '11px',
+                fontWeight: '700',
+                color: 'var(--text-muted)',
+                marginBottom: '5px',
+                paddingLeft: '4px',
+              }}
+            >
+              🤖 Life OS Copilot
             </div>
-            <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Thinking...</div>
+            <div
+              className="thinking-block"
+              style={{
+                padding: '14px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <span style={{ fontSize: '14px' }}>🧠</span>
+              <span style={{ fontSize: '13px', color: '#A5B4FC', fontWeight: '600' }}>
+                Analyzing your data...
+              </span>
+              <span className="ai-cursor" />
+            </div>
           </div>
         )}
       </div>

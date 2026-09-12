@@ -1,3 +1,5 @@
+import { hapticLight } from '../../hooks/useHaptic'
+
 const variants = {
   primary: { background: 'linear-gradient(135deg, #6366F1, #7C3AED)', color: '#fff', border: 'none', boxShadow: '0 4px 14px rgba(99,102,241,0.25)' },
   secondary: { background: 'rgba(255,255,255,0.04)', color: 'var(--text-primary)', border: '1px solid var(--border)', boxShadow: 'none' },
@@ -9,7 +11,10 @@ export default function Button({ children, variant = 'primary', onClick, disable
   return (
     <button
       type={type}
-      onClick={onClick}
+      onClick={e => {
+        if (!disabled) hapticLight()
+        onClick?.(e)
+      }}
       disabled={disabled}
       className={`ripple-btn ${className}`}
       style={{
@@ -21,7 +26,7 @@ export default function Button({ children, variant = 'primary', onClick, disable
         fontFamily: 'DM Sans, sans-serif',
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.45 : 1,
-        transition: 'all 0.2s cubic-bezier(0.32, 0.72, 0, 1)',
+        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -30,6 +35,20 @@ export default function Button({ children, variant = 'primary', onClick, disable
         WebkitTapHighlightColor: 'transparent',
         userSelect: 'none',
         ...style,
+      }}
+      onPointerDown={e => {
+        if (!disabled) {
+          e.currentTarget.style.transform = 'scale(0.96) translateY(1px)'
+          e.currentTarget.style.filter = 'brightness(0.92)'
+        }
+      }}
+      onPointerUp={e => {
+        e.currentTarget.style.transform = 'scale(1) translateY(0)'
+        e.currentTarget.style.filter = 'brightness(1)'
+      }}
+      onPointerLeave={e => {
+        e.currentTarget.style.transform = 'scale(1) translateY(0)'
+        e.currentTarget.style.filter = 'brightness(1)'
       }}
       onMouseEnter={e => {
         if (!disabled) {

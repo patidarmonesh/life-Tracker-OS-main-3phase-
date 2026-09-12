@@ -234,19 +234,25 @@ function LiveClock({ productiveMins, wasteMins, unloggedMins }) {
 
 function StatCard({ label, value, color }) {
   return (
-    <div style={{
-      padding: '16px',
-      borderRadius: '16px',
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '6px',
-    }}>
-      <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+    <div
+      className="stat-card-premium metric-card-hover"
+      style={{
+        '--stat-accent': color,
+        padding: '16px',
+        borderRadius: '16px',
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+      }}
+    >
+      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
         {label}
       </div>
-      <div style={{ fontSize: '20px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color }}>
+      <div className="metric-value" style={{ fontSize: '20px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color }}>
         {value}
       </div>
     </div>
