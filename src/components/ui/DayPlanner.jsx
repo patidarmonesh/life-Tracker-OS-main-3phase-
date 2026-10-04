@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid'
 import { ChevronDown } from 'lucide-react'
 import { useAppActions, useAppState } from '../../context/appHooks'
 import { useToast } from '../../context/toastContextCore'
-import { draftDayPlan } from '../../services/geminiService'
+import { draftDayPlan, draftActualLogs } from '../../services/geminiService'
 import { slotFingerprint } from '../../services/calendarService'
 import { durationMinutes, planComparison, timeMinutes, validateSlots, WASTE_CATEGORIES } from '../../utils/planning'
 import { normalizeTimezone, getTodayDateKey } from '../../utils/dateTime'
@@ -40,6 +40,7 @@ export default function DayPlanner({ date, categories }) {
   const entries = (state.timeflow?.entries || []).filter(e => e.date === date)
   const comparison = planComparison(plans, entries)
   const [open, setOpen] = useState(false)
+  const [actualsOpen, setActualsOpen] = useState(false)
   const [expanded, setExpanded] = useState(null)
   const [draftDate, setDraftDate] = useState(date)
   const [draft, setDraft] = useState([])
@@ -77,6 +78,74 @@ export default function DayPlanner({ date, categories }) {
       validateSlots(slots)
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
+
+  async function generateActuals() {
+    setBusy(true); setError('')
+    try {
+      const result = await draftActualLogs({ text, image: photo, date: draftDate, categories, tentativePlans: plans })
+      
+      const newEntries = []
+      const sessions = []
+      const updatedAt = new Date().toISOString()
+      
+      for (const act of result.actuals) {
+        if (!act.start || !act.end) continue;
+        const actualId = uuid()
+        const isStudy = act.category === 'Study'
+        const studySessionId = isStudy ? `plan-study-${actualId}` : null
+        
+        newEntries.push({
+          id: actualId,
+          date: draftDate,
+          start: act.start,
+          end: act.end,
+          name: act.name?.trim() || act.category,
+          category: act.category,
+          durationMinutes: durationMinutes(act.start, act.end),
+          planSlotId: act.planSlotId,
+          planOutcome: act.planOutcome || 'followed',
+          deviationReason: act.deviationReason?.trim() || '',
+          isWaste: WASTE_CATEGORIES.includes(act.category),
+          productivityScore: 3,
+          mood: 3,
+          source: 'auto-diary',
+          createdAt: updatedAt,
+          updatedAt,
+          studySessionId
+        })
+        
+        if (isStudy) {
+          sessions.push({
+            id: studySessionId,
+            date: draftDate,
+            subject: 'Other',
+            topic: act.name?.trim() || act.category,
+            durationMinutes: durationMinutes(act.start, act.end),
+            focusType: 'Deep Focus',
+            rating: 3,
+            notes: act.deviationReason?.trim() || '',
+            source: 'auto-diary',
+            createdAt: updatedAt,
+            updatedAt
+          })
+        }
+      }
+
+      if (!newEntries.length) throw new Error('No valid actual timings found in image.')
+
+      setModule('timeflow', current => ({
+        ...current,
+        entries: [...(current.entries || []), ...newEntries],
+        subjects: current.subjects || [],
+        studySessions: [...(current.studySessions || []), ...sessions]
+      }))
+      
+      setActualsOpen(false)
+      showToast(`Logged ${newEntries.length} actuals from diary!`, 'success')
+      
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
   function updateSlot(id, key, value) { setDraft(items => items.map(s => s.id === id ? { ...s, [key]: value } : s)) }
   function savePlan() {
     try {
@@ -154,7 +223,10 @@ export default function DayPlanner({ date, categories }) {
         </span>
         <ChevronDown size={18} style={{ flexShrink: 0, color: 'var(--text-muted)', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s ease' }} />
       </button>
-      <Button data-edit-action onClick={editPlan} variant="secondary" style={{ padding: '9px 14px' }}>{plans.length ? 'Edit plan' : 'Plan my day'}</Button>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        {plans.length > 0 && <Button data-edit-action onClick={() => { setActualsOpen(true); setText(''); setPhoto(null); setError('') }} variant="secondary" style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>Log actuals</Button>}
+        <Button data-edit-action onClick={editPlan} variant="secondary" style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>{plans.length ? 'Edit plan' : 'Plan my day'}</Button>
+      </div>
     </div>
     {isOpen && <div id="day-plan-body" style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)' }}>
     <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0' }}>Diary photo or typed notes → editable plan → Calendar reminders → actual check-ins.</p>
@@ -199,7 +271,32 @@ export default function DayPlanner({ date, categories }) {
     </div>}
     <Modal isOpen={open} onClose={() => { if (!busy) setOpen(false) }} title={`Plan your day · ${draftDate}`}>
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Review AI assumptions and times before saving. Only saved plans sync to Calendar. Photos/notes are sent to Gemini when you generate.</p>
-      <textarea aria-label="Tentative day plan" style={input} rows={4} value={text} onChange={e => setText(e.target.value)} placeholder="Kal 7 baje gym, 9–12 study, lunch ke baad project…" />
+      <textarea
+        aria-label="Tentative day plan"
+        style={input}
+        rows={4}
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onPaste={async e => {
+          const items = e.clipboardData?.items
+          if (!items) return
+          for (const item of items) {
+            if (item.type.startsWith('image/')) {
+              const file = item.getAsFile()
+              if (file) {
+                e.preventDefault()
+                try {
+                  const p = await readImage(file)
+                  setPhoto(p)
+                  setError('')
+                } catch (err) { setError(err.message) }
+                return
+              }
+            }
+          }
+        }}
+        placeholder="Kal 7 baje gym... OR you can simply PASTE a photo (Ctrl+V) of your diary here!"
+      />
       <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={choosePhoto} />
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={choosePhoto} />
       <div style={{ ...row, margin: '10px 0' }}><Button variant="secondary" onClick={() => fileRef.current.click()} disabled={busy}>Upload diary</Button><Button variant="secondary" onClick={() => cameraRef.current.click()} disabled={busy}>Take photo</Button><Button onClick={generate} disabled={busy || (!text.trim() && !photo)}>{busy ? 'Reading plan…' : 'Generate timeline'}</Button></div>
@@ -221,6 +318,41 @@ export default function DayPlanner({ date, categories }) {
       <label style={{ display: 'block', marginTop: 8, fontSize: 12 }}>Reminder before start <select style={{ ...input, width: 'auto', display: 'inline-block', marginLeft: 8 }} value={reminder} onChange={e => setReminder(Number(e.target.value))}>{[0, 5, 10, 15, 30].map(n => <option key={n} value={n}>{n} minutes</option>)}</select></label>
       {error && <p role="alert" style={{ color: '#F87171' }}>{error}</p>}
       <Button onClick={savePlan} disabled={busy || (!draft.length && !plans.length)} style={{ marginTop: 16 }}>{draft.length ? 'Save tentative plan' : 'Delete day plan (keep actual logs)'}</Button>
+    </Modal>
+    <Modal isOpen={actualsOpen} onClose={() => { if (!busy) setActualsOpen(false) }} title={`Log Actuals via Diary Photo`}>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Upload an end-of-day photo of your diary or type what you actually did. AI will match it against your tentative plan.</p>
+      <textarea
+        style={input}
+        rows={4}
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onPaste={async e => {
+          const items = e.clipboardData?.items
+          if (!items) return
+          for (const item of items) {
+            if (item.type.startsWith('image/')) {
+              const file = item.getAsFile()
+              if (file) {
+                e.preventDefault()
+                try {
+                  const p = await readImage(file)
+                  setPhoto(p)
+                  setError('')
+                } catch (err) { setError(err.message) }
+                return
+              }
+            }
+          }
+        }}
+        placeholder="E.g. Woke up at 7:30 instead of 7... or PASTE (Ctrl+V) a photo of your diary."
+      />
+      <div style={{ ...row, margin: '10px 0' }}>
+        <Button variant="secondary" onClick={() => fileRef.current.click()} disabled={busy}>Upload diary</Button>
+        <Button variant="secondary" onClick={() => cameraRef.current.click()} disabled={busy}>Take photo</Button>
+        <Button onClick={generateActuals} disabled={busy || (!text.trim() && !photo)}>{busy ? 'Reading actuals…' : 'Log Actuals'}</Button>
+      </div>
+      {photo && <div style={row}><img src={photo.preview} alt="Selected diary page" style={{ maxHeight: 130, maxWidth: '100%', borderRadius: 8 }} /><button onClick={() => setPhoto(null)}>Remove photo</button></div>}
+      {error && <p role="alert" style={{ color: '#F87171' }}>{error}</p>}
     </Modal>
     <Modal isOpen={!!check} onClose={() => setCheck(null)} title="Plan check-in">
       {check && <div style={{ display: 'grid', gap: 12 }}>

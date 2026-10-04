@@ -133,9 +133,9 @@ export function PlanVsActual({ plans = [], entries = [] }) {
   for (let m = from; m <= to; m += step * 60) hours.push(m)
 
   const lane = (label, list, kind) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ width: 48, flexShrink: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{label}</div>
-      <div style={{ position: 'relative', flex: 1, height: 30, borderRadius: 8, background: 'rgba(148,163,184,0.06)', border: '1px solid rgba(148,163,184,0.08)', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+      <div style={{ width: 52, flexShrink: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{label}</div>
+      <div style={{ position: 'relative', flex: 1, height: 38, borderRadius: 10, background: 'rgba(148,163,184,0.06)', border: '1px solid rgba(148,163,184,0.08)', overflow: 'hidden' }}>
         {list.map(item => {
           const r = toRange(item)
           if (!r) return null
@@ -148,11 +148,11 @@ export function PlanVsActual({ plans = [], entries = [] }) {
               key={item.id || `${item.start}-${item.name}`}
               title={`${item.start}–${item.end} · ${item.name || item.category}${outcome ? ` (${outcome})` : ''}`}
               style={{
-                position: 'absolute', top: 3, bottom: 3, left: `${left}%`, width: `${width}%`, borderRadius: 6,
+                position: 'absolute', top: 4, bottom: 4, left: `${left}%`, width: `${width}%`, borderRadius: 6,
                 background: kind === 'plan' ? `${color}33` : color,
                 border: kind === 'plan' ? `1.5px dashed ${color}` : 'none',
                 color: kind === 'plan' ? 'var(--text-primary)' : '#fff',
-                fontSize: 10, fontWeight: 700, padding: '0 6px', display: 'flex', alignItems: 'center',
+                fontSize: 11, fontWeight: 700, padding: '0 8px', display: 'flex', alignItems: 'center',
                 overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
                 outline: outcome && outcome !== 'followed' ? '2px solid #FB7185' : 'none', outlineOffset: -2,
               }}
