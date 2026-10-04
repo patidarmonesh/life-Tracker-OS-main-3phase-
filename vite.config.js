@@ -9,6 +9,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon-192.png', 'icon-512.png', 'favicon.svg'],
       workbox: {
+        navigateFallbackDenylist: [/^\/api\//],
         // Cache Google Fonts for offline use
         runtimeCaching: [
           {
