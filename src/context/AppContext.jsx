@@ -23,7 +23,7 @@ import {
   clearDriveCache,
 } from '../services/driveService'
 import { stripGeminiKeyFromSettings } from '../services/geminiService'
-import { getAccessToken } from '../services/authService'
+import { getAccessToken, refreshAccessToken } from '../services/authService'
 import { useAuth } from './appContextCore'
 import { AppActionsContext, AppStateContext } from './appContextCore'
 import { useToast } from './toastContextCore'
@@ -41,7 +41,7 @@ const MAX_RETRY_DELAY = 120000
 
 const initialState = {
   finance: { expenses: [], budgets: {}, categories: [], bills: [], savingsGoals: [] },
-  timeflow: { entries: [] },
+  timeflow: { entries: [], plans: [], calendarQueue: [] },
   study: { sessions: [], goals: {}, subjects: [], flashcards: [] },
   habits: { checkpoints: [], dailyLogs: [] },
   health: { imported: {}, manualLogs: [], energyLogs: [], waterLogs: [] },
@@ -139,7 +139,7 @@ const MODULE_FILE_MAP = {
 
 const RECORD_COLLECTIONS_BY_MODULE = {
   finance: ['expenses', 'bills', 'savingsGoals'],
-  timeflow: ['entries'],
+  timeflow: ['entries', 'plans', 'calendarQueue'],
   study: ['sessions', 'flashcards'],
   habits: ['checkpoints', 'dailyLogs'],
   health: ['manualLogs', 'bodyLogs', 'nutrition', 'hevyWorkouts', 'energyLogs', 'waterLogs'],
@@ -511,6 +511,8 @@ function mergeWithInitialState(data = {}) {
       ...initialState.timeflow,
       ...timeflow,
       entries: asArray(timeflow.entries),
+      plans: asArray(timeflow.plans),
+      calendarQueue: asArray(timeflow.calendarQueue),
     },
     study: {
       ...initialState.study,
@@ -927,10 +929,9 @@ export function AppProvider({ children }) {
       forceApply = false,
       mergeLocalRecords = !forceApply,
     } = {}) => {
-      const token = getAccessToken()
+      const token = await refreshAccessToken()
 
-      // No token? Don't try to refresh (that opens a popup).
-      // Just notify the UI to show "Reconnect" button.
+      // The server can renew an expired token without opening a popup.
       if (!token) {
         if (isAuthenticated) {
           notifyDriveAuthNeeded()
@@ -1267,6 +1268,7 @@ export function AppProvider({ children }) {
     }
 
     const setModule = (module, data) => {
+      if (typeof data === 'function') data = data(latestStateRef.current[module])
       const time = new Date().toISOString()
       const nextData = addDeletedRecords(
         module,
@@ -1280,13 +1282,8 @@ export function AppProvider({ children }) {
         lastSynced: time,
       }
 
-      dispatch({
-        type: 'SET_MODULE',
-        module,
-        data: nextData,
-        syncStatus: navigator.onLine ? 'synced' : 'offline',
-        time,
-      })
+      latestStateRef.current = nextLocalState
+      dispatch({ type: 'SET_MODULE', module, data: nextData, syncStatus: navigator.onLine ? 'synced' : 'offline', time })
       persistLocalModules([module], nextLocalState)
       persistModule(module, nextData)
     }

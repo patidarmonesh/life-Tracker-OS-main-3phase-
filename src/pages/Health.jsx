@@ -12,7 +12,7 @@ import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import { formatDateKey, getTodayDateKey, toDateKey } from '../utils/dateTime'
 import { useToast } from '../context/toastContextCore'
-import { playSuccessSound, playSubtleClick } from '../hooks/useAudio'
+import { playSuccessSound, playSubtleClick, playWarningBeep } from '../hooks/useAudio'
 import { hapticSuccess, hapticLight } from '../hooks/useHaptic'
 
 /* ─── constants ────────────────────────────────────────────── */

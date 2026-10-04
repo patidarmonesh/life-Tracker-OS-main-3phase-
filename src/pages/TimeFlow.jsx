@@ -1,3 +1,6 @@
+import { GEMINI_BASE_URL } from '../services/geminiService'
+import DayPlanner from '../components/ui/DayPlanner'
+import { summarizeDay, durationMinutes as slotDuration, timeMinutes } from '../utils/planning'
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAppActions, useAppState } from '../context/appHooks'
@@ -275,6 +278,11 @@ export default function TimeFlow() {
 
   const redirectDate = location.state?.selectedDate
   const [selectedDate, setSelectedDate] = useState(redirectDate || today)
+  const [previousRedirectDate, setPreviousRedirectDate] = useState(redirectDate)
+  if (redirectDate !== previousRedirectDate) {
+    setPreviousRedirectDate(redirectDate)
+    if (redirectDate) setSelectedDate(redirectDate)
+  }
   const [activeTab, setActiveTab] = useState('day')
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEntry, setEditingEntry] = useState(null)
@@ -318,44 +326,14 @@ export default function TimeFlow() {
   )
 
   // ── Calculations ──────────────────────────────────────────
-  const { productiveMins, wasteMins, sleepMins, unloggedMins } = useMemo(() => {
-    let productive = 0
-    let waste = 0
-    let sleep = 0
-    let logged = 0
-
-    dayEntries.forEach(entry => {
-      const mins = Number(entry.durationMinutes) || 0
-      logged += mins
-      if (entry.category === 'Sleep') sleep += mins
-      if (!entry.isWaste && entry.category !== 'Sleep' && entry.category !== 'Meals') productive += mins
-      if (entry.isWaste || WASTE_CATEGORIES.includes(entry.category)) waste += mins
-    })
-
-    return {
-      productiveMins: productive,
-      wasteMins: waste,
-      sleepMins: sleep,
-      loggedMins: logged,
-      unloggedMins: Math.max(0, 1440 - logged),
-    }
-  }, [dayEntries])
-
-  // Donut data
-  const donutData = useMemo(() => {
-    const catTotals = {}
-    dayEntries.forEach(e => {
-      catTotals[e.category] = (catTotals[e.category] || 0) + (Number(e.durationMinutes) || 0)
-    })
-    return Object.entries(catTotals).map(([name, value]) => ({ name, value }))
-  }, [dayEntries])
+  const timeSummary = useMemo(() => summarizeDay(allEntries, selectedDate), [allEntries, selectedDate])
+  const { productiveMins, wasteMins, sleepMins, unloggedMins } = timeSummary
+  const donutData = Object.entries(timeSummary.categories).map(([name, value]) => ({ name, value }))
 
   // Weekly data (last 7 days)
   const weeklyData = useMemo(() => Array.from({ length: 7 }, (_, i) => {
     const d = toDateKey(subDays(new Date(), 6 - i), timezone)
-    const entries = allEntries.filter(e => e.date === d)
-    const prod = entries.filter(e => !e.isWaste && e.category !== 'Sleep' && e.category !== 'Meals').reduce((a, e) => a + (Number(e.durationMinutes) || 0), 0)
-    const waste = entries.filter(e => e.isWaste || WASTE_CATEGORIES.includes(e.category)).reduce((a, e) => a + (Number(e.durationMinutes) || 0), 0)
+    const { productiveMins: prod, wasteMins: waste } = summarizeDay(allEntries, d)
     return { day: formatDateKey(d, timezone, { weekday: 'short' }), productive: +(prod / 60).toFixed(1), waste: +(waste / 60).toFixed(1) }
   }), [allEntries, timezone])
 
@@ -414,10 +392,9 @@ export default function TimeFlow() {
   }
 
   function saveEntry(entryData) {
-    const [sh, sm] = entryData.start.split(':').map(Number)
-    const [eh, em] = entryData.end.split(':').map(Number)
-    const durationMinutes = (eh * 60 + em) - (sh * 60 + sm)
-    if (durationMinutes <= 0) return alert('End time must be after start time')
+    const durationMinutes = slotDuration(entryData.start, entryData.end)
+    if (durationMinutes <= 0) return showToast('End time must be after start time. Split overnight logs at midnight.', 'warning')
+    if (dayEntries.some(e => e.id !== editingEntry?.id && Math.max(timeMinutes(e.start), timeMinutes(entryData.start)) < Math.min(timeMinutes(e.end), timeMinutes(entryData.end)))) return showToast('This activity overlaps an existing log. Edit that log or adjust the times.', 'warning')
 
     const payload = {
       date: selectedDate,
@@ -672,7 +649,7 @@ Return format:
 User's day: ${freeText}`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
+        GEMINI_BASE_URL,
         {
           method: 'POST',
           headers: {
@@ -738,7 +715,7 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
 }`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
+        GEMINI_BASE_URL,
         {
           method: 'POST',
           headers: {
@@ -773,12 +750,10 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
     const newEntries = aiResult.activities
       .filter(a => a.start && a.end)
       .map(a => {
-        const [sh, sm] = a.start.split(':').map(Number)
-        const [eh, em] = a.end.split(':').map(Number)
         return {
           id: uuid(), date: selectedDate,
           start: a.start, end: a.end,
-          durationMinutes: (eh * 60 + em) - (sh * 60 + sm),
+          durationMinutes: slotDuration(a.start, a.end),
           name: a.name, category: a.category,
           productivityScore: a.productivityScore || 3,
           mood: 3, isWaste: a.isWaste || WASTE_CATEGORIES.includes(a.category),
@@ -805,13 +780,14 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
       const bStart = toMins(b.start), bEnd = toMins(b.end)
       const overlapStart = Math.max(aStart, bStart)
       const overlapEnd = Math.min(aEnd, bEnd)
-      return (overlapEnd - overlapStart) > 10 // >10 min overlap = same entry
+      return (overlapEnd - overlapStart) > 0
     }
 
     // Filter out new entries that overlap with existing entries
-    const genuinelyNew = newEntries.filter(newEntry =>
-      !existingToday.some(existing => isOverlapping(existing, newEntry))
-    )
+    const genuinelyNew = []
+    for (const entry of newEntries) {
+      if (![...existingToday, ...genuinelyNew].some(existing => isOverlapping(existing, entry))) genuinelyNew.push(entry)
+    }
 
     if (genuinelyNew.length === 0 && newEntries.length > 0) {
       showToast('All entries already exist in your timeline!', 'info')
@@ -1000,7 +976,7 @@ Return ONLY valid JSON:
 }`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
+        GEMINI_BASE_URL,
         {
           method: 'POST',
           headers: {
@@ -1133,7 +1109,7 @@ Return ONLY valid JSON, no markdown:
 User says: ${userMsg}`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
+        GEMINI_BASE_URL,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -1169,10 +1145,7 @@ User says: ${userMsg}`
     const newEntries = entries
       .filter(a => a.start && a.end)
       .map(a => {
-        const [sh, sm] = a.start.split(':').map(Number)
-        const [eh, em] = a.end.split(':').map(Number)
-        let dur = (eh * 60 + em) - (sh * 60 + sm)
-        if (dur < 0) dur += 1440 // overnight
+        const dur = slotDuration(a.start, a.end)
         return {
           id: uuid(), date: selectedDate,
           start: a.start, end: a.end,
@@ -1191,9 +1164,18 @@ User says: ${userMsg}`
       return
     }
 
+    const conflicts = [...dayEntries]
+    for (const entry of newEntries) {
+      if (conflicts.some(e => Math.max(timeMinutes(e.start), timeMinutes(entry.start)) < Math.min(timeMinutes(e.end), timeMinutes(entry.end)))) {
+        showToast('AI activities overlap existing logs or each other. Adjust the times first.', 'warning')
+        return
+      }
+      conflicts.push(entry)
+    }
+
     // Save each entry through the saveEntry flow for Study sync
     newEntries.forEach(entry => {
-      const payload = { ...entry }
+      const payload = entry
       // Sync study entries
       if (payload.category === 'Study') {
         const studySubjects = state.study?.subjects?.length
@@ -1211,8 +1193,7 @@ User says: ${userMsg}`
           source: 'timeflow-ai-quick', createdAt: new Date().toISOString(),
         }
         payload.studySessionId = studySessionId
-        const studySessions = state.study?.sessions || []
-        setModule('study', { ...state.study, sessions: [newSession, ...studySessions] })
+        setModule('study', current => ({ ...current, sessions: [newSession, ...(current.sessions || [])] }))
       }
     })
 
@@ -1271,7 +1252,7 @@ Return ONLY valid JSON, no markdown, no explanation:
 }`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
+        GEMINI_BASE_URL,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -1386,7 +1367,7 @@ Is Time Waste: ${isWaste ? 'Yes' : 'No'}
 Write a detailed 2-4 sentence note describing what likely happened during this time. Be specific and realistic. If it was a waste activity, mention what could have been done instead. Write in a casual Hinglish style (Hindi-English mix). Don't add any greeting or heading — just the note text directly.`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
+        GEMINI_BASE_URL,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -1500,6 +1481,9 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
         />
       </div>
 
+      <div style={{ padding: '16px 24px 0' }}><DayPlanner date={selectedDate} categories={categories} /></div>
+      {timeSummary.overlapMins > 0 && <p style={{ padding: '0 24px', fontSize: 12, color: 'var(--text-muted)' }}>{timeSummary.overlapMins} overlapping minutes in existing logs are counted once; latest edited log takes priority.</p>}
+
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '4px', padding: '12px 24px 0', borderBottom: '1px solid var(--border)' }}>
         {['day', 'week'].map(tab => (
@@ -1525,7 +1509,7 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
           {/* Timeline */}
           <Card>
             <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '14px' }}>
-              Timeline — {selectedDate === today ? 'Today' : selectedDate}
+              Actual timeline — {selectedDate === today ? 'Today' : selectedDate}
             </h3>
             {dayEntries.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--text-muted)' }}>

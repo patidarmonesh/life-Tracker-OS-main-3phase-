@@ -1,425 +1,135 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// authService.js
-//
-// Google Identity Services (Token/Implicit Flow) auth manager.
-//
-// PERMANENT FIX — "Lazy Re-auth on 401" strategy:
-//
-//  1. NO popup on boot. Session is restored purely from localStorage.
-//     App loads instantly with cached user profile.
-//
-//  2. NO silent refresh via prompt:'none'. Google's GIS always opens a
-//     popup for requestAccessToken(), even with prompt:'none'. Modern
-//     browsers block 3rd-party cookies, making silent refresh unreliable.
-//
-//  3. NO One Tap popup. It fires repeatedly, causes UI disturbance,
-//     and often fails to get a Drive access token anyway.
-//
-//  4. Token refresh ONLY happens via user-initiated action:
-//     - User clicks "Reconnect" button → popup opens ONCE → done.
-//     - Or user clicks "Continue with Google" on login page.
-//
-//  5. When token expires, the app continues working with local data.
-//     Drive sync pauses and a "Reconnect" banner appears in TopBar.
-//     Zero data loss, zero popup spam.
-// ─────────────────────────────────────────────────────────────────────────────
+// Server authorization-code flow refreshes silently; GIS remains a static-host fallback.
+const SESSION_KEY = 'lifeos_google_session'
+const SCOPES = 'openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events'
+let accessToken = null, tokenExpiresAt = 0, serverEnabled = false, configPromise, refreshPromise, scriptPromise
+let generation = 0
+const callbacks = new Set()
+export function onTokenRefresh(callback) { callbacks.add(callback); return () => callbacks.delete(callback) }
+const clientId = () => localStorage.getItem('lifeos_google_client_id')?.trim() || import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
+export function hasClientId() { return serverEnabled || Boolean(clientId()) }
+export function hasPersistentGoogleAuth() { return serverEnabled }
 
-const GOOGLE_SCRIPT_ID      = 'google-identity-services'
-const SESSION_KEY           = 'lifeos_google_session'
-const GOOGLE_SCRIPT_TIMEOUT = 10_000          // 10 s to load GIS script
-
-const GOOGLE_SCOPES = [
-  'https://www.googleapis.com/auth/drive.file',
-  'openid',
-  'email',
-  'profile',
-].join(' ')
-
-let tokenClient     = null
-let accessToken     = null
-let tokenExpiresAt  = 0
-
-// ─── Event system ─────────────────────────────────────────────────────────────
-const tokenRefreshCallbacks = new Set()
-
-/** Register a callback fired on every successful token acquisition. */
-export function onTokenRefresh(callback) {
-  tokenRefreshCallbacks.add(callback)
-  return () => tokenRefreshCallbacks.delete(callback)
+async function serverAvailable() {
+  if (!configPromise) configPromise = fetch('/api/google-auth?action=config', { signal: AbortSignal.timeout(5000) })
+    .then(r => r.ok ? r.json() : {}).then(data => { serverEnabled = data.configured === true; return serverEnabled }).catch(() => false)
+  return configPromise
 }
-
-function notifyTokenRefresh(token) {
-  tokenRefreshCallbacks.forEach((cb) => {
-    try { cb({ token }) } catch { /* swallow */ }
-  })
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getClientId() {
-  // Priority: localStorage (user-configured) → .env (build-time default)
-  const stored = localStorage.getItem('lifeos_google_client_id')
-  if (stored?.trim()) return stored.trim()
-  
-  const envId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
-  if (envId) return envId
-  
-  return null
-}
-
-export function hasClientId() {
-  const stored = localStorage.getItem('lifeos_google_client_id')
-  if (stored?.trim()) return true
-  const envId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
-  return !!envId
-}
-
-
-function loadGoogleScript() {
-  return new Promise((resolve, reject) => {
-    if (window.google?.accounts?.oauth2) { resolve(window.google); return }
-
-    const existing = document.getElementById(GOOGLE_SCRIPT_ID)
-    if (existing) {
-      existing.addEventListener('load',  () => resolve(window.google))
-      existing.addEventListener('error', reject)
-      return
-    }
-
-    const script    = document.createElement('script')
-    script.id       = GOOGLE_SCRIPT_ID
-    script.src      = 'https://accounts.google.com/gsi/client'
-    script.async    = true
-    script.defer    = true
-    script.onload   = () => resolve(window.google)
-    script.onerror  = reject
-    document.body.appendChild(script)
-
-    setTimeout(() => {
-      if (!window.google?.accounts?.oauth2) {
-        reject(new Error('Google auth script timed out'))
-      }
-    }, GOOGLE_SCRIPT_TIMEOUT)
-  })
-}
-
-async function fetchGoogleUserProfile(token) {
-  const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!res.ok) throw new Error('Failed to fetch Google profile')
-  const data = await res.json()
-  return {
-    id:      data.sub     || '',
-    name:    data.name    || 'Google User',
-    email:   data.email   || '',
-    picture: data.picture || '',
-  }
-}
-
-function isTokenExpired(expiresAt) {
-  const value = Number(expiresAt || 0)
-  return value > 0 && Date.now() >= value
-}
-
-// ─── Session persistence ───────────────────────────────────────────────────────
-
-function persistSession(token, user, expiresInSeconds = 3600) {
-  accessToken    = token
-  tokenExpiresAt = Date.now() + Math.max(0, Number(expiresInSeconds)) * 1000
-  try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({
-      accessToken: token,
-      tokenExpiresAt,
-      user,
-    }))
-  } catch (e) {
-    console.warn('[authService] Could not persist session:', e)
-  }
-}
-
-function clearSession() {
-  accessToken    = null
-  tokenExpiresAt = 0
-  try { localStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
-}
-
-// ─── Public: read session / token ─────────────────────────────────────────────
-
 export function getStoredSession() {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY)
-    if (!raw) return null
-    const session = JSON.parse(raw)
-
-    // Always return the session object so the caller has the user profile,
-    // even if the token is expired — the caller can then trigger reconnect.
-    if (session?.accessToken && !isTokenExpired(session.tokenExpiresAt)) {
-      accessToken    = session.accessToken
-      tokenExpiresAt = Number(session.tokenExpiresAt || 0)
-    }
-    return session ?? null
-  } catch {
-    return null
-  }
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') } catch { return null }
 }
-
+function persist(token, user, expiresIn, persistent = false) {
+  accessToken = token
+  tokenExpiresAt = Date.now() + Number(expiresIn || 3600) * 1000
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ accessToken: token, tokenExpiresAt, user, persistent }))
+  localStorage.removeItem('lifeos_logged_out')
+  callbacks.forEach(cb => { try { cb({ token, user }) } catch { /* isolate listeners */ } })
+  return { accessToken: token, user }
+}
 export function getAccessToken() {
-  const token = accessToken || getStoredSession()?.accessToken || null
-  if (!token) return null
-  if (isTokenExpired(tokenExpiresAt)) return null  // expired — caller shows Reconnect
-  return token
-}
-
-// ─── Core: initialize the GIS tokenClient ─────────────────────────────────────
-
-/** Always safe to call multiple times. Resolves once tokenClient is ready. */
-export async function initializeGoogleAuth() {
-  const clientId = getClientId()
-  if (!clientId) return false  // No client ID configured
-  
-  await loadGoogleScript()
-  if (!tokenClient) {
-    tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope:     GOOGLE_SCOPES,
-      callback:  () => {},  // overridden per-call below
-    })
-  }
-  return true
-}
-
-// ─── REMOVED: refreshAccessToken ──────────────────────────────────────────────
-//
-// The old refreshAccessToken() used prompt:'none' which still opens a popup
-// in GIS. It also triggered One Tap as fallback. Both caused repeated popups
-// and UI disturbance.
-//
-// Now: if token is expired, we simply return null. The caller (driveService /
-// AppContext) will set syncStatus to 'auth_required' and show a Reconnect
-// button. The user clicks it → signInWithGoogle() → ONE popup → done.
-
-export async function refreshAccessToken() {
-  // Just check if we have a valid token. No popup, no network call.
-  const current = getAccessToken()
-  if (current) return current
-  return null
-}
-
-// ─── REMOVED: Token refresh watcher ───────────────────────────────────────────
-//
-// The 30-second interval watcher called refreshAccessToken() which opened
-// popups. Not needed anymore — we use lazy re-auth on 401.
-
-export function startTokenRefreshWatcher() {
-  // no-op — kept for backward compatibility so existing callers don't break
-}
-
-export const scheduleTokenRefresh = startTokenRefreshWatcher
-
-// ─── REMOVED: Visibility / focus / online listeners ───────────────────────────
-//
-// These called refreshAccessToken() on tab focus/online, triggering popups.
-// Not needed anymore.
-
-export function installTokenRefreshListeners() {
-  // When user returns to the tab, try to silently refresh an expired token
-  const handleVisibility = async () => {
-    if (document.visibilityState !== 'visible') return
+  if (localStorage.getItem('lifeos_logged_out') === 'true') return null
+  if (!accessToken) {
     const session = getStoredSession()
-    if (!session?.user) return
-    if (!isTokenExpired(session.tokenExpiresAt)) return
-    // Token expired — try silent reconnect
-    const result = await trySilentReconnect(session.user)
-    if (result) {
-      console.log('[authService] Silent reconnect on tab focus succeeded')
-    }
+    accessToken = session?.accessToken || null
+    tokenExpiresAt = Number(session?.tokenExpiresAt || 0)
   }
-  document.addEventListener('visibilitychange', handleVisibility)
-  return () => document.removeEventListener('visibilitychange', handleVisibility)
+  return accessToken && tokenExpiresAt > Date.now() + 60000 ? accessToken : null
 }
-
-export function removeTokenRefreshListeners() {
-  // no-op — kept for backward compatibility
-}
-
-// ─── REMOVED: One Tap ─────────────────────────────────────────────────────────
-//
-// One Tap (initializeOneTap, silentAccessTokenRequest, decodeIdToken) has been
-// completely removed. It caused repeated popup/prompt UI disturbance and
-// rarely succeeded in getting a Drive access token silently.
-
-// ─── REMOVED: attemptAutoLogin ────────────────────────────────────────────────
-//
-// attemptAutoLogin() tried: silent refresh → One Tap → silent token request.
-// All of these open popups. Replaced by simple localStorage restore in
-// AuthContext boot().
-
-export async function attemptAutoLogin() {
-  // Simple: check if we have a valid stored session. No popup, no network.
-  const session = getStoredSession()
-  if (!session?.accessToken) return null
-
-  if (!isTokenExpired(session.tokenExpiresAt)) {
-    // Token still valid — fully logged in
-    return { strategy: 'stored-session', token: session.accessToken, user: session.user }
-  }
-
-  // Token expired but we have user profile — try silent reconnect first
-  if (session.user) {
-    try {
-      const result = await trySilentReconnect(session.user)
-      if (result) {
-        return { strategy: 'silent-reconnect', token: result.accessToken, user: result.user }
+export async function refreshAccessToken(force = false) {
+  if (localStorage.getItem('lifeos_logged_out') === 'true') return null
+  if (!force && getAccessToken()) return getAccessToken()
+  if (!await serverAvailable()) return null
+  if (!refreshPromise) {
+    const requestGeneration = generation
+    refreshPromise = (async () => {
+      const res = await fetch('/api/google-auth?action=token', { method: 'POST', credentials: 'same-origin', signal: AbortSignal.timeout(20000) })
+      if (res.status === 401) {
+        accessToken = null; tokenExpiresAt = 0
+        const previous = getStoredSession()
+        if (previous) localStorage.setItem(SESSION_KEY, JSON.stringify({ ...previous, accessToken: null, tokenExpiresAt: 0 }))
+        return null
       }
-    } catch {
-      // Silent reconnect failed — fall through to expired-session
-    }
-
-    // Couldn't reconnect silently — return user so app shows them
-    // as "logged in" but Drive sync will need manual reconnect
-    return { strategy: 'expired-session', token: null, user: session.user }
+      if (!res.ok) throw new Error('Google refresh temporarily unavailable. Sync will retry.')
+      const data = await res.json()
+      if (requestGeneration !== generation) return null
+      persist(data.accessToken, data.user, data.expiresIn, true)
+      return data.accessToken
+    })().finally(() => { refreshPromise = null })
   }
-
-  return null
+  return refreshPromise
 }
-
-/**
- * Try to get a new access token silently.
- * Uses prompt:'' which auto-selects the existing Google account.
- * The popup opens briefly and auto-closes if the user has an active Google session.
- * Returns null if it fails (user needs to manually click Reconnect).
- */
-async function trySilentReconnect(existingUser) {
-  try {
-    await initializeGoogleAuth()
-  } catch {
+export async function initializeGoogleAuth() { return await serverAvailable() || hasClientId() }
+export async function attemptAutoLogin() {
+  const params = new URLSearchParams(window.location.search)
+  const connected = params.get('google_auth') === 'connected'
+  if (connected) {
+    localStorage.removeItem('lifeos_logged_out')
+    accessToken = null; tokenExpiresAt = 0
+    params.delete('google_auth')
+    window.history.replaceState({}, '', window.location.pathname + (params.size ? '?' + params : ''))
+  }
+  if (localStorage.getItem('lifeos_logged_out') === 'true') return null
+  let token = null
+  try { token = await refreshAccessToken(connected) } catch { /* retain local session offline */ }
+  const session = getStoredSession()
+  return session?.user ? { token, user: session.user } : null
+}
+export function installTokenRefreshListeners() {
+  const refresh = () => {
+    if (document.visibilityState === 'visible' && getStoredSession()?.persistent) refreshAccessToken().catch(() => {})
+  }
+  const timer = setInterval(refresh, 30000)
+  document.addEventListener('visibilitychange', refresh)
+  window.addEventListener('online', refresh)
+  return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('online', refresh) }
+}
+export function startTokenRefreshWatcher() { /* lifecycle owned by installTokenRefreshListeners */ }
+export const scheduleTokenRefresh = startTokenRefreshWatcher
+export function removeTokenRefreshListeners() { /* cleanup returned by install */ }
+export function disableAutoSelect() { window.google?.accounts?.id?.disableAutoSelect?.() }
+function loadScript() {
+  if (window.google?.accounts?.oauth2) return Promise.resolve()
+  if (!scriptPromise) scriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    const timer = setTimeout(() => reject(new Error('Google sign-in timed out. Retry.')), 10000)
+    script.onload = () => { clearTimeout(timer); resolve() }
+    script.onerror = () => { clearTimeout(timer); reject(new Error('Unable to load Google sign-in')) }
+    document.head.appendChild(script)
+  }).catch(error => { scriptPromise = null; throw error })
+  return scriptPromise
+}
+export async function signInWithGoogle() {
+  if (await serverAvailable()) {
+    window.location.assign('/api/google-auth?action=start')
     return null
   }
-
-  return new Promise((resolve) => {
-    // Set a timeout — if popup doesn't resolve in 8 seconds, give up
-    const timeout = setTimeout(() => resolve(null), 8000)
-
-    tokenClient.callback = async (response) => {
-      clearTimeout(timeout)
-      if (response?.error) {
-        resolve(null)
-        return
-      }
-      try {
-        const token     = response.access_token
-        const expiresIn = Number(response.expires_in || 3600)
-        // Reuse existing user profile to avoid extra API call
-        const user = existingUser || await fetchGoogleUserProfile(token)
-        persistSession(token, user, expiresIn)
-        notifyTokenRefresh(token)
-        resolve({ accessToken: token, user })
-      } catch {
-        resolve(null)
-      }
-    }
-
-    try {
-      // prompt:'' auto-selects the previously used account
-      // login_hint helps Google identify the right account faster
-      tokenClient.requestAccessToken({
-        prompt: '',
-        login_hint: existingUser?.email || '',
-      })
-    } catch {
-      clearTimeout(timeout)
-      resolve(null)
-    }
-  })
-}
-
-// ─── Disable Auto-Select (for sign-out) ───────────────────────────────────────
-
-export function disableAutoSelect() {
-  try {
-    if (window.google?.accounts?.id?.disableAutoSelect) {
-      window.google.accounts.id.disableAutoSelect()
-    }
-  } catch {
-    // ignore
-  }
-}
-
-// ─── Sign in / Sign out ───────────────────────────────────────────────────────
-
-export async function signInWithGoogle() {
-  await initializeGoogleAuth()
-
+  if (!clientId()) throw new Error('Set your Google Client ID in Settings.')
+  await loadScript()
   return new Promise((resolve, reject) => {
-    tokenClient.callback = async (response) => {
-      if (response?.error) {
-        reject(new Error(response.error))
-        return
-      }
-      try {
-        const token     = response.access_token
-        const expiresIn = Number(response.expires_in || 3600)
-        const user      = await fetchGoogleUserProfile(token)
-        persistSession(token, user, expiresIn)
-
-        notifyTokenRefresh(token)
-
-        resolve({ accessToken: token, user })
-      } catch (error) {
-        reject(error)
-      }
-    }
-
-    tokenClient.requestAccessToken({ prompt: 'consent' })
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId(), scope: SCOPES,
+      error_callback: () => reject(new Error('Google sign-in was closed or blocked. Please retry.')),
+      callback: async response => {
+        if (response.error) return reject(new Error(response.error))
+        try {
+          const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + response.access_token } })
+          if (!res.ok) throw new Error('Unable to fetch Google profile')
+          const p = await res.json()
+          resolve(persist(response.access_token, { id: p.sub, name: p.name, email: p.email, picture: p.picture }, response.expires_in))
+        } catch (error) { reject(error) }
+      },
+    })
+    client.requestAccessToken({ prompt: 'consent' })
   })
 }
-
-/**
- * Reconnect to Google Drive — used when token has expired.
- * Opens a popup ONCE for the user to re-authorize.
- * Uses prompt:'' (empty string) so Google auto-selects the existing account
- * without forcing consent screen again.
- */
-export async function reconnectGoogle() {
-  await initializeGoogleAuth()
-
-  return new Promise((resolve, reject) => {
-    tokenClient.callback = async (response) => {
-      if (response?.error) {
-        reject(new Error(response.error))
-        return
-      }
-      try {
-        const token     = response.access_token
-        const expiresIn = Number(response.expires_in || 3600)
-        const user      = await fetchGoogleUserProfile(token)
-        persistSession(token, user, expiresIn)
-
-        notifyTokenRefresh(token)
-
-        resolve({ accessToken: token, user })
-      } catch (error) {
-        reject(error)
-      }
-    }
-
-    // prompt:'' lets Google auto-select the previously used account
-    // without showing the consent screen again. The popup opens briefly
-    // and closes automatically if the user has an active Google session.
-    tokenClient.requestAccessToken({ prompt: '' })
-  })
-}
-
-export function signOutGoogle() {
-  const token = getAccessToken()
-  clearSession()
+export const reconnectGoogle = signInWithGoogle
+export async function signOutGoogle() {
+  generation++
+  accessToken = null; tokenExpiresAt = 0
+  localStorage.setItem('lifeos_logged_out', 'true')
+  localStorage.removeItem(SESSION_KEY)
   disableAutoSelect()
-  try {
-    if (token && window.google?.accounts?.oauth2?.revoke) {
-      window.google.accounts.oauth2.revoke(token, () => {})
-    }
-  } catch {
-    // ignore revoke errors
-  }
+  if (serverEnabled) await fetch('/api/google-auth?action=logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {})
 }
+

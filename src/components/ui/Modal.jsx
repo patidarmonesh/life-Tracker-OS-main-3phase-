@@ -31,8 +31,12 @@ export default function Modal({ isOpen, onClose, title, children }) {
       document.body.style.overflow = 'hidden'
       return () => {
         document.removeEventListener('keydown', handleKeyDown)
+        document.body.style.overflow = ''
       }
     }
+    setRendered(false)
+    setClosing(false)
+    document.body.style.overflow = ''
   }, [isOpen, handleKeyDown])
 
   useEffect(() => {

@@ -1,3 +1,6 @@
+import PlanSyncManager from '../ui/PlanSyncManager'
+import ContextAssistant from '../ui/ContextAssistant'
+import { getTodayDateKey } from '../../utils/dateTime'
 import { useEffect, useState } from 'react'
 import TopBar from './TopBar'
 import BottomNav from './BottomNav'
@@ -98,7 +101,7 @@ export default function AppShell({ children }) {
       category: expenseForm.category,
       subcategory: '',
       description: expenseForm.description.trim() || 'Quick Expense',
-      date: new Date().toISOString().split('T')[0],
+      date: getTodayDateKey(state.settings?.profile?.timezone),
       time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
       paymentMethod: expenseForm.paymentMethod,
       isImpulsive: false,
@@ -124,7 +127,7 @@ export default function AppShell({ children }) {
   }
 
   function handleQuickWater(amount) {
-    const todayStr = new Date().toISOString().split('T')[0]
+    const todayStr = getTodayDateKey(state.settings?.profile?.timezone)
     const amountToLog = parseInt(amount || waterForm.amountMl)
     if (!amountToLog || amountToLog <= 0) return
 
@@ -161,7 +164,7 @@ export default function AppShell({ children }) {
       topic: studyForm.topic.trim(),
       focusType: 'Deep Focus',
       durationMinutes: Number(studyForm.durationMinutes),
-      date: new Date().toISOString().split('T')[0],
+      date: getTodayDateKey(state.settings?.profile?.timezone),
       notes: studyForm.notes.trim(),
       rating: 4,
       pagesRead: 0,
@@ -192,7 +195,7 @@ export default function AppShell({ children }) {
 
     const newEntry = {
       id: uuid(),
-      date: new Date().toISOString().split('T')[0],
+      date: getTodayDateKey(state.settings?.profile?.timezone),
       title: journalForm.title.trim() || 'Quick Reflection',
       content: journalForm.content.trim(),
       mood: Number(journalForm.mood),
@@ -828,6 +831,8 @@ export default function AppShell({ children }) {
       }}>
         <TopBar isMobile />
         <ReconnectBanner />
+        <PlanSyncManager />
+        <ContextAssistant key={location.pathname} />
         {renderFloatingWisdom()}
         <main style={{
           flex: 1,
@@ -858,6 +863,8 @@ export default function AppShell({ children }) {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <TopBar isMobile={false} />
         <ReconnectBanner />
+        <PlanSyncManager />
+        <ContextAssistant key={location.pathname} />
         {renderFloatingWisdom()}
         <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
           <div className="page-enter" key={location.pathname}>

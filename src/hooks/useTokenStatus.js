@@ -20,6 +20,7 @@ import {
   getStoredSession,
   getAccessToken,
   reconnectGoogle,
+  refreshAccessToken,
 } from '../services/authService'
 
 const CHECK_INTERVAL_MS = 30_000 // 30 seconds
@@ -28,7 +29,7 @@ export function useTokenStatus() {
   const [needsReconnect, setNeedsReconnect] = useState(false)
   const [isReconnecting, setIsReconnecting] = useState(false)
 
-  const checkStatus = useCallback(() => {
+  const checkStatus = useCallback(async () => {
     const session = getStoredSession()
     if (!session?.user) {
       // No session at all — user is logged out, not our job
@@ -36,7 +37,8 @@ export function useTokenStatus() {
       return
     }
 
-    const token = getAccessToken()
+    let token = getAccessToken()
+    try { token = token || await refreshAccessToken() } catch { return }
     // Has session but no valid token → needs reconnect
     setNeedsReconnect(!token)
   }, [])

@@ -1,3 +1,4 @@
+import { budgetPercent, dailyBudgetFor, finiteAmount } from '../utils/financeMath'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAppActions, useAppState } from '../context/appHooks'
@@ -177,7 +178,7 @@ export default function Finance() {
       return
     }
 
-    const amountMatch = smsInput.match(/(?:rs\.?|inr|amt|sent|debited|paid|withdrawal|withdrawn|spent)\s*(?:rs\.?|inr)?\s*(\d+(?:\.\d+)?)/i)
+    const amountMatch = smsInput.match(/(?:rs\.?|inr|amt|sent|debited|paid|withdrawal|withdrawn|spent)\s*(?:rs\.?|inr)?\s*(\d[\d,]*(?:\.\d+)?)/i)
     if (!amountMatch) {
       showToast("Could not extract amount. Please make sure the SMS contains words like 'debited', 'paid' or 'spent' followed by a number", 'error')
       playWarningBeep()
@@ -185,7 +186,7 @@ export default function Finance() {
       return
     }
 
-    const amount = parseFloat(amountMatch[1])
+    const amount = finiteAmount(amountMatch[1].replaceAll(',', ''))
 
     let merchant = 'Unknown Merchant'
     const merchantMatch = smsInput.match(/(?:to|at|for|ref|payee|towards)\s+([a-z0-9\s&'\-\.]+?)(?:\s+ref|\s+on|\s+ref\.|\s+via|\s+balance|\s+bal|\s+a\/c|\s+ac|\s+\d{2}[-\/.]|\s+date|$)/i)
@@ -228,6 +229,7 @@ export default function Finance() {
 
   function handleSaveSMSExpense() {
     if (!parsedSMSResult) return
+    if (!Number.isFinite(Number(parsedSMSResult.amount)) || Number(parsedSMSResult.amount) <= 0) return showToast('Enter a positive expense amount.', 'warning')
 
     const newExpense = {
       id: uuid(),
@@ -292,8 +294,8 @@ export default function Finance() {
 
   const allTags = useMemo(() => [...new Set((state.finance?.expenses || []).flatMap(e => e.tags || []))], [state.finance?.expenses])
 
-  const monthlyBudget = state.settings?.preferences?.monthlyBudget || 8000
-  const dailyBudget = Math.max(1, Math.round(monthlyBudget / 30))
+  const monthlyBudget = Math.max(0, finiteAmount(state.settings?.preferences?.monthlyBudget ?? 8000))
+  const dailyBudget = dailyBudgetFor(monthlyBudget, selectedDate)
   const categories = state.settings?.preferences?.expenseCategories?.length
     ? state.settings.preferences.expenseCategories
     : Object.keys(CATEGORY_COLORS)
@@ -328,7 +330,7 @@ export default function Finance() {
     let currentMonthTotal = 0
 
     expenses.forEach(expense => {
-      const amount = Number(expense.amount || 0)
+      const amount = finiteAmount(expense.amount)
       const date = expense.date || ''
 
       totalsByDate.set(date, (totalsByDate.get(date) || 0) + amount)
@@ -372,8 +374,8 @@ export default function Finance() {
     }
   }, [expenses, selectedDate])
 
-  const pct = Math.min(100, (todayTotal / dailyBudget) * 100)
-  const monthPct = Math.min(100, (monthTotal / monthlyBudget) * 100)
+  const pct = budgetPercent(todayTotal, dailyBudget)
+  const monthPct = budgetPercent(monthTotal, monthlyBudget)
 
   // View-month-specific data for month tab navigation
   const {
@@ -394,7 +396,7 @@ export default function Finance() {
     let vmTotal = 0
 
     expenses.forEach(expense => {
-      const amount = Number(expense.amount || 0)
+      const amount = finiteAmount(expense.amount)
       const date = expense.date || ''
       if (date >= vmStart && date <= vmEnd) {
         vmExpenses.push(expense)
@@ -421,7 +423,7 @@ export default function Finance() {
       viewMonthAccountTotals: Object.entries(totalsByAccount)
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value),
-      viewMonthBudgetPct: Math.min(100, (vmTotal / monthlyBudget) * 100),
+      viewMonthBudgetPct: budgetPercent(vmTotal, monthlyBudget),
     }
   }, [expenses, viewMonth, monthlyBudget])
 
@@ -438,7 +440,7 @@ export default function Finance() {
       const monthKey = (expense.date || '').slice(0, 7)
       const bucket = monthMap.get(monthKey)
       if (bucket) {
-        bucket.total += Number(expense.amount || 0)
+        bucket.total += finiteAmount(expense.amount)
         bucket.expenses.push(expense)
       }
     })
@@ -527,7 +529,7 @@ export default function Finance() {
   }
 
   function handleSave() {
-    if (!form.amount || isNaN(Number(form.amount))) return
+    if (!Number.isFinite(Number(form.amount)) || Number(form.amount) <= 0) return showToast('Enter a positive, finite expense amount.', 'warning')
 
     const linkedBill = pendingBillForExpense || null
     const billDriveFileId = billRemoved ? null : (linkedBill?.driveFileId || editingEntry?.billDriveFileId || null)
@@ -536,7 +538,7 @@ export default function Finance() {
     if (editingEntry) {
       const updatedExpense = {
         ...editingEntry,
-        amount: Number(form.amount),
+        amount: finiteAmount(form.amount),
         category: form.category,
         subcategory: form.subcategory,
         description: form.description || linkedBill?.fileName || '',
@@ -579,7 +581,7 @@ export default function Finance() {
     const newExpenseId = uuid()
     const newExpense = {
       id: newExpenseId,
-      amount: Number(form.amount),
+      amount: finiteAmount(form.amount),
       currency: currencyCode,
       category: form.category,
       subcategory: form.subcategory,
@@ -1070,7 +1072,8 @@ export default function Finance() {
                     const isSelected = dateKey === selectedDate
                     const isTodayDate = isDateToday(day)
                     const hasSpending = spent > 0
-                    const spendRatio = spent / dailyBudget
+                    const cellBudget = dailyBudgetFor(monthlyBudget, dateKey)
+                    const spendRatio = cellBudget > 0 ? spent / cellBudget : (spent > 0 ? 1 : 0)
 
                     let bgColor = 'transparent'
                     let amountColor = '#10B981'
@@ -1722,6 +1725,147 @@ export default function Finance() {
         )}
       </div>
 
+      {activeTab === 'recurring' && (
+        <RecurringDebtTab
+          state={state}
+          setModule={setModule}
+          showToast={showToast}
+          currencySymbol={currencySymbol}
+          inputStyle={inputStyle}
+          labelStyle={labelStyle}
+        />
+      )}
+
+
+      {/* UPI SMS Auto Import Modal */}
+      <Modal
+        isOpen={showSMSModal}
+        onClose={() => {
+          setShowSMSModal(false);
+          setSmsInput('');
+          setParsedSMSResult(null);
+        }}
+        title="📥 UPI SMS Auto-Import"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div>
+            <label style={labelStyle}>Paste UPI SMS Text</label>
+            <textarea
+              rows={4}
+              style={{ ...inputStyle, resize: 'vertical', fontSize: '13px' }}
+              placeholder="Paste SMS here... e.g. 'Debited from a/c HDFC Rs.250 to Zomato' or 'SBI: Amt Sent Rs. 1200.00 to SWIGGY'"
+              value={smsInput}
+              onChange={e => setSmsInput(e.target.value)}
+            />
+          </div>
+
+          {!parsedSMSResult ? (
+            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowSMSModal(false);
+                  setSmsInput('');
+                }}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleParseSMS} style={{ flex: 1 }} disabled={!smsInput.trim()}>
+                Parse SMS
+              </Button>
+            </div>
+          ) : (
+            <div style={{ background: 'rgba(99,102,241,0.04)', border: '1px dashed rgba(99,102,241,0.2)', padding: '14px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
+              <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: 'var(--accent-indigo)' }}>🔍 Parsed Details (Verify & Edit)</h4>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={labelStyle}>Amount ({currencySymbol})</label>
+                  <input
+                    type="number"
+                    style={inputStyle}
+                    value={parsedSMSResult.amount}
+                    onChange={e => setParsedSMSResult(p => ({ ...p, amount: Number(e.target.value) }))}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Vendor / Payee</label>
+                  <input
+                    style={inputStyle}
+                    value={parsedSMSResult.merchant}
+                    onChange={e => setParsedSMSResult(p => ({ ...p, merchant: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={labelStyle}>Account</label>
+                  <select
+                    style={inputStyle}
+                    value={parsedSMSResult.account}
+                    onChange={e => setParsedSMSResult(p => ({ ...p, account: e.target.value }))}
+                  >
+                    {accounts.map(acct => (
+                      <option key={acct} value={acct}>{acct}</option>
+                    ))}
+                    {!accounts.includes(parsedSMSResult.account) && (
+                      <option value={parsedSMSResult.account}>{parsedSMSResult.account}</option>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Category</label>
+                  <select
+                    style={inputStyle}
+                    value={parsedSMSResult.category}
+                    onChange={e => setParsedSMSResult(p => ({ ...p, category: e.target.value }))}
+                  >
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={labelStyle}>Date</label>
+                  <input
+                    type="date"
+                    style={inputStyle}
+                    value={parsedSMSResult.date}
+                    onChange={e => setParsedSMSResult(p => ({ ...p, date: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Time</label>
+                  <input
+                    style={inputStyle}
+                    value={parsedSMSResult.time}
+                    onChange={e => setParsedSMSResult(p => ({ ...p, time: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <Button
+                  variant="secondary"
+                  onClick={() => setParsedSMSResult(null)}
+                  style={{ flex: 1 }}
+                >
+                  Reparse / Clear
+                </Button>
+                <Button onClick={handleSaveSMSExpense} style={{ flex: 1 }}>
+                  Confirm & Save
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
       <Modal
         isOpen={showAddModal}
         onClose={closeExpenseModal}
@@ -2364,13 +2508,15 @@ function SavingsTabContent({ state, setModule, showToast, currencyCode, currency
     const { goalId, type, amount, description } = transactionModal
     if (!goalId || !amount) return
     const val = parseFloat(amount)
-    if (isNaN(val) || val <= 0) return
+    if (!Number.isFinite(val) || val <= 0) return
+    const goal = goals.find(g => g.id === goalId)
+    if (type === 'withdraw' && val > finiteAmount(goal?.currentAmount)) return showToast('Withdrawal cannot exceed the saved balance.', 'warning')
 
     const updated = goals.map(g => {
       if (g.id !== goalId) return g
       
       const change = type === 'deposit' ? val : -val
-      const nextAmount = Math.max(0, g.currentAmount + change)
+      const nextAmount = Math.max(0, finiteAmount(g.currentAmount) + finiteAmount(change))
       
       if (type === 'deposit' && nextAmount >= g.targetAmount && g.currentAmount < g.targetAmount) {
         showToast(`🏆 Goal Completed: ${g.title}! Outstanding job!`, 'success')
@@ -2507,7 +2653,7 @@ function SavingsTabContent({ state, setModule, showToast, currencyCode, currency
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         {goals.map(g => {
-          const pct = Math.min(100, Math.round((g.currentAmount / g.targetAmount) * 100))
+          const pct = Math.round(budgetPercent(g.currentAmount, g.targetAmount))
           const needed = Math.max(0, g.targetAmount - g.currentAmount)
           
           let etaDisplay = 'No target date set'
@@ -2609,16 +2755,6 @@ function SavingsTabContent({ state, setModule, showToast, currencyCode, currency
         )}
       </div>
 
-      {activeTab === 'recurring' && (
-        <RecurringDebtTab
-          state={state}
-          setModule={setModule}
-          showToast={showToast}
-          currencySymbol={currencySymbol}
-          inputStyle={inputStyle}
-          labelStyle={labelStyle}
-        />
-      )}
 
       <Modal
         isOpen={transactionModal.isOpen}
@@ -2664,134 +2800,7 @@ function SavingsTabContent({ state, setModule, showToast, currencyCode, currency
         </div>
       </Modal>
 
-      {/* UPI SMS Auto Import Modal */}
-      <Modal
-        isOpen={showSMSModal}
-        onClose={() => {
-          setShowSMSModal(false);
-          setSmsInput('');
-          setParsedSMSResult(null);
-        }}
-        title="📥 UPI SMS Auto-Import"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div>
-            <label style={labelStyle}>Paste UPI SMS Text</label>
-            <textarea
-              rows={4}
-              style={{ ...inputStyle, resize: 'vertical', fontSize: '13px' }}
-              placeholder="Paste SMS here... e.g. 'Debited from a/c HDFC Rs.250 to Zomato' or 'SBI: Amt Sent Rs. 1200.00 to SWIGGY'"
-              value={smsInput}
-              onChange={e => setSmsInput(e.target.value)}
-            />
-          </div>
 
-          {!parsedSMSResult ? (
-            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setShowSMSModal(false);
-                  setSmsInput('');
-                }}
-                style={{ flex: 1 }}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleParseSMS} style={{ flex: 1 }} disabled={!smsInput.trim()}>
-                Parse SMS
-              </Button>
-            </div>
-          ) : (
-            <div style={{ background: 'rgba(99,102,241,0.04)', border: '1px dashed rgba(99,102,241,0.2)', padding: '14px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
-              <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: 'var(--accent-indigo)' }}>🔍 Parsed Details (Verify & Edit)</h4>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <div>
-                  <label style={labelStyle}>Amount ({currencySymbol})</label>
-                  <input
-                    type="number"
-                    style={inputStyle}
-                    value={parsedSMSResult.amount}
-                    onChange={e => setParsedSMSResult(p => ({ ...p, amount: Number(e.target.value) }))}
-                  />
-                </div>
-                <div>
-                  <label style={labelStyle}>Vendor / Payee</label>
-                  <input
-                    style={inputStyle}
-                    value={parsedSMSResult.merchant}
-                    onChange={e => setParsedSMSResult(p => ({ ...p, merchant: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <div>
-                  <label style={labelStyle}>Account</label>
-                  <select
-                    style={inputStyle}
-                    value={parsedSMSResult.account}
-                    onChange={e => setParsedSMSResult(p => ({ ...p, account: e.target.value }))}
-                  >
-                    {accounts.map(acct => (
-                      <option key={acct} value={acct}>{acct}</option>
-                    ))}
-                    {!accounts.includes(parsedSMSResult.account) && (
-                      <option value={parsedSMSResult.account}>{parsedSMSResult.account}</option>
-                    )}
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>Category</label>
-                  <select
-                    style={inputStyle}
-                    value={parsedSMSResult.category}
-                    onChange={e => setParsedSMSResult(p => ({ ...p, category: e.target.value }))}
-                  >
-                    {categories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <div>
-                  <label style={labelStyle}>Date</label>
-                  <input
-                    type="date"
-                    style={inputStyle}
-                    value={parsedSMSResult.date}
-                    onChange={e => setParsedSMSResult(p => ({ ...p, date: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label style={labelStyle}>Time</label>
-                  <input
-                    style={inputStyle}
-                    value={parsedSMSResult.time}
-                    onChange={e => setParsedSMSResult(p => ({ ...p, time: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-                <Button
-                  variant="secondary"
-                  onClick={() => setParsedSMSResult(null)}
-                  style={{ flex: 1 }}
-                >
-                  Reparse / Clear
-                </Button>
-                <Button onClick={handleSaveSMSExpense} style={{ flex: 1 }}>
-                  Confirm & Save
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </Modal>
     </div>
   )
 }
@@ -2816,7 +2825,7 @@ function RecurringDebtTab({ state, setModule, showToast, currencySymbol, inputSt
   const monthlyEmiTotal = emis.reduce((acc, emi) => acc + (Number(emi.amount) || 0), 0)
 
   function addSubscription() {
-    if (!subForm.name.trim() || !subForm.amount) return
+    if (!subForm.name.trim() || !Number.isFinite(Number(subForm.amount)) || Number(subForm.amount) <= 0) return showToast('Enter a positive subscription amount.', 'warning')
     const newSub = {
       id: 'sub_' + Date.now(),
       name: subForm.name.trim(),
@@ -2838,7 +2847,8 @@ function RecurringDebtTab({ state, setModule, showToast, currencySymbol, inputSt
   }
 
   function addEMI() {
-    if (!emiForm.name.trim() || !emiForm.amount) return
+    if (!emiForm.name.trim() || !Number.isFinite(Number(emiForm.amount)) || Number(emiForm.amount) <= 0) return showToast('Enter a positive EMI amount.', 'warning')
+    if (!Number.isInteger(Number(emiForm.totalMonths)) || !Number.isInteger(Number(emiForm.remainingMonths)) || Number(emiForm.remainingMonths) < 1 || Number(emiForm.totalMonths) < Number(emiForm.remainingMonths)) return showToast('Remaining months must be a positive whole number no greater than total months.', 'warning')
     const newEmi = {
       id: 'emi_' + Date.now(),
       name: emiForm.name.trim(),
@@ -2860,7 +2870,7 @@ function RecurringDebtTab({ state, setModule, showToast, currencySymbol, inputSt
   }
 
   function addLoan() {
-    if (!loanForm.person.trim() || !loanForm.amount) return
+    if (!loanForm.person.trim() || !Number.isFinite(Number(loanForm.amount)) || Number(loanForm.amount) <= 0) return showToast('Enter a positive loan amount.', 'warning')
     const newLoan = {
       id: 'loan_' + Date.now(),
       person: loanForm.person.trim(),
@@ -3233,10 +3243,10 @@ function RecurringDebtTab({ state, setModule, showToast, currencySymbol, inputSt
             <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center' }}>
               <div style={{ fontSize: '20px' }}>🤝</div>
               <div style={{ fontSize: '18px', fontWeight: '800', color: '#10B981', margin: '4px 0 2px' }}>
-                + {currencySymbol} {loans.filter(l => l.type === 'Lent').reduce((acc, l) => acc + l.amount, 0)}
+                + {currencySymbol} {loans.filter(l => l.type === 'Lent').reduce((acc, l) => acc + finiteAmount(l.amount), 0)}
               </div>
               <div style={{ fontSize: '18px', fontWeight: '800', color: '#EF4444', marginBottom: '4px' }}>
-                - {currencySymbol} {loans.filter(l => l.type === 'Borrowed').reduce((acc, l) => acc + l.amount, 0)}
+                - {currencySymbol} {loans.filter(l => l.type === 'Borrowed').reduce((acc, l) => acc + finiteAmount(l.amount), 0)}
               </div>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Lent vs Borrowed Debt Ledger</span>
             </Card>

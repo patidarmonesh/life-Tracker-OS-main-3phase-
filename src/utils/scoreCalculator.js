@@ -1,4 +1,6 @@
-import { getTodayDateKey } from './dateTime'
+import { dailyBudgetFor, finiteAmount } from './financeMath.js'
+import { summarizeDay } from './planning.js'
+import { getTodayDateKey } from './dateTime.js'
 
 const DEFAULT_WEIGHTS = {
   habits: { weight: 30, enabled: true },
@@ -44,7 +46,8 @@ export function calcLifeScore(state) {
 
   // Habits
   const todayLogs = (habits.dailyLogs || []).filter(l => l.date === today)
-  const doneLogs = todayLogs.filter(l => l.status === 'done').length
+  const checkpointIds = new Set((habits.checkpoints || []).map(c => c.id))
+  const doneLogs = new Set(todayLogs.filter(l => l.status === 'done' && checkpointIds.has(l.checkpointId)).map(l => l.checkpointId)).size
   const totalCheckpoints = (habits.checkpoints || []).length
   const checkpointScore =
     totalCheckpoints > 0
@@ -53,24 +56,21 @@ export function calcLifeScore(state) {
 
   // Study
   const todaySessions = (study.sessions || []).filter(s => s.date === today)
-  const studyMins = todaySessions.reduce((a, s) => a + (Number(s.durationMinutes) || 0), 0)
-  const studyScore = Math.min(100, (studyMins / (dailyStudyGoal * 60)) * 100)
+  const studyMins = todaySessions.reduce((a, s) => a + Math.max(0, finiteAmount(s.durationMinutes)), 0)
+  const studyScore = dailyStudyGoal > 0 ? Math.min(100, (studyMins / (dailyStudyGoal * 60)) * 100) : 100
 
   // Finance
-  const dailyBudget = monthlyBudget / 30
+  const dailyBudget = dailyBudgetFor(monthlyBudget, today)
   const todaySpend = (finance.expenses || [])
     .filter(e => e.date === today)
     .reduce((a, e) => a + (Number(e.amount) || 0), 0)
   const financeScore =
     todaySpend <= dailyBudget
       ? 100
-      : Math.max(0, 100 - ((todaySpend - dailyBudget) / dailyBudget) * 100)
+      : dailyBudget > 0 ? Math.max(0, 100 - ((todaySpend - dailyBudget) / dailyBudget) * 100) : 0
 
   // TimeFlow (waste time)
-  const todayEntries = (timeflow.entries || []).filter(e => e.date === today)
-  const wasteMins = todayEntries
-    .filter(e => e.isWaste)
-    .reduce((a, e) => a + (Number(e.durationMinutes) || 0), 0)
+  const { wasteMins } = summarizeDay(timeflow.entries || [], today)
   const wasteScore =
     wasteMins <= dailyWasteLimit * 60
       ? 100
@@ -91,8 +91,8 @@ export function calcLifeScore(state) {
 
   // Calculate total active weight for normalization
   let totalWeight = 0
-  Object.entries(weights).forEach(([key, config]) => {
-    if (config.enabled) totalWeight += config.weight
+  Object.values(weights).forEach(config => {
+    if (config.enabled) totalWeight += Math.max(0, finiteAmount(config.weight))
   })
 
   // If nothing is enabled, return 50
@@ -116,7 +116,7 @@ export function calcLifeScore(state) {
       breakdown[key] = { score: Math.round(components[key]), weight: 0, contribution: 0, enabled: false }
       return
     }
-    const normalizedWeight = config.weight / totalWeight
+    const normalizedWeight = Math.max(0, finiteAmount(config.weight)) / totalWeight
     const contribution = components[key] * normalizedWeight
     total += contribution
     breakdown[key] = {

@@ -1,3 +1,4 @@
+import { dailyBudgetFor } from './financeMath'
 import { getTodayDateKey } from './dateTime'
 
 // ── Level thresholds ─────────────────────────────────────────
@@ -174,7 +175,6 @@ function getUnderBudgetStreak(state) {
   const expenses = state.finance?.expenses || []
   const preferences = state.settings?.preferences || {}
   const monthlyBudget = preferences.monthlyBudget || 8000
-  const dailyBudget = monthlyBudget / 30
 
   // Get all unique expense dates and sort descending
   const dateSpend = {}
@@ -187,7 +187,7 @@ function getUnderBudgetStreak(state) {
   const sortedDates = Object.keys(dateSpend).sort((a, b) => b.localeCompare(a))
   let streak = 0
   for (const d of sortedDates) {
-    if (dateSpend[d] <= dailyBudget) streak++
+    if (dateSpend[d] <= dailyBudgetFor(monthlyBudget, d)) streak++
     else break
   }
   return streak
@@ -220,7 +220,6 @@ function getUnderBudgetDays(state) {
   const expenses = state.finance?.expenses || []
   const preferences = state.settings?.preferences || {}
   const monthlyBudget = preferences.monthlyBudget || 8000
-  const dailyBudget = monthlyBudget / 30
 
   const dateSpend = {}
   expenses.forEach(e => {
@@ -229,7 +228,7 @@ function getUnderBudgetDays(state) {
     dateSpend[d] = (dateSpend[d] || 0) + (Number(e.amount) || 0)
   })
 
-  return Object.values(dateSpend).filter(s => s <= dailyBudget).length
+  return Object.entries(dateSpend).filter(([date, spent]) => spent <= dailyBudgetFor(monthlyBudget, date)).length
 }
 
 // ── XP Calculation ───────────────────────────────────────────

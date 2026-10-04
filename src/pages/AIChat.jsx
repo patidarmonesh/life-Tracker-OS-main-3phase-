@@ -1,3 +1,4 @@
+import { GEMINI_BASE_URL } from '../services/geminiService'
 
 
 
@@ -297,7 +298,7 @@ async function askGemini(question, summary, tone, scoreWeights, trend7Days, cate
   if (!apiKey) return null
 
   const res = await fetch(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
+    GEMINI_BASE_URL,
     {
       method: 'POST',
       headers: {

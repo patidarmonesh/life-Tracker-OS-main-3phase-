@@ -1,3 +1,6 @@
+import { dailyBudgetFor } from '../utils/financeMath'
+import { summarizeDay } from '../utils/planning'
+import { GEMINI_BASE_URL } from '../services/geminiService'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { useAuth } from '../context/appContextCore'
@@ -66,16 +69,14 @@ export default function Home() {
 
   const todayExpenses = (state.finance?.expenses || []).filter(e => e.date === today)
   const todaySpend = todayExpenses.reduce((a, e) => a + (Number(e.amount) || 0), 0)
-  const dailyBudget = Math.round((preferences.monthlyBudget || 8000) / 30)
+  const dailyBudget = dailyBudgetFor(preferences.monthlyBudget ?? 8000, today)
 
   const todaySessions = (state.study?.sessions || []).filter(s => s.date === today)
   const studyMins = todaySessions.reduce((a, s) => a + (Number(s.durationMinutes) || 0), 0)
   const studyGoalMins = (preferences.dailyStudyGoal || 6) * 60
 
   const todayTimeEntries = (state.timeflow?.entries || []).filter(e => e.date === today)
-  const wasteMins = todayTimeEntries
-    .filter(e => e.isWaste)
-    .reduce((a, e) => a + (Number(e.durationMinutes) || 0), 0)
+  const { wasteMins } = summarizeDay(state.timeflow?.entries || [], today)
 
   const todayLogs = (state.habits?.dailyLogs || []).filter(l => l.date === today)
   const todayBodyLog = (state.health?.bodyLogs || []).find(l => l.date === today)
@@ -400,7 +401,7 @@ Return ONLY valid JSON, no markdown:
 }`
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
+        GEMINI_BASE_URL,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },

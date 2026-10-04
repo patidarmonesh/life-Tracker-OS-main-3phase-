@@ -1,3 +1,4 @@
+import { GEMINI_BASE_URL } from '../services/geminiService'
 import { useEffect, useState, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { fetchPublicFileData, SHAREABLE_MODULES } from '../services/shareService'
@@ -318,7 +319,7 @@ export default function SharedDashboard() {
           if (localApiKey) {
             try {
               const res = await fetch(
-                'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
+                GEMINI_BASE_URL,
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json', 'x-goog-api-key': localApiKey },

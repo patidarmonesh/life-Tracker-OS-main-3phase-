@@ -12,6 +12,7 @@ import { getCurrencySymbol, normalizeCurrency } from '../utils/currency'
 import { playSuccessSound, playWarningBeep, playNoticeChime, playSubtleClick } from '../hooks/useAudio'
 import { hapticSuccess, hapticWarning, hapticMedium, hapticLight } from '../hooks/useHaptic'
 import { SHAREABLE_MODULES, makeFilePublic, revokePublicAccess, generateShareLink, getShareConfig } from '../services/shareService'
+import { hasPersistentGoogleAuth, getStoredSession, reconnectGoogle } from '../services/authService'
 
 const AVATARS = ['🧠', '🚀', '💻', '📚', '🎯', '🔥', '⚡', '🌙', '🏋️', '🎵', '🪴', '🧩']
 const DEFAULT_EXPENSE_CATEGORIES = [
@@ -938,6 +939,11 @@ export default function Settings() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {/* Google Client ID */}
+            <div style={{ padding: 12, background: 'var(--bg-secondary)', borderRadius: 10 }}>
+              <strong>Google Drive + Calendar</strong>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{hasPersistentGoogleAuth() ? (getStoredSession()?.persistent ? 'Automatic token refresh enabled. Calendar plans sync while LifeOS is open; Google delivers saved event reminders.' : 'Server ready. Connect once to enable lasting sync and Calendar reminders.') : 'Automatic refresh needs Vercel server configuration. See GOOGLE_SYNC_SETUP.md in the project.'}</p>
+              <Button variant="secondary" onClick={() => reconnectGoogle().catch(e => showToast(e.message, 'error'))}>Connect Google Calendar & Drive</Button>
+            </div>
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <label style={labelStyle}>Google Client ID</label>

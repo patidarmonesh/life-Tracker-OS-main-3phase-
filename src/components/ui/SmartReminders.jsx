@@ -1,3 +1,4 @@
+import { dailyBudgetFor } from '../../utils/financeMath'
 import { useState, useMemo } from 'react'
 import { getTodayDateKey } from '../../utils/dateTime'
 import { X } from 'lucide-react'
@@ -37,11 +38,11 @@ function getReminderChips(state) {
   }
 
   // Budget alert — >80%
-  const monthlyBudget = preferences.monthlyBudget || 8000
-  const dailyBudget = Math.round(monthlyBudget / 30)
+  const monthlyBudget = preferences.monthlyBudget ?? 8000
+  const dailyBudget = dailyBudgetFor(monthlyBudget, today)
   const todayExpenses = (state?.finance?.expenses || []).filter(e => e.date === today)
   const todaySpend = todayExpenses.reduce((a, e) => a + (Number(e.amount) || 0), 0)
-  const budgetPct = dailyBudget > 0 ? Math.round((todaySpend / dailyBudget) * 100) : 0
+  const budgetPct = dailyBudget > 0 ? Math.round((todaySpend / dailyBudget) * 100) : (todaySpend > 0 ? 100 : 0)
   if (budgetPct > 80) {
     chips.push({
       id: 'budget',

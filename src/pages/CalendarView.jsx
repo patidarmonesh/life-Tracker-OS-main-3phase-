@@ -56,7 +56,10 @@ export default function CalendarView() {
     // TimeFlow entries
     ;(state.timeflow?.entries || []).forEach(e => {
       const hours = ((e.durationMinutes || 0) / 60).toFixed(1)
-      addEvent(e.date, 'timeflow', e.activity, `${hours}h${e.isWaste ? ' ⚠️' : ''}`)
+      addEvent(e.date, 'timeflow', e.name || e.activity, `${hours}h${e.isWaste ? ' ⚠️' : ''}`)
+    })
+    ;(state.timeflow?.plans || []).forEach(p => {
+      addEvent(p.date, 'timeflow', `Plan: ${p.name}`, `${p.start}–${p.end}`)
     })
 
     // Habits

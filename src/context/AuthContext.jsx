@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import {
   getStoredSession,
-  getAccessToken,
   initializeGoogleAuth,
   attemptAutoLogin,
   signInWithGoogle,
   signOutGoogle,
   reconnectGoogle,
   onTokenRefresh,
-  startTokenRefreshWatcher,
   installTokenRefreshListeners,
-  removeTokenRefreshListeners,
   disableAutoSelect,
 } from '../services/authService'
 import { AuthContext } from './appContextCore'
@@ -32,12 +29,11 @@ export function AuthProvider({ children }) {
         // ── Step 1: Restore session from localStorage (NO network call) ───
         // This is instant — no popup, no Google API call.
         const session = getStoredSession()
-        if (session?.user && mounted) {
+        if (session?.user && mounted && localStorage.getItem('lifeos_logged_out') !== 'true') {
           setUser(session.user)
         }
 
-        // ── Step 2: Initialize the GIS tokenClient ────────────────────────
-        // Just loads the script, does NOT trigger any popup or auth flow.
+        // Discover server auth support without opening a popup.
         try {
           await initializeGoogleAuth()
         } catch (googleError) {
@@ -50,10 +46,8 @@ export function AuthProvider({ children }) {
           // Don't bail out — the user can still use the app with cached data
         }
 
-        // ── Step 3: Check stored session validity (NO popup) ──────────────
-        // attemptAutoLogin() now ONLY checks localStorage — no network call,
-        // no One Tap, no silent refresh, no popup. Instant.
-        const isLoggedOut = localStorage.getItem('lifeos_logged_out') === 'true'
+        // Restore a valid token or renew it through the server's offline session.
+        const isLoggedOut = localStorage.getItem('lifeos_logged_out') === 'true' && !window.location.search.includes('google_auth=connected')
 
         if (!isLoggedOut && mounted) {
           const autoResult = await attemptAutoLogin()
