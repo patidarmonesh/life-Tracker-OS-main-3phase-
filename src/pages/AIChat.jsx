@@ -1,4 +1,4 @@
-import { GEMINI_BASE_URL } from '../services/geminiService'
+import { getGeminiBaseUrl } from '../services/geminiService'
 
 
 
@@ -298,7 +298,7 @@ async function askGemini(question, summary, tone, scoreWeights, trend7Days, cate
   if (!apiKey) return null
 
   const res = await fetch(
-    GEMINI_BASE_URL,
+    getGeminiBaseUrl(),
     {
       method: 'POST',
       headers: {

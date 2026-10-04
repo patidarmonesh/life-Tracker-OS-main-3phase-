@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import Card from '../components/ui/Card'
-import { saveGeminiApiKey, testGeminiApiKey, getGeminiApiKey } from '../services/geminiService'
+import { saveGeminiApiKey, testGeminiApiKey, getGeminiApiKey, fetchAvailableModels } from '../services/geminiService'
 import Button from '../components/ui/Button'
 import { useToast } from '../context/toastContextCore'
 import { getCurrencySymbol, normalizeCurrency } from '../utils/currency'
@@ -44,6 +44,9 @@ export default function Settings() {
   const [googleClientId, setGoogleClientId] = useState(() => localStorage.getItem('lifeos_google_client_id') || '')
   const [isEditingGoogle, setIsEditingGoogle] = useState(false)
   const [isEditingGemini, setIsEditingGemini] = useState(false)
+  const [geminiModel, setGeminiModel] = useState(() => localStorage.getItem('lifeos_gemini_model')?.trim() || import.meta.env.VITE_GEMINI_MODEL?.trim() || 'gemini-1.5-flash')
+  const [availableModels, setAvailableModels] = useState([])
+  const [modelsLoading, setModelsLoading] = useState(false)
   const [showApiHelp, setShowApiHelp] = useState(false)
   const [newAccountName, setNewAccountName] = useState('')
   const [newAccountType, setNewAccountType] = useState('Bank')
@@ -198,6 +201,32 @@ export default function Settings() {
     saveGeminiApiKey(geminiKeyInput.trim())
     setIsEditingGemini(false)
     showToast('Gemini API Key saved ✓', 'success')
+    loadModels() // auto fetch models after saving
+  }
+
+  async function loadModels() {
+    const key = geminiKeyInput.trim() || getGeminiApiKey()
+    if (!key) return
+    try {
+      setModelsLoading(true)
+      const models = await fetchAvailableModels(key)
+      setAvailableModels(models)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setModelsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadModels()
+  }, [])
+
+  function handleModelChange(e) {
+    const m = e.target.value
+    setGeminiModel(m)
+    localStorage.setItem('lifeos_gemini_model', m)
+    showToast('AI Model updated!', 'success')
   }
 
   function saveGoogleClientId() {
@@ -1024,6 +1053,30 @@ export default function Settings() {
                   {apiStatus}
                 </div>
               )}
+            </div>
+
+            {/* Gemini Model */}
+            <div>
+              <label style={labelStyle}>AI Model</label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <select
+                  style={{ ...inputStyle, flex: 1 }}
+                  value={geminiModel}
+                  onChange={handleModelChange}
+                  disabled={modelsLoading}
+                >
+                  <option value={geminiModel}>{geminiModel}</option>
+                  {availableModels.filter(m => m !== geminiModel).map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                <Button variant="secondary" onClick={loadModels} disabled={modelsLoading || !geminiKeyInput}>
+                  {modelsLoading ? 'Loading...' : 'Fetch'}
+                </Button>
+              </div>
+              <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                {availableModels.length > 0 ? `Loaded ${availableModels.length} models. We recommend gemini-1.5-flash or gemini-2.0-flash.` : 'Click Fetch to auto-load available models.'}
+              </div>
             </div>
 
             {/* Help Text Expandable */}

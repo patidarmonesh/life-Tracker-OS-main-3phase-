@@ -1,4 +1,4 @@
-import { GEMINI_BASE_URL } from '../services/geminiService'
+import { getGeminiBaseUrl } from '../services/geminiService'
 import DayPlanner from '../components/ui/DayPlanner'
 import { summarizeDay, durationMinutes as slotDuration, timeMinutes } from '../utils/planning'
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
@@ -665,7 +665,7 @@ Return format:
 User's day: ${freeText}`
 
       const res = await fetch(
-        GEMINI_BASE_URL,
+        getGeminiBaseUrl(),
         {
           method: 'POST',
           headers: {
@@ -731,7 +731,7 @@ Return ONLY valid JSON in this format, no markdown, no explanation:
 }`
 
       const res = await fetch(
-        GEMINI_BASE_URL,
+        getGeminiBaseUrl(),
         {
           method: 'POST',
           headers: {
@@ -992,7 +992,7 @@ Return ONLY valid JSON:
 }`
 
       const res = await fetch(
-        GEMINI_BASE_URL,
+        getGeminiBaseUrl(),
         {
           method: 'POST',
           headers: {
@@ -1125,7 +1125,7 @@ Return ONLY valid JSON, no markdown:
 User says: ${userMsg}`
 
       const res = await fetch(
-        GEMINI_BASE_URL,
+        getGeminiBaseUrl(),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -1268,7 +1268,7 @@ Return ONLY valid JSON, no markdown, no explanation:
 }`
 
       const res = await fetch(
-        GEMINI_BASE_URL,
+        getGeminiBaseUrl(),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -1383,7 +1383,7 @@ Is Time Waste: ${isWaste ? 'Yes' : 'No'}
 Write a detailed 2-4 sentence note describing what likely happened during this time. Be specific and realistic. If it was a waste activity, mention what could have been done instead. Write in a casual Hinglish style (Hindi-English mix). Don't add any greeting or heading — just the note text directly.`
 
       const res = await fetch(
-        GEMINI_BASE_URL,
+        getGeminiBaseUrl(),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },

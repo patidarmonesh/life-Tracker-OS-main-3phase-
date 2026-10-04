@@ -1,7 +1,25 @@
 import { getRecentDateKeys, getTodayDateKey } from '../utils/dateTime'
 
-export const GEMINI_BASE_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/${import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash'}:generateContent`
+export function getGeminiModel() {
+  const stored = localStorage.getItem('lifeos_gemini_model')?.trim()
+  const rawModel = stored || import.meta.env.VITE_GEMINI_MODEL || 'gemini-1.5-flash'
+  return rawModel.replace(/^models\//, '')
+}
+
+export function getGeminiBaseUrl() {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${getGeminiModel()}:generateContent`
+}
+
+export const GEMINI_BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent` // Kept for backward compatibility if needed, but getGeminiBaseUrl() is preferred.
+
+export async function fetchAvailableModels(apiKey) {
+  if (!apiKey) throw new Error("Missing API Key")
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`)
+  if (!res.ok) throw new Error("Failed to fetch models")
+  const data = await res.json()
+  // Filter for models that support generateContent
+  return data.models.filter(m => m.supportedGenerationMethods.includes('generateContent')).map(m => m.name.replace(/^models\//, ''))
+}
 
 const GEMINI_KEY_STORAGE = 'lifeos_gemini_api_key'
 
@@ -24,7 +42,7 @@ export async function geminiRequest({ apiKey, contents, generationConfig = { tem
     throw new Error('Missing Gemini API key')
   }
 
-  const res = await fetch(GEMINI_BASE_URL, {
+  const res = await fetch(getGeminiBaseUrl(), {
     signal: AbortSignal.timeout(60000),
     method: 'POST',
     headers: {

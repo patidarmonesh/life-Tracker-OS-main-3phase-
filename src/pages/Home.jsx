@@ -1,6 +1,6 @@
 import { dailyBudgetFor } from '../utils/financeMath'
 import { summarizeDay } from '../utils/planning'
-import { GEMINI_BASE_URL } from '../services/geminiService'
+import { getGeminiBaseUrl } from '../services/geminiService'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { useAuth } from '../context/appContextCore'
@@ -401,7 +401,7 @@ Return ONLY valid JSON, no markdown:
 }`
 
       const res = await fetch(
-        GEMINI_BASE_URL,
+        getGeminiBaseUrl(),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
