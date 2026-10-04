@@ -2,60 +2,66 @@ import { localDate, addDays, localDateTimeToInstant } from '../metrics/dates.js'
 import { adaptActivities, classifyActivity, resolveSegments } from '../metrics/records.js'
 import { METRIC_VERSION, sourceRevision } from '../metrics/index.js'
 // Plans are intentions. Only a separately confirmed check-in can create actual work.
+/**
+ * EMPTY_PLANNING
+ * @description Automatically documented.
+ */
 export const EMPTY_PLANNING = { drafts: {}, revisions: [], checkins: [], timer: null, reviews: [], exportStatus: {} }
+/**
+ * uid
+ * @description Automatically documented.
+ */
 export const uid = (prefix = 'record') => `${prefix}_${globalThis.crypto.randomUUID()}`
+/**
+ * ownerDate
+ * @description Automatically documented.
+ */
 export const ownerDate = localDate
+/**
+ * nextDate
+ * @description Automatically documented.
+ */
 export const nextDate = (date, delta = 1) => addDays(date, delta)
+/**
+ * clockMinutes function
+ * @param {any} clock
+ * @returns {any}
+ */
 export function clockMinutes(clock) {
   if (!/^\d{2}:\d{2}$/.test(clock || '')) return null
   const [h, m] = clock.split(':').map(Number)
   return h < 24 && m < 60 ? h * 60 + m : null
 }
+/**
+ * minuteClock function
+ * @param {any} minutes
+ * @returns {any}
+ */
 export function minuteClock(minutes) { return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}` }
+/**
+ * zonedInstant
+ * @description Automatically documented.
+ */
 export const zonedInstant = localDateTimeToInstant
+/**
+ * displayClock function
+ * @param {any} instant, timezone
+ * @returns {any}
+ */
 export function displayClock(instant, timezone) {
   return new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(instant))
 }
-function parseClockToken(token, contextPeriod = '') {
-  const match = token.trim().match(/^(\d{1,2})(?::([0-5]\d))?\s*(am|pm)?$/i)
-  if (!match) return null
-  let hour = Number(match[1]); const minute = Number(match[2] || 0), period = (match[3] || contextPeriod).toLowerCase()
-  if (period && (hour < 1 || hour > 12) || !period && hour > 23) return null
-  if (period) hour = hour % 12 + (period === 'pm' ? 12 : 0)
-  return { minutes: hour * 60 + minute, explicit: Boolean(match[2] !== undefined || match[3] || contextPeriod) }
-}
-export function parseDiary(text) {
-  const source = String(text).replace(/[०-९]/g, d => String('०१२३४५६७८९'.indexOf(d)))
-  return source.split(/\n|;/).map(line => line.trim()).filter(Boolean).map(line => {
-    const contextPeriod = /subah|morning|सुबह/i.test(line) ? 'am' : /shaam|sham|evening|raat|night|दोपहर|शाम|रात/i.test(line) ? 'pm' : ''
-    const clockText = line.replace(/\b\d{4}-\d{2}-\d{2}\b/g, '')
-    const range = clockText.match(/\b(\d{1,2}(?::[0-5]\d)?\s*(?:am|pm)?)\s*(?:baje|बजे)?\s*(?:[-–—]|to|se|से)\s*(\d{1,2}(?::[0-5]\d)?\s*(?:am|pm)?)(?![\d:])/i)
-    const duration = line.match(/(\d+(?:\.\d+)?)\s*(hours?|hrs?|h|घंटे?|घंटा|minutes?|mins?|m|मिनट)(?=\s|$|[,.;])/i)
-    const time = line.match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\s*(?:am|pm)?\b/i) || line.match(/\b\d{1,2}\s*(?:am|pm)\b/i)
-    let startTime = '', estimateMinutes = duration ? Math.round(+duration[1] * (/^(h|घं)/i.test(duration[2]) ? 60 : 1)) : 30, warning = '', endsNextDay = false
-    if (range) {
-      const periodA = range[1].match(/(am|pm)/i)?.[1], periodB = range[2].match(/(am|pm)/i)?.[1]
-      const a = parseClockToken(range[1], periodA || periodB || contextPeriod), b = parseClockToken(range[2], periodB || periodA || contextPeriod)
-      if (!a || !b || !a.explicit || !b.explicit) warning = 'Choose AM/PM or 24-hour HH:mm times for this range before approving.'
-      else {
-        startTime = minuteClock(a.minutes)
-        estimateMinutes = (b.minutes - a.minutes + 1440) % 1440
-        endsNextDay = b.minutes < a.minutes
-        if (!estimateMinutes || (estimateMinutes > 720 && !(periodA && periodB))) warning = 'This range is ambiguous. Specify AM/PM for both ends or edit its duration.'
-      }
-    } else if (time) {
-      const parsed = parseClockToken(time[0], contextPeriod)
-      if (parsed) startTime = minuteClock(parsed.minutes)
-    } else if (/\b\d{1,2}\s*(baje|बजे)/i.test(line)) warning = 'Choose AM/PM for this time before approving.'
-    return {
-      id: uid('block'), taskId: uid('task'), title: line.replace(/^[-*•]\s*/, ''),
-      estimateMinutes, estimateAssumed: !duration && !range, startTime, endsNextDay, reminderMinutes: 10,
-      priority: /\bmust\b|ज़रूरी|जरूरी/i.test(line) ? 'must' : 'should', fixed: Boolean(startTime),
-      category: /study|read|gate|पढ़|padh/i.test(line) ? 'Study' : /sleep|सोना|sona/i.test(line) ? 'Sleep' : /meal|lunch|dinner|खाना/i.test(line) ? 'Meals' : /walk|gym|exercise|चलना/i.test(line) ? 'Exercise' : 'Deep Work',
-      completionCriterion: '', explicitDate: line.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] || '', warning, source: 'diary-draft',
-    }
-  })
-}
+// Diary parsing lives in ./parser.js (waking-window AM/PM rule, Hinglish quarters, sequence context).
+/**
+ * Item
+ * @description Automatically documented.
+ */
+export { parseDiary, resolveAmbiguity, suggestIntention, guessCategory } from './parser.js'
+/**
+ * scheduleDraft function
+ * @param {any} tasks, { localDate, timezone = 'Asia/Kolkata', windowStart = '09:00', windowEnd = '18:00', bufferMinutes = 10, busy = [] }
+ * @returns {any}
+ */
 export function scheduleDraft(tasks, { localDate, timezone = 'Asia/Kolkata', windowStart = '09:00', windowEnd = '18:00', bufferMinutes = 10, busy = [] }) {
   const from = clockMinutes(windowStart), to = clockMinutes(windowEnd)
   if (from == null || to == null || to <= from) return { blocks: [], unscheduled: tasks, warnings: ['The work window must end after it starts.'] }
@@ -86,7 +92,17 @@ export function scheduleDraft(tasks, { localDate, timezone = 'Asia/Kolkata', win
   if (unscheduled.length) warnings.push(`${unscheduled.length} task${unscheduled.length === 1 ? '' : 's'} need editing or carry-over. No task has been shortened.`)
   return { blocks: blocks.sort((a, b) => a.startAt.localeCompare(b.startAt)), unscheduled, warnings }
 }
+/**
+ * latestApproved function
+ * @param {any} planning, date
+ * @returns {any}
+ */
 export function latestApproved(planning, date) { return (planning?.revisions || []).filter(r => r.localDate === date && r.status === 'approved').sort((a, b) => b.revision - a.revision)[0] || null }
+/**
+ * retainBlockIds function
+ * @param {any} proposed, previous = []
+ * @returns {any}
+ */
 export function retainBlockIds(proposed, previous = []) {
   const used = new Set()
   return proposed.map(block => {
@@ -96,6 +112,11 @@ export function retainBlockIds(proposed, previous = []) {
     return { ...block, id: match.id, taskId: match.taskId }
   })
 }
+/**
+ * approveRevision function
+ * @param {any} planning, draft, now = new Date().toISOString()
+ * @returns {any}
+ */
 export function approveRevision(planning, draft, now = new Date().toISOString()) {
   if (!draft.blocks?.length || draft.unscheduled?.length || draft.warnings?.length) throw new Error('Resolve the schedule warnings before approving.')
   const previous = latestApproved(planning, draft.localDate)
@@ -105,18 +126,38 @@ export function approveRevision(planning, draft, now = new Date().toISOString())
   revision.originalRevisionId ||= revision.id
   return { planning: { ...planning, revisions: [...(planning.revisions || []), revision] }, revision }
 }
+/**
+ * replanTasks function
+ * @param {any} revision, checkins
+ * @returns {any}
+ */
 export function replanTasks(revision, checkins) {
   const settled = new Set(checkins.filter(c => ['done', 'partial'].includes(c.outcome)).map(c => c.blockId))
   return revision.blocks.map(block => ({ ...block, fixed: block.fixed || settled.has(block.id) }))
 }
+/**
+ * createTimer function
+ * @param {any} block, deviceId, now = new Date().toISOString()
+ * @returns {any}
+ */
 export function createTimer(block, deviceId, now = new Date().toISOString()) {
   return { id: uid('timer'), blockId: block.id, taskId: block.taskId, title: block.title, category: block.category, block: structuredClone(block), state: 'running', runningSince: now, segments: [], revision: 1, deviceId, createdAt: now }
 }
+/**
+ * timerMilliseconds function
+ * @param {any} timer, now = Date.now()
+ * @returns {any}
+ */
 export function timerMilliseconds(timer, now = Date.now()) {
   if (!timer) return 0
   const closed = (timer.segments || []).reduce((sum, s) => sum + Math.max(0, Date.parse(s.endAt) - Date.parse(s.startAt)), 0)
   return closed + (timer.state === 'running' && timer.runningSince ? Math.max(0, Number(new Date(now)) - Date.parse(timer.runningSince)) : 0)
 }
+/**
+ * transitionTimer function
+ * @param {any} timer, action, now = new Date().toISOString()
+ * @returns {any}
+ */
 export function transitionTimer(timer, action, now = new Date().toISOString()) {
   if (!timer) return null
   if (action === 'resume' && timer.state === 'paused') return { ...timer, state: 'running', runningSince: now, revision: timer.revision + 1 }
@@ -124,6 +165,11 @@ export function transitionTimer(timer, action, now = new Date().toISOString()) {
   if (action === 'stop' && timer.state === 'paused') return { ...timer, state: 'stopped', revision: timer.revision + 1 }
   return timer
 }
+/**
+ * checkinActivities function
+ * @param {any} checkin, block, timer = null
+ * @returns {any}
+ */
 export function checkinActivities(checkin, block, timer = null) {
   if (checkin.outcome === 'not-started' || checkin.timing === 'unknown') return []
   const base = { blockId: checkin.outcome === 'other' ? null : block.id, replacedBlockId: checkin.outcome === 'other' ? block.id : null, taskId: checkin.outcome === 'other' ? null : block.taskId, date: block.localDate, category: checkin.outcome === 'other' ? 'Other' : block.category, description: checkin.replacement || block.title, source: 'confirmed-check-in' }
@@ -138,6 +184,11 @@ export function checkinActivities(checkin, block, timer = null) {
   }
   return intervals.map((s, i) => ({ ...base, ...s, id: `checkin_${checkin.id}_${i}`, canonicalId: `checkin_${checkin.id}_${i}`, durationMinutes: (Date.parse(s.endAt) - Date.parse(s.startAt)) / 60000, createdAt: checkin.answeredAt }))
 }
+/**
+ * commitmentSummary function
+ * @param {any} planning, date
+ * @returns {any}
+ */
 export function commitmentSummary(planning, date) {
   const current = latestApproved(planning, date)
   const original = planning.revisions?.find(r => r.id === current?.originalRevisionId) || current
@@ -148,6 +199,11 @@ export function commitmentSummary(planning, date) {
 }
 
 /** Original-commitment metrics; only resolved, explicitly linked evidence matches a block. */
+/**
+ * buildPlanningSummary function
+ * @param {any} state, date, { now = Date.now(), timezone = state.settings?.profile?.timezone || 'Asia/Kolkata' } = {}
+ * @returns {any}
+ */
 export function buildPlanningSummary(state, date, { now = Date.now(), timezone = state.settings?.profile?.timezone || 'Asia/Kolkata' } = {}) {
   const planning = state.planning || EMPTY_PLANNING, current = latestApproved(planning, date)
   const original = planning.revisions?.find(r => r.id === current?.originalRevisionId) || current
@@ -200,4 +256,21 @@ export function buildPlanningSummary(state, date, { now = Date.now(), timezone =
     estimateRatio: { ...meta, value: ratios.length ? (ratios.length % 2 ? ratios[mid] : (ratios[mid - 1] + ratios[mid]) / 2) : null, unit: 'ratio', sampleCount: ratios.length, status: ratios.length ? 'observed' : 'incomplete' },
   }
 }
+
+/**
+ * Item
+ * @description Automatically documented.
+ */
+export * from './sync.js'
+/**
+ * Item
+ * @description Automatically documented.
+ */
+export * from './learning.js'
+/**
+ * Item
+ * @description Automatically documented.
+ */
+export * from './parser.js'
+
 

@@ -1,4 +1,9 @@
 import { buildRangeSummary } from '../domain/metrics/index.js'
+/**
+ * reportModel function
+ * @param {any} state, range, selectedAreas = ['time', 'study', 'sleep', 'money', 'routines']
+ * @returns {any}
+ */
 export function reportModel(state, range, selectedAreas = ['time', 'study', 'sleep', 'money', 'routines']) {
   const summary = buildRangeSummary(state, range)
   const definitions = [
@@ -27,3 +32,5 @@ export function reportModel(state, range, selectedAreas = ['time', 'study', 'sle
     }),
   }
 }
+
+

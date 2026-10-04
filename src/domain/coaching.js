@@ -1,6 +1,10 @@
 import { addDays, assertDate, localDate } from './metrics/dates.js'
 import { buildPlanningSummary } from './planning/index.js'
 
+/**
+ * COACHING_LIMITS
+ * @description Automatically documented.
+ */
 export const COACHING_LIMITS = { facts: 12, preferences: 8, activeExperiments: 2, memoryCharacters: 400, minimumTasks: 8, minimumCorrelationPairs: 21 }
 const timestamp = now => new Date(now ?? Date.now()).toISOString()
 const clean = (value, max, label) => {
@@ -11,6 +15,11 @@ const clean = (value, max, label) => {
 const newest = rows => [...rows].sort((a, b) => String(b.updatedAt || b.confirmedAt || '').localeCompare(String(a.updatedAt || a.confirmedAt || '')) || String(a.id).localeCompare(String(b.id)))
 
 /** This mutator requires explicit confirmation; AI suggestions alone are never memory. */
+/**
+ * saveCoachMemory function
+ * @param {any} chat = {}, input, { now, id = input.id || crypto.randomUUID() } = {}
+ * @returns {any}
+ */
 export function saveCoachMemory(chat = {}, input, { now, id = input.id || crypto.randomUUID() } = {}) {
   if (input.confirmed !== true) throw new Error('Confirm this personal fact or preference before saving it.')
   if (!['fact', 'preference'].includes(input.kind)) throw new Error('Choose a fact or preference.')
@@ -22,12 +31,22 @@ export function saveCoachMemory(chat = {}, input, { now, id = input.id || crypto
   return { ...chat, coachingMemories: [...(chat.coachingMemories || []).filter(row => row.id !== id), memory] }
 }
 
+/**
+ * changeMemoryStatus function
+ * @param {any} chat = {}, id, status, { now } = {}
+ * @returns {any}
+ */
 export function changeMemoryStatus(chat = {}, id, status, { now } = {}) {
   if (!['rejected', 'deleted'].includes(status)) throw new Error('Choose reject or delete.')
   if (!(chat.coachingMemories || []).some(row => row.id === id)) throw new Error('Memory was not found.')
   return { ...chat, coachingMemories: chat.coachingMemories.map(row => row.id === id ? { ...row, status, updatedAt: timestamp(now), ...(status === 'deleted' ? { text: '', revisions: [] } : {}) } : row) }
 }
 
+/**
+ * saveWeeklyExperiment function
+ * @param {any} chat = {}, input, { now, id = input.id || crypto.randomUUID() } = {}
+ * @returns {any}
+ */
 export function saveWeeklyExperiment(chat = {}, input, { now, id = input.id || crypto.randomUUID() } = {}) {
   if (input.confirmed !== true) throw new Error('Review and confirm this experiment before starting it.')
   const title = clean(input.title, 160, 'Experiment'), successCriterion = clean(input.successCriterion, 400, 'Success criterion')
@@ -42,6 +61,11 @@ export function saveWeeklyExperiment(chat = {}, input, { now, id = input.id || c
   return { ...chat, weeklyExperiments: [...(chat.weeklyExperiments || []).filter(row => row.id !== id), experiment] }
 }
 
+/**
+ * reviewWeeklyExperiment function
+ * @param {any} chat = {}, id, { status, result, reviewNotes = '' }, { now } = {}
+ * @returns {any}
+ */
 export function reviewWeeklyExperiment(chat = {}, id, { status, result, reviewNotes = '' }, { now } = {}) {
   if (!['completed', 'rejected', 'deleted'].includes(status)) throw new Error('Choose a review outcome.')
   if (status === 'completed' && !['met', 'not-met', 'inconclusive'].includes(result)) throw new Error('Choose whether the success criterion was met, not met, or inconclusive.')
@@ -53,6 +77,11 @@ export function reviewWeeklyExperiment(chat = {}, id, { status, result, reviewNo
 }
 
 /** Allowlist projection: never include conversation, diary/SMS text, rejected facts or histories. */
+/**
+ * selectCoachingContext function
+ * @param {any} state = {}, { now = Date.now(), timezone = state.settings?.profile?.timezone || 'Asia/Kolkata' } = {}
+ * @returns {any}
+ */
 export function selectCoachingContext(state = {}, { now = Date.now(), timezone = state.settings?.profile?.timezone || 'Asia/Kolkata' } = {}) {
   const date = localDate(now, timezone), chat = state.aiChat || {}
   const memories = newest((chat.coachingMemories || []).filter(row => row.status === 'confirmed' && row.source === 'user-confirmed' && row.confirmedAt && typeof row.text === 'string' && row.text.trim()))
@@ -66,6 +95,11 @@ export function selectCoachingContext(state = {}, { now = Date.now(), timezone =
 const quantile = (values, p) => { const position = (values.length - 1) * p, lower = Math.floor(position); return values[lower] + (values[Math.ceil(position)] - values[lower]) * (position - lower) }
 
 /** Comparable means an explicitly selected category/subject, not an AI-invented cluster. */
+/**
+ * estimationPattern function
+ * @param {any} state = {}, { category = 'Study', subject = null, now = Date.now(), timezone = state.settings?.profile?.timezone || 'Asia/Kolkata' } = {}
+ * @returns {any}
+ */
 export function estimationPattern(state = {}, { category = 'Study', subject = null, now = Date.now(), timezone = state.settings?.profile?.timezone || 'Asia/Kolkata' } = {}) {
   const endDate = localDate(now, timezone), startDate = addDays(endDate, -89)
   const planning = state.planning || {}, revisions = planning.revisions || []
@@ -89,6 +123,11 @@ export function estimationPattern(state = {}, { category = 'Study', subject = nu
 }
 
 /** One observed pair per date, minimum 21 dates, no imputation or causal interpretation. */
+/**
+ * correlationSummary function
+ * @param {any} pairs = []
+ * @returns {any}
+ */
 export function correlationSummary(pairs = []) {
   const dates = new Map(), duplicated = new Set()
   for (const pair of pairs) {
@@ -107,3 +146,5 @@ export function correlationSummary(pairs = []) {
   if (!(denominator > 0) || !Number.isFinite(denominator)) return { ...meta, status: 'constant-or-invalid-series', value: null }
   return { ...meta, status: 'observed', value: Math.max(-1, Math.min(1, covariance / denominator)) }
 }
+
+

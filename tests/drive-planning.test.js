@@ -26,9 +26,9 @@ test('old Drive merge preserves records, conflicts, unknown fields and repeats w
 
 test('diary ranges infer duration, support Hinglish and retain ambiguity for review', () => {
   const blocks = parseDiary('09:00–10:30 Study\nshaam 6 se 7 baje walk\n9am to 10am reading\n9 se 10 baje meeting\n23:00-01:00 project')
-  assert.deepEqual(blocks.map(b => b.estimateMinutes), [90, 60, 60, 30, 120])
-  assert.deepEqual(blocks.map(b => b.startTime), ['09:00', '18:00', '09:00', '', '23:00'])
-  assert.ok(blocks[3].warning); assert.equal(blocks[4].endsNextDay, true)
+  assert.deepEqual(blocks.map(b => b.estimateMinutes), [90, 60, 60, 60, 120])
+  assert.deepEqual(blocks.map(b => b.startTime), ['09:00', '18:00', '09:00', '09:00', '23:00'])
+  assert.equal(blocks[3].periodInferred, true); assert.equal(blocks[4].endsNextDay, true)
   assert.ok(blocks.every(b => b.reminderMinutes === 10))
   const dated = parseDiary('2026-10-04 09:00-10:00 Study')[0]
   assert.equal(dated.startTime, '09:00'); assert.equal(dated.estimateMinutes, 60)

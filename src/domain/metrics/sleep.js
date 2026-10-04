@@ -2,6 +2,11 @@ import { localDate, localParts } from './dates.js'
 import { finiteNonNegative, isSyntheticHealth, normalizeActivity } from './records.js'
 import { chronologicalCorrections } from './canonical.js'
 
+/**
+ * circularClockStats function
+ * @param {any} minutes
+ * @returns {any}
+ */
 export function circularClockStats(minutes) {
   const values = minutes.filter(v => Number.isFinite(v) && v >= 0 && v < 1440)
   if (!values.length) return { meanMinutes: null, spreadMinutes: null, count: 0, ambiguous: false }
@@ -29,6 +34,11 @@ function asleepMinutes(record) {
   return Math.max(0, total - merged.reduce((sum, [a, b]) => sum + (b - a) / 60000, 0))
 }
 
+/**
+ * collectSleepEpisodes function
+ * @param {any} state, adapted, now
+ * @returns {any}
+ */
 export function collectSleepEpisodes(state, adapted, now) {
   const timezone = adapted.timezone
   const records = [...adapted.records.filter(r => r.bucket === 'Sleep')]
@@ -59,6 +69,11 @@ export function collectSleepEpisodes(state, adapted, now) {
   return result
 }
 
+/**
+ * selectSleepNight function
+ * @param {any} episodes, date, resolutions = []
+ * @returns {any}
+ */
 export function selectSleepNight(episodes, date, resolutions = []) {
   const all = episodes.filter(r => r.wakeDate === date)
   const candidates = all.filter(r => r.kind !== 'nap')
@@ -66,3 +81,5 @@ export function selectSleepNight(episodes, date, resolutions = []) {
   const selected = resolution ? candidates.find(r => r.id === resolution.episodeId || r.originalRecordId === resolution.episodeId || r.originalIds.includes(resolution.episodeId)) : candidates.length === 1 ? candidates[0] : null
   return { episode: selected || null, candidates, naps: all.filter(r => r.kind === 'nap'), needsReview: candidates.length > 1 && !selected }
 }
+
+

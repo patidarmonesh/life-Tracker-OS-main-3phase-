@@ -4,6 +4,7 @@ import { useAppState } from '../../context/appHooks'
 import Sidebar from './Sidebar'
 import BottomNav from './BottomNav'
 import TopBar from './TopBar'
+import CommandMenu from './CommandMenu'
 import UpdatePrompt from '../ui/UpdatePrompt'
 export default function AppShell({ children }) {
   const state = useAppState(), location = useLocation()
@@ -20,5 +21,6 @@ export default function AppShell({ children }) {
     const names = { '/': 'Today', '/plan': 'Plan', '/capture': 'Capture', '/insights': 'Insights', '/me': 'Me', '/finance': 'Money', '/habits': 'Routines', '/brain': 'Notes' }
     if (names[location.pathname]) document.title = `${names[location.pathname]} · LifeOS`
   }, [location.pathname])
-  return <div className="life-shell"><a className="skip-link" href="#main-content">Skip to content</a><Sidebar/><div className="life-main"><TopBar/><main id="main-content" className="life-content" tabIndex={-1}><UpdatePrompt/>{children}</main></div><BottomNav/></div>
+  return <div className="life-shell"><a className="skip-link" href="#main-content">Skip to content</a><Sidebar/><div className="life-main"><TopBar/><main id="main-content" className="life-content" tabIndex={-1}><UpdatePrompt/><CommandMenu/>{children}</main></div><BottomNav/></div>
 }
+

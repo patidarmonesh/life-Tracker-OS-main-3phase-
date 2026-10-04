@@ -1,69 +1,208 @@
 import { useMemo, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { useAppActions, useAppState } from '../context/appHooks'
-import { buildDailySummary, buildRangeSummary, selectedDateRange, normalizeManualInterval, adaptActivities } from '../domain/metrics/index.js'
-import { getTodayDateKey } from '../utils/dateTime'
-import Metric from '../components/areas/Metric'
-import { duration, numberOf } from '../components/areas/format'
-import Button from '../components/ui/Button'
-import Modal from '../components/ui/Modal'
+import { AnimatePresence } from 'motion/react'
+import { Clock, Plus, Zap, Coffee, Moon, Sunrise, Sun as SunIcon, Sunset } from 'lucide-react'
+import { Page, Card, StatCard, Tabs, Button, Chips, EmptyState, Sheet, Ring, Legend } from '../ui/index'
+import HeatCalendar from '../ui/calendar/HeatCalendar'
+import DateNavigator from '../ui/calendar/DateNavigator'
+import { heatColor } from '../ui/calendar/calendarMath'
+import { useLocalPref, useLiveNow } from '../ui/hooks'
+import { fmtMinutes, fmtHours, fmtClock, fmtDate } from '../ui/format'
+import { localDate, dayBounds, addDays } from '../domain/metrics/dates'
+import { adaptActivities, resolveSegments, ALLOCATION_BUCKETS } from '../domain/metrics/records'
+import { useAppState } from '../context/appHooks'
+import { useNavigate } from 'react-router-dom'
+
+const BUCKET_COLORS = { Focus: '#6366F1', Health: '#10B981', Essentials: '#94A3B8', Leisure: '#F59E0B', Drift: '#F43F5E', Sleep: '#818CF8', Other: '#64748B', Conflict: '#EF4444' }
+const THEME = hour => {
+  if (hour < 6) return { label: 'Night', icon: Moon, bg: '#111', orb: '#6366F1' }
+  if (hour < 12) return { label: 'Morning', icon: Sunrise, bg: '#111', orb: '#F59E0B' }
+  if (hour < 17) return { label: 'Afternoon', icon: SunIcon, bg: '#111', orb: '#22D3EE' }
+  if (hour < 21) return { label: 'Evening', icon: Sunset, bg: '#111', orb: '#A78BFA' }
+  return { label: 'Night', icon: Moon, bg: '#111', orb: '#6366F1' }
+}
 
 export default function TimeFlow() {
   const state = useAppState()
-  const { updateModule, updateModules } = useAppActions()
-  const location = useLocation()
-  const timezone = state.settings.profile.timezone
-  const [date, setDate] = useState(location.state?.selectedDate || getTodayDateKey(timezone))
-  const [editing, setEditing] = useState(null)
-  const [open, setOpen] = useState(false)
-  const [error, setError] = useState('')
-  const blank = { name: '', category: 'Study', start: '09:00', end: '10:00', endsNextDay: false, isWaste: false, notes: '', subject: '' }
-  const [form, setForm] = useState(blank)
-  const summary = useMemo(() => buildDailySummary(state, date), [state, date])
-  const range = selectedDateRange(date, 7)
-  const week = useMemo(() => buildRangeSummary(state, selectedDateRange(date, 7)), [state, date])
-  const adapted = useMemo(() => adaptActivities(state, { timezone }), [state, timezone])
-  const entries = (state.timeflow.entries || []).filter(entry => entry.date === date || entry.endDate === date)
-  const categories = state.settings.preferences.timeCategories || []
-  function save(event) {
-    event.preventDefault()
-    try {
-      const interval = normalizeManualInterval({ ...form, date, timezone })
-      if (Date.parse(interval.endAt) > Date.now()) throw new Error('Actual time cannot end in the future. Add intended work in Plan.')
-      const id = editing?.id || crypto.randomUUID()
-      const payload = { ...editing, ...form, ...interval, id, canonicalActivityId: editing?.canonicalActivityId || id, date, intentionality: form.isWaste ? 'confirmed-drift' : 'intentional', certainty: 'user-estimated', source: 'manual', updatedAt: new Date().toISOString() }
-      updateModules({
-        timeflow: previous => ({ ...previous, entries: [payload, ...(previous.entries || []).filter(e => e.id !== id)] }),
-        ...(editing?.studySessionId ? { study: previous => ({ ...previous, sessions: previous.sessions.filter(s => s.id !== editing.studySessionId) }) } : {}),
-      })
-      setOpen(false); setError('')
-    } catch (failure) { setError(failure.message) }
+  const navigate = useNavigate()
+  const now = useLiveNow(30000)
+  const today = localDate(now)
+  const [date, setDate] = useState(today)
+  const [tab, setTab] = useLocalPref('timeflow_tab', 'day')
+  const hour = new Date(now).getHours()
+  const theme = THEME(hour)
+
+  const { records } = useMemo(() => adaptActivities(state), [state])
+  const dayRecords = useMemo(() => records.filter(r => r.date === date), [records, date])
+  const bounds = useMemo(() => { try { return dayBounds(date, 'Asia/Kolkata', now) } catch { return null } }, [date, now])
+  const segments = useMemo(() => bounds ? resolveSegments(dayRecords, bounds.start, bounds.cutoff) : [], [dayRecords, bounds])
+
+  const bucketMinutes = useMemo(() => {
+    const m = {}; ALLOCATION_BUCKETS.forEach(b => { m[b] = 0 })
+    segments.forEach(s => { m[s.bucket] = (m[s.bucket] || 0) + s.minutes })
+    return m
+  }, [segments])
+  const totalLogged = Object.values(bucketMinutes).reduce((a, b) => a + b, 0)
+  const gapMinutes = bounds ? bounds.elapsedMinutes - totalLogged : 0
+
+  const tabs = [
+    { key: 'day', label: 'Day' },
+    { key: 'week', label: 'Week' },
+    { key: 'month', label: 'Month' },
+  ]
+
+  return <Page title="Time Flow" icon={Clock} color="#22D3EE" className="pb-24 max-md:pb-24"
+    actions={<>
+      <DateNavigator value={date} onChange={setDate} today={today} max={today} />
+      <Button variant="primary" icon={Plus} onClick={() => navigate('/capture?type=time')}>Log</Button>
+    </>}>
+
+    {/* Live clock hero */}
+    {date === today && <Card glass style={{ background: theme.bg, position: 'relative', overflow: 'hidden', padding: '2rem 1.5rem', borderRadius: '0', boxShadow: 'none' }}>
+      <div className="orb" style={{ '--orb': theme.orb, top: '-30%', right: '-10%', width: 300, height: 300, opacity: .35, filter: 'blur(50px)' }} />
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div>
+          <div style={{ fontSize: '.8rem', textTransform: 'uppercase', letterSpacing: '.15em', fontWeight: 700, color: 'rgba(255,255,255,.7)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <theme.icon size={16} />{theme.label}
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: 'clamp(2.5rem, 6vw, 4rem)', lineHeight: 1.1, color: '#FFFFFF', letterSpacing: '-0.02em', marginTop: '4px', textShadow: 'none' }}>
+            {new Date(now).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+          </div>
+          <div style={{ fontSize: '1rem', color: 'rgba(255,255,255,.6)', marginTop: 8, fontWeight: 500 }}>{fmtDate(today, 'long')}</div>
+        </div>
+      </div>
+    </Card>}
+
+    <Tabs tabs={tabs} value={tab} onChange={setTab} id="tf" />
+
+    {tab === 'day' && <DayView segments={segments} bucketMinutes={bucketMinutes} totalLogged={totalLogged} gapMinutes={gapMinutes} navigate={navigate} />}
+    {tab === 'week' && <WeekView records={records} date={date} />}
+    {tab === 'month' && <MonthView records={records} date={date} setDate={setDate} today={today} />}
+    <div className="pb-24 h-24 min-h-[6rem] mb-12"></div>
+    </Page>
+}
+
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, LineChart, Line, XAxis, YAxis } from 'recharts'
+
+function DayView({ segments, bucketMinutes, totalLogged, gapMinutes, navigate }) {
+  const active = ALLOCATION_BUCKETS.filter(b => bucketMinutes[b] > 0)
+  
+  const pieData = active.map(b => ({ name: b, value: bucketMinutes[b] }))
+  if (gapMinutes > 15) pieData.push({ name: 'Unlogged', value: gapMinutes })
+
+  return <>
+    {/* Stats strip */}
+    <div className="ui-grid cols-4">
+      <StatCard label="Logged" value={totalLogged > 0 ? totalLogged : null} format={v => fmtMinutes(v)} color="#22D3EE"
+        placeholder={{ label: '+ Log', onClick: () => navigate('/capture?type=time') }} />
+      <StatCard label="Focus" value={bucketMinutes.Focus > 0 ? bucketMinutes.Focus : null} format={v => fmtHours(v)} color="#6366F1" />
+      <StatCard label="Unlogged" value={gapMinutes > 5 ? gapMinutes : null} format={v => fmtMinutes(v)} color="#64748B" />
+      <StatCard label="Drift" value={bucketMinutes.Drift > 0 ? bucketMinutes.Drift : null} format={v => fmtMinutes(v)} color="#F43F5E" />
+    </div>
+
+    {/* Distribution Chart */}
+    {(totalLogged > 0 || gapMinutes > 60) && (
+      <Card title="Time Distribution">
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <div style={{ height: 160, width: 160, flexShrink: 0 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value" paddingAngle={3} animationDuration={1000}>
+                  {pieData.map((entry, i) => (
+                    <Cell key={i} fill={entry.name === 'Unlogged' ? 'rgba(100,116,139,0.3)' : BUCKET_COLORS[entry.name]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip formatter={(v) => fmtMinutes(v)} contentStyle={{ background: '#1E293B', border: 'none', borderRadius: 0, color: '#F8FAFC' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignContent: 'center' }}>
+            {active.map(b => <span key={b} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '.3rem .7rem', borderRadius: 0,
+              background: `color-mix(in srgb, ${BUCKET_COLORS[b]} 15%, transparent)`, border: `1px solid color-mix(in srgb, ${BUCKET_COLORS[b]} 35%, transparent)`,
+              fontSize: '.78rem', fontWeight: 650 }}>
+              <i style={{ width: 8, height: 8, borderRadius: '0', background: BUCKET_COLORS[b], display: 'inline-block' }} />
+              {b} · {fmtMinutes(bucketMinutes[b])}
+            </span>)}
+            {gapMinutes > 15 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '.3rem .7rem', borderRadius: 0, background: 'rgba(100,116,139,0.1)', border: '1px solid rgba(100,116,139,0.2)', fontSize: '.78rem', fontWeight: 650, color: '#94A3B8' }}>Unlogged · {fmtMinutes(gapMinutes)}</span>}
+          </div>
+        </div>
+      </Card>
+    )}
+
+    {/* Timeline */}
+    <Card title="Timeline">
+      {segments.length === 0 ? <EmptyState emoji="⏱" title="No entries yet" text="Log your first activity to see the timeline" action={<Button icon={Plus} onClick={() => navigate('/capture?type=time')}>Log time</Button>} />
+        : <div className="ui-list">
+          {segments.map((seg, i) => {
+            const color = BUCKET_COLORS[seg.bucket] || '#64748B'
+            return <div key={i} className="ui-row" style={{ borderLeft: `3px solid ${color}` }}>
+              <div style={{ width: 44, textAlign: 'center', fontSize: '.72rem', fontWeight: 700, color: 'var(--text-3)' }}>
+                {fmtClock(new Date(seg.startAt).toTimeString().slice(0, 5))}
+              </div>
+              <div className="grow">
+                <div className="title">{seg.bucket}{seg.isStudy ? ' · Study' : ''}</div>
+                <div className="meta">{fmtClock(new Date(seg.startAt).toTimeString().slice(0, 5))} – {fmtClock(new Date(seg.endAt).toTimeString().slice(0, 5))} · {fmtMinutes(seg.minutes)}</div>
+              </div>
+              <div className="amt" style={{ color }}>{fmtMinutes(seg.minutes)}</div>
+            </div>
+          })}
+        </div>}
+    </Card>
+  </>
+}
+
+function WeekView({ records, date }) {
+  const days = Array.from({ length: 7 }, (_, i) => addDays(date, i - 6))
+  
+  const weeklyData = days.map(d => {
+    const dayRecs = records.filter(r => r.date === d)
+    const focus = dayRecs.filter(r => r.bucket === 'Focus').reduce((a, r) => a + (r.durationMinutes || 0), 0)
+    const total = dayRecs.reduce((a, r) => a + (r.durationMinutes || 0), 0)
+    return {
+      day: fmtDate(d, 'day').split(' ')[1]?.slice(0, 3) || d.slice(8),
+      focus: Number((focus / 60).toFixed(1)),
+      other: Number(((total - focus) / 60).toFixed(1)),
+      total: Number((total / 60).toFixed(1))
+    }
+  })
+
+  return (
+    <Card title="Productive vs Other (Last 7 Days)">
+      <div style={{ height: 220, width: '100%', marginTop: '1rem' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={weeklyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: 'var(--text-3)', fontSize: 12}} />
+            <YAxis axisLine={false} tickLine={false} tick={{fill: 'var(--text-3)', fontSize: 12}} />
+            <RechartsTooltip formatter={(v, name) => [`${v}h`, name]} contentStyle={{ background: '#1E293B', border: 'none', borderRadius: 0, color: '#F8FAFC' }} />
+            <Line type="monotone" dataKey="focus" name="Focus" stroke="#6366F1" strokeWidth={3} dot={{ fill: '#6366F1', r: 4 }} activeDot={{ r: 6 }} animationDuration={1500} />
+            <Line type="monotone" dataKey="other" name="Other" stroke="#94A3B8" strokeWidth={3} dot={{ fill: '#94A3B8', r: 4 }} activeDot={{ r: 6 }} animationDuration={1500} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </Card>
+  )
+}
+
+function MonthView({ records, date, setDate, today }) {
+  const month = date.slice(0, 7)
+  const [selectedDate, setSelectedDate] = useState(null)
+
+  const getDay = d => {
+    if (d > today) return { status: 'future' }
+    const dayRecs = records.filter(r => r.date === d)
+    const total = dayRecs.reduce((a, r) => a + (r.durationMinutes || 0), 0)
+    if (dayRecs.length === 0) return { status: 'unknown' }
+    const focus = dayRecs.filter(r => r.bucket === 'Focus').reduce((a, r) => a + (r.durationMinutes || 0), 0)
+    return {
+      status: 'value', value: fmtHours(total),
+      cellBg: heatColor('#6366F1', Math.min(1, total / 600)),
+      dots: focus > 0 ? ['#6366F1'] : [],
+    }
   }
-  function remove(entry) {
-    if (!window.confirm(`Delete “${entry.name || entry.category}”? Its linked projection will be removed too.`)) return
-    updateModules({ timeflow: previous => ({ ...previous, entries: previous.entries.filter(e => e.id !== entry.id) }), ...(entry.studySessionId ? { study: previous => ({ ...previous, sessions: previous.sessions.filter(s => s.id !== entry.studySessionId) }) } : {}) })
-  }
-  function resolve(segment, activityId) {
-    updateModule('timeflow', previous => ({ ...previous, resolutions: [...(previous.resolutions || []), { id: crypto.randomUUID(), startAt: segment.startAt, endAt: segment.endAt, selectedActivityId: activityId, reason: 'User chose the accurate observation', resolvedAt: new Date().toISOString() }] }))
-  }
-  return <div className="page-stack">
-    <header className="page-header"><div><p className="area-eyebrow">Actual activity</p><h1>Time Flow</h1><p>What happened, with gaps and conflicts kept visible.</p></div><Button onClick={() => { setEditing(null); setForm(blank); setError(''); setOpen(true) }}>Log actual time</Button></header>
-    <div className="area-toolbar"><label>Selected date <input aria-label="Selected date" type="date" value={date} onChange={e => setDate(e.target.value)} /></label><Link to="/capture">Import a diary</Link><Link to="/plan">Plan intended time</Link></div>
-    <div className="metric-grid"><Metric label="Focus" value={duration(summary.time.buckets.Focus)} detail="Study and deliberate work" /><Metric label="Drift" value={duration(summary.time.buckets.Drift)} detail="Only unwanted distraction you confirmed" /><Metric label="Elapsed unlogged" value={duration(summary.time.unloggedMinutes)} /><Metric label="Future time" value={duration(summary.time.futureMinutes)} /></div>
-    <p className="notice">Coverage: {numberOf(summary.time.coverage) == null ? 'not available' : `${Math.round(numberOf(summary.time.coverage) * 100)}%`}. Unlogged time is unknown. Duration-only records do not fill timeline gaps.</p>
-    {numberOf(summary.time.conflictingMinutes) > 0 && <section className="area-card"><h2>Resolve overlapping observations</h2><p>{duration(summary.time.conflictingMinutes)} needs your correction. Select what actually happened during each overlap.</p>{summary.time.segments.filter(s => s.bucket === 'Conflict').map((s, i) => <div key={i} className="area-card"><p>{new Date(s.startAt).toLocaleTimeString([], { timeZone: timezone, hour: '2-digit', minute: '2-digit' })}–{new Date(s.endAt).toLocaleTimeString([], { timeZone: timezone, hour: '2-digit', minute: '2-digit' })}</p><div className="area-toolbar">{s.activityIds.map(id => <Button key={id} variant="secondary" onClick={() => resolve(s, id)}>{adapted.records.find(a => a.id === id)?.name || adapted.records.find(a => a.id === id)?.category || id}</Button>)}</div></div>)}</section>}
-    <section className="area-card"><h2>Allocation · {date}</h2><ul className="area-list">{Object.entries(summary.time.buckets).map(([label, metric]) => <li key={label}><div className="area-toolbar"><strong>{label === 'Sleep' ? 'Sleep / rest' : label}</strong><span>{duration(metric)}</span></div></li>)}</ul></section>
-    <section className="area-card"><h2>Records</h2>{!entries.length && <p>No Time Flow records for this date. Study history can also contribute observed intervals.</p>}<ul className="area-list">{entries.map(entry => <li key={entry.id}><h3>{entry.name || entry.category}</h3><p>{entry.start || 'Timing unknown'}{entry.end && ` → ${entry.end}${entry.endsNextDay ? ' next day' : ''}`} · {entry.category} · {entry.source || 'legacy-unknown'}</p><div className="area-toolbar"><Button variant="secondary" onClick={() => { setEditing(entry); setForm({ ...blank, ...entry }); setOpen(true) }}>Edit</Button><Button variant="ghost" onClick={() => remove(entry)}>Delete</Button></div></li>)}</ul></section>
-    {!!adapted.repair.length && <section className="area-card notice-warning"><h2>Records needing repair</h2><p>{adapted.repair.length} records have invalid or uncertain timing. They are preserved in your backup. Edit the original record with an explicit end date.</p></section>}
-    <section className="area-card"><h2>Seven days ending {date}</h2><p>{range.startDate} to {range.endDate} · Focus {duration(week.time?.buckets?.Focus)} · Study {duration(week.study?.minutes)}</p></section>
-    <Modal isOpen={open} onClose={() => setOpen(false)} title={editing ? 'Edit actual activity' : 'Log actual activity'}><form className="area-form" onSubmit={save}>
-      <label>Activity<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label>
-      <label>Category<select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>{categories.map(c => <option key={c}>{c}</option>)}</select></label>
-      {form.category === 'Study' && <label>Subject<input value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} /></label>}
-      <label>Start<input type="time" required value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} /></label><label>End<input type="time" required value={form.end} onChange={e => setForm({ ...form, end: e.target.value })} /></label>
-      <label className="check-label"><input type="checkbox" checked={form.endsNextDay} onChange={e => setForm({ ...form, endsNextDay: e.target.checked })} />Ends next day</label><label className="check-label"><input type="checkbox" checked={form.isWaste} onChange={e => setForm({ ...form, isWaste: e.target.checked })} />I consider this unwanted distraction</label>
-      <label>Notes<textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></label><p className="muted">Manually recalled timing is labelled user-estimated. It never records future plans as completed work.</p>{error && <p role="alert">{error}</p>}<Button type="submit">Save actual activity</Button>
-    </form></Modal>
-  </div>
+
+  return <>
+    <HeatCalendar month={month} onMonthChange={m => setDate(`${m}-01`)} getDay={getDay}
+      selected={selectedDate} onSelect={setSelectedDate} today={today} maxMonth={today.slice(0, 7)}
+      legend={<Legend items={[['rgba(99,102,241,.2)', 'Low'], ['rgba(99,102,241,.5)', 'Medium'], ['rgba(99,102,241,.85)', 'High'], ['transparent', 'Not logged']]} />} />
+  </>
 }
 

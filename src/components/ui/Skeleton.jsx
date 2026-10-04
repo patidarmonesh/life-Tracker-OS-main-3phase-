@@ -2,13 +2,12 @@
  * Skeleton loading placeholder with shimmer animation.
  * Use as a placeholder while data is loading.
  */
-export default function Skeleton({ width = '100%', height = 16, borderRadius = 8, style = {} }) {
+export default function Skeleton({ width = '100%', height = 16, borderRadius = 0, style = {} }) {
   return (
     <div style={{
       width, height, borderRadius,
-      background: 'linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-card-hover) 50%, var(--bg-secondary) 75%)',
-      backgroundSize: '200% 100%',
-      animation: 'shimmer 1.5s infinite ease-in-out',
+      background: 'var(--bg-card-hover)',
+      animation: 'skeletonPulse 1.5s infinite ease-in-out',
       ...style,
     }} />
   )
@@ -20,7 +19,7 @@ export default function Skeleton({ width = '100%', height = 16, borderRadius = 8
 export function SkeletonCard({ rows = 3 }) {
   return (
     <div style={{
-      padding: '20px', borderRadius: '16px',
+      padding: '20px', borderRadius: '0px',
       background: 'var(--bg-card)',
       border: '1px solid var(--border)',
     }}>
@@ -43,7 +42,7 @@ export function SkeletonCard({ rows = 3 }) {
 export function SkeletonMetric() {
   return (
     <div style={{
-      padding: '16px', borderRadius: '14px',
+      padding: '16px', borderRadius: '0px',
       background: 'var(--bg-card)',
       border: '1px solid var(--border)',
       textAlign: 'center',
@@ -62,13 +61,13 @@ export function HomeSkeleton() {
   return (
     <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', animate: 'pulse 1.5s infinite' }}>
       {/* Hero card skeleton */}
-      <div style={{ height: '220px', borderRadius: '28px', background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+      <div style={{ height: '220px', borderRadius: '0px', background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         <Skeleton width="20%" height={20} style={{ marginBottom: '16px' }} />
         <Skeleton width="50%" height={40} style={{ marginBottom: '16px' }} />
         <Skeleton width="70%" height={16} />
       </div>
       {/* Quick logs skeleton */}
-      <div style={{ height: '56px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 16px' }}>
+      <div style={{ height: '56px', borderRadius: '0px', background: 'var(--bg-card)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 16px' }}>
         <Skeleton width="80%" height={16} />
       </div>
       {/* Metrics grid */}
@@ -98,12 +97,12 @@ export function FinanceSkeleton() {
       {/* Header row skeleton */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Skeleton width="20%" height={28} />
-        <Skeleton width="120px" height={36} borderRadius={10} />
+        <Skeleton width="120px" height={36} borderRadius={0} />
       </div>
       {/* Budget progress card skeleton */}
-      <div style={{ padding: '24px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+      <div style={{ padding: '24px', borderRadius: '0px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
         <Skeleton width="30%" height={32} style={{ marginBottom: '12px' }} />
-        <Skeleton width="100%" height={8} borderRadius={4} style={{ marginBottom: '12px' }} />
+        <Skeleton width="100%" height={8} borderRadius={0} style={{ marginBottom: '12px' }} />
         <Skeleton width="40%" height={12} />
       </div>
       {/* Filter and stats row */}
@@ -126,15 +125,15 @@ export function AnalyticsSkeleton() {
     <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Skeleton width="25%" height={28} />
-        <Skeleton width="140px" height={36} borderRadius={10} />
+        <Skeleton width="140px" height={36} borderRadius={0} />
       </div>
       {/* Grid of charts placeholder */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px' }}>
-        <div style={{ height: '300px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '20px' }}>
+        <div style={{ height: '300px', borderRadius: '0px', background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '20px' }}>
           <Skeleton width="30%" height={16} style={{ marginBottom: '24px' }} />
-          <div style={{ height: '180px', width: '180px', borderRadius: '50%', border: '10px solid var(--bg-secondary)', margin: '0 auto', boxSizing: 'border-box' }} />
+          <div style={{ height: '180px', width: '180px', borderRadius: '0px', border: '10px solid var(--bg-secondary)', margin: '0 auto', boxSizing: 'border-box' }} />
         </div>
-        <div style={{ height: '300px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '20px' }}>
+        <div style={{ height: '300px', borderRadius: '0px', background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '20px' }}>
           <Skeleton width="30%" height={16} style={{ marginBottom: '24px' }} />
           <div style={{ height: '180px', display: 'flex', alignItems: 'flex-end', gap: '12px', justifyContent: 'center' }}>
             <Skeleton width={20} height={120} />
@@ -158,7 +157,7 @@ export function GeneralSkeleton() {
     <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Skeleton width="30%" height={28} />
-        <Skeleton width="100px" height={36} borderRadius={10} />
+        <Skeleton width="100px" height={36} borderRadius={0} />
       </div>
       <SkeletonCard rows={4} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>

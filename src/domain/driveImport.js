@@ -1,6 +1,15 @@
+/**
+ * DRIVE_MODULES
+ * @description Automatically documented.
+ */
 export const DRIVE_MODULES = Object.fromEntries(['finance', 'timeflow', 'study', 'habits', 'health', 'journal', 'wisdom', 'goals', 'decisions', 'crm', 'secondBrain', 'readings', 'meditations', 'settings', 'aiChat'].map(name => [`${name}.json`, name]))
 const blocked = new Set(['__proto__', 'prototype', 'constructor'])
 const stable = value => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v)
+/**
+ * mergeDriveModules function
+ * @param {any} current, imported
+ * @returns {any}
+ */
 export function mergeDriveModules(current, imported) {
   const conflicts = [], counts = { added: 0, duplicates: 0 }, modules = {}
   function merge(left, right, path) {
@@ -32,3 +41,5 @@ export function mergeDriveModules(current, imported) {
   for (const name of Object.values(DRIVE_MODULES)) if (Object.hasOwn(imported, name)) modules[name] = merge(current[name], imported[name], name)
   return { modules, conflicts, ...counts }
 }
+
+

@@ -1,6 +1,10 @@
 import { DEFAULT_TIMEZONE, localDate, normalizeManualInterval } from './dates.js'
 import { chronologicalCorrections } from './canonical.js'
 
+/**
+ * ALLOCATION_BUCKETS
+ * @description Automatically documented.
+ */
 export const ALLOCATION_BUCKETS = ['Focus', 'Health', 'Essentials', 'Leisure', 'Drift', 'Sleep', 'Other', 'Conflict']
 const CATEGORY_MAP = {
   study: 'Focus', work: 'Focus', 'deep work': 'Focus', project: 'Focus', learning: 'Focus',
@@ -9,10 +13,27 @@ const CATEGORY_MAP = {
   'social media': 'Leisure', entertainment: 'Leisure', social: 'Leisure', family: 'Leisure', hobby: 'Leisure',
   sleep: 'Sleep', rest: 'Sleep', nap: 'Sleep',
 }
+/**
+ * SYNTHETIC_HEALTH_FIELDS
+ * @description Automatically documented.
+ */
 export const SYNTHETIC_HEALTH_FIELDS = ['steps', 'sleepHours', 'sleepMinutes', 'deepSleep', 'remSleep', 'lightSleep', 'avgHeartRate', 'heartRate', 'spo2', 'sleepStages']
+/**
+ * isSyntheticHealth
+ * @description Automatically documented.
+ */
 export const isSyntheticHealth = row => row?.source === 'smartwatch' || row?.source === 'synthetic' || row?.synthetic === true
+/**
+ * finiteNonNegative
+ * @description Automatically documented.
+ */
 export const finiteNonNegative = value => value !== '' && value !== null && value !== undefined && Number.isFinite(Number(value)) && Number(value) >= 0
 
+/**
+ * classifyActivity function
+ * @param {any} record
+ * @returns {any}
+ */
 export function classifyActivity(record) {
   const category = String(record.categoryId || record.category || '').toLowerCase()
   if (['sleep', 'rest', 'nap'].includes(category)) return 'Sleep'
@@ -27,6 +48,11 @@ function instant(value) {
   return typeof value === 'string' && /(?:Z|[+-]\d\d:\d\d)$/.test(value) && Number.isFinite(Date.parse(value)) ? value : null
 }
 
+/**
+ * normalizeActivity function
+ * @param {any} record, origin, index, timezone = DEFAULT_TIMEZONE
+ * @returns {any}
+ */
 export function normalizeActivity(record, origin, index, timezone = DEFAULT_TIMEZONE) {
   const id = String(record.canonicalActivityId || record.activityId || record.canonicalId || `${origin}:${record.id ?? index}`)
   const originalIds = [...new Set([...(record.originalIds || []), `${origin}:${record.id ?? index}`])]
@@ -62,6 +88,11 @@ export function normalizeActivity(record, origin, index, timezone = DEFAULT_TIME
 }
 
 /** Non-mutating adapter. Only explicit identities/links dedupe; fuzzy matches are review candidates. */
+/**
+ * adaptActivities function
+ * @param {any} state = {}, options = {}
+ * @returns {any}
+ */
 export function adaptActivities(state = {}, options = {}) {
   const timezone = options.timezone || state.settings?.profile?.timezone || DEFAULT_TIMEZONE
   const canonical = Array.isArray(state.activities) ? state.activities : state.activities?.entries || []
@@ -95,6 +126,11 @@ export function adaptActivities(state = {}, options = {}) {
   return { records, repair, duplicates, timezone, inputCount: input.length }
 }
 
+/**
+ * resolveSegments function
+ * @param {any} records, start, cutoff, resolutions = []
+ * @returns {any}
+ */
 export function resolveSegments(records, start, cutoff, resolutions = []) {
   const newestCorrections = chronologicalCorrections(resolutions).reverse()
   const intervals = records.filter(r => r.timing === 'interval').map(record => ({
@@ -116,3 +152,5 @@ export function resolveSegments(records, start, cutoff, resolutions = []) {
   }
   return segments
 }
+
+

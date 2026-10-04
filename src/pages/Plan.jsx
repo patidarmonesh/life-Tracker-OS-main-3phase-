@@ -1,105 +1,242 @@
-import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { CalendarDays, Plus, ArrowRight, Check, Trash2, RefreshCw } from 'lucide-react'
+import { useMemo, useState, useCallback } from 'react'
+import { AnimatePresence } from 'motion/react'
+import { CalendarDays, Edit3, Check, AlertTriangle, Clock, Sparkles, ArrowRight, ChevronDown } from 'lucide-react'
+import { Page, Card, StatCard, Tabs, Button, Sheet, EmptyState, Ring, Chips, Confetti, Status } from '../ui/index'
+import DateNavigator from '../ui/calendar/DateNavigator'
+import HeatCalendar from '../ui/calendar/HeatCalendar'
+import { heatColor, syncColor } from '../ui/calendar/calendarMath'
+import { useLocalPref, useLiveNow } from '../ui/hooks'
+import { fmtMinutes, fmtClock, fmtPct, fmtDate, relativeDay } from '../ui/format'
+import { localDate, addDays } from '../domain/metrics/dates'
+import { parseDiary, scheduleDraft } from '../domain/planning'
+import { computeDaySync } from '../domain/planning/sync'
 import { useAppState, useAppActions } from '../context/appHooks'
-import { EMPTY_PLANNING, approveRevision, latestApproved, nextDate, ownerDate, parseDiary, replanTasks, scheduleDraft, retainBlockIds, uid } from '../domain/planning/index'
-import { exportApprovedPlan, schedulePlanReminders } from '../services/calendarService'
-import { useAuth } from '../context/appContextCore'
-import { connectGoogle } from '../services/authService'
-import { apiRequest } from '../services/apiClient'
-import Button from '../components/ui/Button'
-import Input from '../components/ui/Input'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
-const defaults = { text: '', blocks: [], windowStart: '09:00', windowEnd: '18:00', bufferMinutes: 10 }
+const PRIORITY_COLORS = { must: '#F43F5E', should: '#F59E0B', could: '#22D3EE' }
+
 export default function Plan() {
-  const state = useAppState(), { updateModule, synchronize } = useAppActions(), [params, setParams] = useSearchParams()
-  const { user, capabilities, integration } = useAuth()
-  const [aiBusy, setAiBusy] = useState(false)
-  const calendarConnected = integration?.state === 'connected' && integration?.scopes?.includes('calendar.app.created')
-  const timezone = state.settings?.profile?.timezone || 'Asia/Kolkata'
-  const date = params.get('date') || ownerDate(new Date(), timezone)
-  const planning = state.planning || EMPTY_PLANNING, draft = { ...defaults, ...planning.drafts?.[date] }
-  const approved = latestApproved(planning, date)
-  const [message, setMessage] = useState(''), [error, setError] = useState(''), [exporting, setExporting] = useState(false)
-  const preview = scheduleDraft(draft.blocks, { ...draft, localDate: date, timezone })
-  const exportStatus = planning.exportStatus?.[approved?.id]
-  const plannedMinutes = preview.blocks.reduce((sum, b) => sum + b.estimateMinutes, 0)
-  function change(patch) { setMessage(''); setError(''); updateModule('planning', p => ({ ...p, drafts: { ...p.drafts, [date]: { ...defaults, ...p.drafts?.[date], ...patch } } })) }
-  function changeBlock(id, patch) { change({ blocks: draft.blocks.map(b => b.id === id ? { ...b, ...patch } : b) }) }
-  function propose() {
-    if (!draft.text.trim()) { setError('Write at least one task.'); return }
-    const blocks = retainBlockIds(parseDiary(draft.text), draft.blocks); change({ blocks }); setMessage('Draft prepared. Review each estimate, time and priority before approving.')
-  }
-  async function aiPropose() {
-    setAiBusy(true); setError('')
+  const state = useAppState()
+  const { patchModule } = useAppActions()
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const now = useLiveNow(60000)
+  const today = localDate(now)
+  const [date, setDate] = useState(params.get('date') || today)
+  const [view, setView] = useLocalPref('plan_view', 'day')
+  const [showCompose, setShowCompose] = useState(false)
+  const [diaryText, setDiaryText] = useState('')
+  const [confetti, setConfetti] = useState(false)
+
+  const draft = state.planning?.drafts?.[date]
+  const approved = draft?.status === 'approved'
+  const blocks = draft?.blocks || []
+
+  // Parse diary text
+  const parsed = useMemo(() => {
+    if (!diaryText.trim()) return null
+    try { return parseDiary(diaryText) } catch { return null }
+  }, [diaryText])
+
+  // Compute sync for this day
+  const sync = useMemo(() => {
+    try { return computeDaySync(state, date, { now, timezone: 'Asia/Kolkata', mode: 'live' }) }
+    catch { return null }
+  }, [state, date, now])
+
+  const views = [
+    { key: 'day', label: 'Day' },
+    { key: 'compare', label: 'Compare' },
+    { key: 'month', label: 'Month' },
+  ]
+
+  const handleSaveDraft = useCallback(() => {
+    if (!parsed?.length) return
+    const scheduled = scheduleDraft(parsed, { localDate: date, timezone: 'Asia/Kolkata' })
+    patchModule('planning', { drafts: { ...state.planning?.drafts, [date]: { blocks: scheduled.blocks, unscheduled: scheduled.unscheduled, status: 'draft', createdAt: new Date().toISOString() } } })
+    setDiaryText('')
+    setShowCompose(false)
+  }, [parsed, date, patchModule, state.planning?.drafts])
+
+  const handleApprove = useCallback(async () => {
+    if (!draft) return
+    patchModule('planning', { drafts: { ...state.planning?.drafts, [date]: { ...draft, status: 'approved', approvedAt: new Date().toISOString() } } })
+    setConfetti(true)
     try {
-      const data = await apiRequest('planning/diary', { method: 'POST', body: { text: draft.text, date, timezone } })
-      change({ blocks: retainBlockIds(data.tasks.map(t => ({ ...t, id: uid('block'), taskId: uid('task'), completionCriterion: '' })), draft.blocks) })
-      setMessage('AI draft ready. Review every time, duration and question before approving.')
-    } catch (e) { setError(e.message) } finally { setAiBusy(false) }
+      const { exportApprovedPlan } = await import('../services/calendarService')
+      await exportApprovedPlan(draft)
+    } catch (err) {
+      console.warn('Failed to sync to Google Calendar:', err)
+    }
+  }, [draft, date, patchModule, state.planning?.drafts])
+
+  return <Page title="Plan" icon={CalendarDays} color="#6366F1"
+    actions={<>
+      <DateNavigator value={date} onChange={setDate} today={today} max={addDays(today, 7)} />
+      <Button variant="primary" icon={Edit3} onClick={() => setShowCompose(true)}>Write plan</Button>
+    </>}>
+
+    <Confetti fire={confetti} onDone={() => setConfetti(false)} />
+
+    <Tabs tabs={views} value={view} onChange={setView} id="plan" />
+
+    {/* Sync summary strip */}
+    {sync && sync.status !== 'no-plan' && <div className="ui-grid cols-3">
+      <StatCard label="Sync" value={sync.timing?.value} format={v => fmtPct(v)} color={syncColor(sync.timing?.value)} icon={Sparkles}
+        truth={{ status: sync.timing?.value >= .8 ? 'complete' : sync.timing?.value >= .5 ? 'partial' : 'low',
+          rows: [['Timing', fmtPct(sync.timing?.value)], ['Effort', fmtPct(sync.effort?.value)], ['Outcome', fmtPct(sync.outcome?.value)]],
+          note: `${sync.details?.filter(d => d.status === 'on-time' || d.status === 'done-untimed').length || 0} of ${sync.details?.length || 0} blocks on track`
+        }} />
+      <StatCard label="Must" value={sync.must?.completed != null ? sync.must.completed : null} format={v => `${v}/${sync.must?.total || 0}`} color="#F43F5E" />
+      <StatCard label="Status" value={null} note={sync.status === 'complete' ? '✓ Day complete' : sync.status === 'partial' ? 'In progress' : 'Not started'} />
+    </div>}
+
+    {view === 'day' && <DayView date={date} blocks={blocks} draft={draft} approved={approved} sync={sync} onApprove={handleApprove} navigate={navigate} />}
+    {view === 'compare' && <CompareView date={date} sync={sync} blocks={blocks} />}
+    {view === 'month' && <MonthView state={state} date={date} setDate={setDate} today={today} now={now} />}
+
+    {/* Diary composer sheet */}
+    <Sheet open={showCompose} onClose={() => setShowCompose(false)} title={`Plan for ${relativeDay(date, today)}`}
+      footer={<><Button variant="ghost" onClick={() => setShowCompose(false)}>Cancel</Button><Button variant="primary" onClick={handleSaveDraft} disabled={!parsed?.length}>Save draft</Button></>}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <p style={{ fontSize: '.82rem', color: 'var(--text-3)' }}>Write what you want to do today in your own words (Hindi/English). LifeOS will parse it into a timeline.</p>
+        <textarea className="ui-input" rows={8} value={diaryText} onChange={e => setDiaryText(e.target.value)}
+          placeholder={"subah 7 baje uthna\n8-9 study maths\n10 se 12 coding project\nlunch 1 bje\ndopahar gym 1 hour\nshaam reading 2 ghante\nraat 10 bje sona"} style={{ fontFamily: 'var(--font-sans)', lineHeight: 1.6 }} />
+        {parsed && <Card eyebrow="Preview" title={`${parsed.length} tasks parsed`}>
+          <div className="ui-list">
+            {parsed.map((t, i) => <div key={i} className="ui-row">
+              <span style={{ width: 8, height: 8, borderRadius: '0', background: PRIORITY_COLORS[t.priority] || '#94A3B8', flexShrink: 0 }} />
+              <div className="grow">
+                <div className="title">{t.title}</div>
+                <div className="meta">
+                  {t.startTime && fmtClock(t.startTime)}{t.startTime && t.endTime && ' – '}{t.endTime && fmtClock(t.endTime)}
+                  {t.estimateMinutes && ` · ${fmtMinutes(t.estimateMinutes)}`}
+                  {t.warning && <span style={{ color: 'var(--warning-ink)' }}> ⚠ {t.warning}</span>}
+                </div>
+              </div>
+              <span style={{ fontSize: '.68rem', fontWeight: 700, color: PRIORITY_COLORS[t.priority] || 'var(--text-3)', textTransform: 'uppercase' }}>{t.priority}</span>
+            </div>)}
+          </div>
+          {parsed.some(t => t.ambiguity) && <Status tone="warn" style={{ marginTop: 12 }}>Some times are ambiguous — review after saving.</Status>}
+        </Card>}
+      </div>
+    </Sheet>
+    <div className="pb-24 h-24 min-h-[6rem] mb-12"></div>
+    </Page>
+}
+
+function DayView({ date, blocks, draft, approved, sync, onApprove, navigate }) {
+  if (!draft || blocks.length === 0) {
+    return <EmptyState emoji="📝" title="No plan yet" text={`Write what you want to do ${relativeDay(date, localDate()) === 'Today' ? 'today' : 'on ' + fmtDate(date, 'weekday')}`}
+      action={<Button variant="primary" icon={Edit3} onClick={() => navigate(`/plan?date=${date}`)}>Write plan</Button>} />
   }
-  function addBlock() { change({ blocks: [...draft.blocks, { id: uid('block'), taskId: uid('task'), title: '', estimateMinutes: 30, priority: 'should', fixed: false, startTime: '', category: 'Deep Work', completionCriterion: '', reminderMinutes: 10 }] }) }
-  function replan() {
-    if (!approved) return
-    const today = ownerDate(new Date(), timezone), nowClock = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date())
-    change({ blocks: replanTasks(approved, planning.checkins || []), windowStart: date === today && nowClock > draft.windowStart ? nowClock : draft.windowStart })
-    setMessage('Current commitments copied. Completed and fixed blocks are held in place. Review the changes before approving a new revision.')
+
+  return <Card>
+    {!approved && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+      <Status tone="warn">Draft — review and approve to push to calendar</Status>
+      <Button variant="success" icon={Check} onClick={onApprove}>Approve</Button>
+    </div>}
+
+    <div className="ui-list">
+      {blocks.map((block, i) => {
+        const detail = sync?.details?.find(d => d.blockId === block.id)
+        const statusColor = detail?.status === 'on-time' ? '#10B981' : detail?.status === 'late' || detail?.status === 'shifted' ? '#F59E0B' : detail?.status === 'skipped' || detail?.status === 'missed' ? '#F43F5E' : 'var(--text-3)'
+        return <div key={block.id || i} className="ui-row" style={{ borderLeft: `3px solid ${PRIORITY_COLORS[block.priority] || '#94A3B8'}` }}>
+          <div style={{ width: 50, textAlign: 'center', fontSize: '.72rem', fontWeight: 700, color: 'var(--text-3)' }}>
+            {block.startTime && fmtClock(block.startTime)}
+          </div>
+          <div className="grow">
+            <div className="title">{block.title}</div>
+            <div className="meta">
+              {block.estimateMinutes && fmtMinutes(block.estimateMinutes)}
+              {detail?.status && <span style={{ color: statusColor, marginLeft: 8 }}>
+                {detail.status === 'on-time' ? '✓ On time' : detail.status === 'late' ? '⏱ Late' : detail.status === 'shifted' ? '↪ Shifted' : detail.status === 'skipped' ? '✗ Skipped' : detail.status === 'missed' ? '✗ Missed' : detail.status}
+              </span>}
+            </div>
+          </div>
+          <span style={{ fontSize: '.68rem', fontWeight: 700, color: PRIORITY_COLORS[block.priority] || 'var(--text-3)', textTransform: 'uppercase' }}>{block.priority}</span>
+        </div>
+      })}
+    </div>
+  </Card>
+}
+
+function CompareView({ sync, blocks }) {
+  if (!sync || sync.status === 'no-plan') {
+    return <EmptyState emoji="🔄" title="Nothing to compare" text="Approve a plan and log some activities to see how your day unfolded vs what you planned." />
   }
-  function carryOver() {
-    const ids = new Set(preview.unscheduled.map(b => b.id)), tomorrow = nextDate(date)
-    updateModule('planning', p => ({ ...p, drafts: { ...p.drafts, [date]: { ...draft, blocks: draft.blocks.filter(b => !ids.has(b.id)) }, [tomorrow]: { ...defaults, ...p.drafts?.[tomorrow], blocks: [...(p.drafts?.[tomorrow]?.blocks || []), ...preview.unscheduled.map(b => ({ ...b, id: uid('block'), fixed: false, startTime: '', carriedFrom: date }))] } } }))
-    setMessage(`Unscheduled tasks moved to the draft for ${tomorrow}. Original approved commitments are preserved.`)
+
+  return <>
+    {/* Sync ring */}
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24, justifyContent: 'center', padding: '1rem 0' }}>
+        <Ring value={sync.timing?.value} upper={sync.timing?.upper} size={140} stroke={12} color={syncColor(sync.timing?.value) || 'var(--accent)'}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '1.4rem' }}>{fmtPct(sync.timing?.value)}</div>
+          <div style={{ fontSize: '.68rem', color: 'var(--text-3)' }}>Sync</div>
+        </Ring>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div><span style={{ fontWeight: 700, color: 'var(--text-3)', fontSize: '.72rem', textTransform: 'uppercase' }}>Timing</span> {fmtPct(sync.timing?.value)}</div>
+          <div><span style={{ fontWeight: 700, color: 'var(--text-3)', fontSize: '.72rem', textTransform: 'uppercase' }}>Effort</span> {fmtPct(sync.effort?.value)}</div>
+          <div><span style={{ fontWeight: 700, color: 'var(--text-3)', fontSize: '.72rem', textTransform: 'uppercase' }}>Outcome</span> {fmtPct(sync.outcome?.value)}</div>
+          {sync.startDelay && <div><span style={{ fontWeight: 700, color: 'var(--text-3)', fontSize: '.72rem', textTransform: 'uppercase' }}>Start delay</span> {fmtMinutes(sync.startDelay.median)}</div>}
+        </div>
+      </div>
+    </Card>
+
+    {/* Dual timeline */}
+    {sync.details?.length > 0 && <Card title="Planned vs Actual">
+      <div className="ui-list">
+        {sync.details.map((d, i) => {
+          const block = blocks.find(b => b.id === d.blockId) || {}
+          const statusIcon = d.status === 'on-time' ? '✓' : d.status === 'late' || d.status === 'shifted' ? '⏱' : d.status === 'skipped' || d.status === 'missed' ? '✗' : '◐'
+          const statusColor = d.status === 'on-time' ? '#10B981' : d.status === 'late' || d.status === 'shifted' ? '#F59E0B' : d.status === 'skipped' || d.status === 'missed' ? '#F43F5E' : 'var(--text-3)'
+          return <div key={d.blockId || i} className="ui-row">
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: `color-mix(in srgb, ${statusColor} 18%, transparent)`, display: 'grid', placeItems: 'center', color: statusColor, fontWeight: 800, fontSize: '.82rem', flexShrink: 0 }}>{statusIcon}</div>
+            <div className="grow">
+              <div className="title">{block.title || d.blockId}</div>
+              <div className="meta">
+                {d.status}{d.derailReason ? ` — ${d.derailReason}` : ''}
+                {d.actualSpans?.length > 0 && ` · Actually: ${d.actualSpans.map(s => fmtMinutes(s.minutes)).join(', ')}`}
+              </div>
+            </div>
+            <div className="amt" style={{ color: statusColor }}>{d.blockFit != null ? fmtPct(d.blockFit) : ''}</div>
+          </div>
+        })}
+      </div>
+    </Card>}
+
+    {/* Derails */}
+    {sync.derails?.length > 0 && <Card title="Derails" eyebrow={`${sync.derails.length} moments`}>
+      <div className="ui-list">
+        {sync.derails.map((d, i) => <div key={i} className="ui-row" style={{ borderLeft: '3px solid #F43F5E' }}>
+          <div className="grow">
+            <div className="title">{d.reason || 'Deviation from plan'}</div>
+            <div className="meta">{d.planned && `Planned: ${d.planned}`}{d.actual && ` → Actual: ${d.actual}`}</div>
+          </div>
+        </div>)}
+      </div>
+    </Card>}
+  </>
+}
+
+function MonthView({ state, date, setDate, today, now }) {
+  const month = date.slice(0, 7)
+  const [selected, setSelected] = useState(null)
+
+  const getDay = d => {
+    if (d > today) return { status: 'future' }
+    const draft = state.planning?.drafts?.[d]
+    if (!draft) return { status: 'unknown' }
+    let sync
+    try { sync = computeDaySync(state, d, { now, timezone: 'Asia/Kolkata', mode: 'final' }) } catch { return { status: 'value', value: '📝' } }
+    const v = sync.timing?.value
+    return {
+      status: 'value', value: v != null ? fmtPct(v) : '📝',
+      cellBg: v != null ? heatColor(syncColor(v)?.replace('#', '') || '6366F1', v) : undefined,
+      badges: draft.status === 'approved' ? ['✓'] : [],
+    }
   }
-  async function approve(andExport = false) {
-    try {
-      setError('')
-      const result = approveRevision(planning, { ...preview, localDate: date, timezone })
-      updateModule('planning', () => result.planning)
-      setMessage(`Approved ${date}, revision ${result.revision.revision}. Your actual activity is unchanged.`)
-      if (andExport) await exportDay(result.revision)
-    } catch (e) { setError(e.message) }
-  }
-  async function exportDay(revision) {
-    setExporting(true); setError('')
-    try {
-      const sync = await synchronize()
-      if (sync?.status !== 'synced') throw new Error(sync?.error || 'Sync this approved revision with your configured account before exporting. The local workspace cannot export to Google.')
-      const result = await exportApprovedPlan(revision)
-      updateModule('planning', p => ({ ...p, exportStatus: { ...p.exportStatus, [revision.id]: { ...result, updatedAt: new Date().toISOString() } } }))
-      setMessage(result.status === 'partial' ? 'Some blocks need retry. Successful exports will not be duplicated.' : `Calendar export completed for ${revision.localDate}.`)
-    } catch (e) {
-      const status = { status: 'pending', error: e.message, updatedAt: new Date().toISOString() }
-      updateModule('planning', p => ({ ...p, exportStatus: { ...p.exportStatus, [revision.id]: status } }))
-      setError(`Your approval is saved locally. Calendar export is pending: ${e.message}`)
-    } finally { setExporting(false) }
-  }
-  async function scheduleReminders() {
-    if (!approved) return
-    setExporting(true); setError('')
-    try {
-      const sync = await synchronize()
-      if (sync?.status !== 'synced') throw new Error(sync?.error || 'Sync this approved revision with your configured account before scheduling reminders.')
-      const result = await schedulePlanReminders(approved)
-      updateModule('planning', p => ({ ...p, reminderStatus: { ...p.reminderStatus, [approved.id]: { ...result, updatedAt: new Date().toISOString() } } }))
-      setMessage('Reminder scheduling request saved on the server. Delivery is best-effort; pending check-ins stay available in Today.')
-    } catch (e) { setError(`Reminders were not scheduled: ${e.message} Your approved plan is retained.`) }
-    finally { setExporting(false) }
-  }
-  const differences = approved ? preview.blocks.filter(b => { const old = approved.blocks.find(a => a.id === b.id); return !old || old.startAt !== b.startAt || old.endAt !== b.endAt || old.title !== b.title }) : []
-  const removed = approved ? approved.blocks.filter(a => !preview.blocks.some(b => b.id === a.id)) : []
-  return <div className="page-stack">
-    <header className="page-header"><div><p className="eyebrow">MAKE ROOM FOR WHAT MATTERS</p><h1>Plan a realistic day.</h1><p>A draft you can change. A commitment you choose.</p></div><Link to={`/calendar?date=${date}`} className="button button-secondary"><CalendarDays size={16}/>Open day calendar</Link></header>
-    <section className="section-card"><div className="form-grid"><Input type="date" label="Planning date" value={date} onChange={e => { if (e.target.value) { setParams({ date: e.target.value }); setMessage(''); setError('') } }}/><div className="field"><span>Owner timezone</span><p>{timezone}</p><p className="caption">Approval and export apply only to this date.</p></div></div><div className="row-actions" style={{ marginTop: '1rem' }}>{Array.from({ length: 7 }, (_, i) => nextDate(date, i - 3)).map(d => <Button key={d} variant={d === date ? 'primary' : 'ghost'} onClick={() => setParams({ date: d })}>{new Date(`${d}T12:00:00`).toLocaleDateString('en', { weekday: 'short', day: 'numeric' })}</Button>)}</div></section>
-    <div className="today-grid"><section className="section-card"><div className="section-heading"><h2>Start with a rough plan</h2><span className="badge">Draft saved on this device</span></div><div className="field"><label htmlFor="diary-plan">One task per line · Hindi, English or Hinglish</label><textarea id="diary-plan" className="draft-textarea" value={draft.text} onChange={e => change({ text: e.target.value })} placeholder={'09:00–10:30 Study thermodynamics must\nshaam 6 se 7 baje walk\n20:00–20:30 Dinner'}/><p className="caption">Write time ranges in English, Hindi or Hinglish. Explicit ranges become fixed blocks. Missing estimates start at an editable 30 min.</p></div><div className="row-actions" style={{ marginTop: '1rem' }}><Button onClick={propose}>Prepare editable draft <ArrowRight size={16}/></Button><Button variant="secondary" loading={aiBusy} disabled={!capabilities.ai || user?.isGuest || !draft.text.trim()} onClick={aiPropose}>Draft with AI</Button></div><p className="caption">“Draft with AI” sends only this text to Gemini for suggestions; it never exports automatically.</p><label className="field">Use a saved journal entry<select defaultValue="" onChange={e => { const entry = state.journal.entries.find(j => String(j.id) === e.target.value); if (entry) change({ text: [draft.text, entry.content || entry.text || entry.title].filter(Boolean).join("\n") }); e.target.value = "" }}><option value="">Choose an entry to append…</option>{state.journal.entries.slice().reverse().slice(0, 100).map(j => <option key={j.id} value={j.id}>{j.date} · {j.title || "Diary note"}</option>)}</select></label></section>
-    <section className="section-card"><h2>Your capacity</h2><p className="caption" style={{ margin: '.5rem 0 1rem' }}>Explicit defaults, not learned capacity. Add sleep, meals, travel or appointments as fixed blocks to protect them.</p><div className="form-grid"><Input type="time" label="Flexible work starts" value={draft.windowStart} onChange={e => change({ windowStart: e.target.value })}/><Input type="time" label="Flexible work ends" value={draft.windowEnd} onChange={e => change({ windowEnd: e.target.value })}/><Input type="number" min="0" max="120" label="Buffer between tasks (min)" value={draft.bufferMinutes} onChange={e => change({ bufferMinutes: Math.max(0, Number(e.target.value)) })}/></div><p className="caption" style={{ marginTop: '1rem' }}>External busy events are not loaded automatically. Add existing commitments before approving.</p></section></div>
-    <section className="section-card"><div className="section-heading"><div><h2>Shape the day</h2><p className="caption">{preview.blocks.length} blocks fit · {plannedMinutes} planned minutes · {preview.unscheduled.length} need attention</p></div><div className="row-actions">{approved && <Button variant="secondary" onClick={replan}><RefreshCw size={16}/>Replan remaining day</Button>}<Button variant="secondary" onClick={addBlock}><Plus size={16}/>Add task</Button></div></div>
-    {!draft.blocks.length && <div className="empty-state"><CalendarDays size={32}/><h3>A little structure goes a long way.</h3><p>Prepare a draft above or add your first task. Leave space between commitments.</p></div>}
-    {draft.blocks.map((block, index) => <div className="plan-block" key={block.id}><span className="plan-index">{String(index + 1).padStart(2, '0')}</span><div className="plan-block-body"><Input label={`Task ${index + 1}`} value={block.title} onChange={e => changeBlock(block.id, { title: e.target.value })}/><div className="plan-block-fields"><Input type="number" min="1" max="1440" label="Estimate (min)" value={block.estimateMinutes} onChange={e => changeBlock(block.id, { estimateMinutes: Number(e.target.value), estimateAssumed: false })}/><div className="field"><label htmlFor={`priority-${block.id}`}>Priority</label><select id={`priority-${block.id}`} value={block.priority} onChange={e => changeBlock(block.id, { priority: e.target.value })}><option value="must">Must</option><option value="should">Should</option><option value="could">Could</option></select></div><div className="field"><label htmlFor={`category-${block.id}`}>Area</label><select id={`category-${block.id}`} value={block.category} onChange={e => changeBlock(block.id, { category: e.target.value })}>{['Deep Work', 'Study', 'Sleep', 'Meals', 'Exercise', 'Travel', 'Entertainment', 'Other'].map(c => <option key={c}>{c}</option>)}</select></div></div><div className="row-actions"><label className="row-actions"><input type="checkbox" checked={block.fixed} onChange={e => changeBlock(block.id, { fixed: e.target.checked })}/>Fixed time</label>{block.fixed && <Input type="time" aria-label={`Start time for ${block.title}`} value={block.startTime} onChange={e => changeBlock(block.id, { startTime: e.target.value, warning: '' })}/>}<label className="row-actions caption"><input type="checkbox" checked={Boolean(block.endsNextDay)} onChange={e => changeBlock(block.id, { endsNextDay: e.target.checked })}/>Allow an overnight end</label><span className="caption">{preview.blocks.find(b => b.id === block.id)?.startTime || 'Unscheduled'}{block.estimateAssumed ? ' · estimate assumed' : ''}</span></div>{block.warning && <div className="notice warning"><p>{block.warning} Edit the time and duration above.</p><Button variant="ghost" onClick={() => changeBlock(block.id, { warning: "" })}>I reviewed this assumption</Button></div>}<label className="row-actions caption"><input type="checkbox" checked={Boolean(block.pushReminder)} onChange={e => changeBlock(block.id, { pushReminder: e.target.checked, reminderMinutes: block.reminderMinutes ?? 10 })}/>Also schedule a LifeOS push reminder</label><Input type="number" min="0" max="120" label="Google Calendar reminder (minutes before)" value={block.reminderMinutes ?? 10} onChange={e => changeBlock(block.id, { reminderMinutes: Math.min(120, Math.max(0, Number(e.target.value))) })}/><Input label="Done means (optional)" value={block.completionCriterion || ''} onChange={e => changeBlock(block.id, { completionCriterion: e.target.value })}/></div><button type="button" className="icon-button" aria-label={`Remove ${block.title || 'task'} from draft`} onClick={() => change({ blocks: draft.blocks.filter(b => b.id !== block.id) })}><Trash2 size={17}/></button></div>)}
-    {preview.warnings.length > 0 && <div className="notice warning" style={{ marginTop: '1rem' }}>{preview.warnings.map((w, i) => <p key={i}>{w}</p>)}{preview.unscheduled.length > 0 && <Button variant="secondary" onClick={carryOver} style={{ marginTop: '.75rem' }}>Carry unscheduled tasks to {nextDate(date)}</Button>}</div>}
-    {approved && (differences.length > 0 || removed.length > 0) && <div className="notice" style={{ marginTop: '1rem' }}><strong>Changes awaiting approval</strong>{differences.map(b => <p key={b.id}>{b.title}: {b.startTime}–{b.endTime}</p>)}{removed.map(b => <p key={b.id}>{b.title}: removed from current draft; original commitment retained</p>)}</div>}
-    <div className="notice" style={{ marginTop: "1rem" }}><strong>Google Calendar · 10-minute reminders by default</strong><p>{calendarConnected ? "Ready to export approved blocks to your LifeOS Plan calendar." : "Connect Calendar once, then approve and export this date."}</p>{!calendarConnected && <Button variant="secondary" disabled={user?.isGuest || !capabilities.auth} onClick={() => connectGoogle("calendar").catch(e => setError(e.message))}>Connect Google Calendar</Button>}<p className="caption">Enable LifeOS Plan calendar notifications on your phone. Each event includes a link back to check in. Calendar events do not detect whether you completed a task.</p></div><div className="row-actions" style={{ marginTop: '1.5rem' }}><Button onClick={() => approve(false)} disabled={!preview.blocks.length || preview.warnings.length > 0}><Check size={16}/>Approve day</Button><Button variant="secondary" onClick={() => approve(true)} loading={exporting} disabled={!calendarConnected || !preview.blocks.length || preview.warnings.length > 0}>Approve & add to Google Calendar</Button></div><p className="caption" style={{ marginTop: '.75rem' }}>No recurrence. External edits require your approval. Missed commitments stay in the original revision.</p>
-    </section>
-    {message && <p className="notice" role="status">{message}</p>}{error && <p className="notice error" role="alert">{error}</p>}
-    {approved && <section className="section-card"><div className="section-heading"><h2>Approval history</h2><Link to="/">Go to Today <ArrowRight size={16}/></Link></div><div className="page-stack">{planning.revisions.filter(r => r.localDate === date).slice().reverse().map(r => <div key={r.id}><p><strong>Revision {r.revision}</strong> · {r.blocks.length} blocks · {r.id === r.originalRevisionId ? 'Original commitments' : 'Approved adjustment'}</p><p className="caption">Approved {new Date(r.approvedAt).toLocaleString('en', { timeZone: timezone })}</p></div>)}<div className="notice"><div className="row-actions"><Button variant="secondary" loading={exporting} disabled={!approved.blocks.some(b => b.pushReminder)} onClick={scheduleReminders}>Schedule opted-in reminders</Button><Link className="button button-ghost" to="/settings">Enable this device in Settings</Link></div><p className="caption">Reminders require a configured server and device subscription. In-app check-ins remain available if delivery fails.</p><p>Calendar: {exportStatus?.status || 'not exported'}</p>{exportStatus?.error && <p>{exportStatus.error}</p>}{exportStatus?.operations?.filter(o => o.status === 'failed').map(o => <p key={o.blockId}>{o.error}</p>)}<Button variant="secondary" loading={exporting} onClick={() => exportDay(approved)} style={{ marginTop: '.75rem' }}>{exportStatus?.status === 'partial' || exportStatus?.status === 'pending' ? 'Retry pending export' : 'Export approved date'}</Button></div></div></section>}
-  </div>
+
+  return <HeatCalendar month={month} onMonthChange={m => setDate(`${m}-01`)} getDay={getDay}
+    selected={selected} onSelect={d => { setSelected(d); setDate(d) }} today={today} maxMonth={today.slice(0, 7)} />
 }

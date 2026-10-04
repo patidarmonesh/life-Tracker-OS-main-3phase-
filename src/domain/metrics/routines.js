@@ -1,5 +1,10 @@
 import { addDays, dateRange, localDate, weekday, weekStart } from './dates.js'
 
+/**
+ * routineSummary function
+ * @param {any} state, dates, now, timezone
+ * @returns {any}
+ */
 export function routineSummary(state, dates, now, timezone) {
   const routines = state.routines?.entries || state.habits?.checkpoints || []
   const logs = state.routines?.occurrences || state.habits?.dailyLogs || []
@@ -37,3 +42,5 @@ export function routineSummary(state, dates, now, timezone) {
   }
   return { numerator, denominator, pending, details }
 }
+
+

@@ -6,15 +6,48 @@ import { ledgerSummary } from './finance.js'
 import { routineSummary } from './routines.js'
 import { canonicalMetricSource } from './canonical.js'
 
+/**
+ * Item
+ * @description Automatically documented.
+ */
 export * from './dates.js'
+/**
+ * Item
+ * @description Automatically documented.
+ */
 export * from './records.js'
+/**
+ * Item
+ * @description Automatically documented.
+ */
 export * from './sleep.js'
+/**
+ * Item
+ * @description Automatically documented.
+ */
 export * from './goals.js'
+/**
+ * Item
+ * @description Automatically documented.
+ */
 export * from './finance.js'
+/**
+ * Item
+ * @description Automatically documented.
+ */
 export * from './routines.js'
+/**
+ * METRIC_VERSION
+ * @description Automatically documented.
+ */
 export const METRIC_VERSION = 'lifeos-metrics/2.0.0'
 
 /** Stable cache revision, not a cryptographic backup checksum. */
+/**
+ * sourceRevision function
+ * @param {any} state
+ * @returns {any}
+ */
 export function sourceRevision(state) {
   let hash = 2166136261
   const text = JSON.stringify(canonicalMetricSource({ activities: state.activities, timeflow: state.timeflow, study: state.study, health: state.health, sleep: state.sleep, finance: state.finance, habits: state.habits, routines: state.routines, settings: state.settings }))
@@ -39,6 +72,11 @@ const sumValues = metrics => metrics.reduce((s, m) => s + (m?.value ?? 0), 0)
 const sumOrNull = metrics => metrics.some(m => m?.value != null) ? sumValues(metrics) : null
 const percentage = (a, b) => a != null && b > 0 ? 100 * a / b : null
 
+/**
+ * buildDailySummary function
+ * @param {any} state = {}, date, options = {}
+ * @returns {any}
+ */
 export function buildDailySummary(state = {}, date, options = {}) {
   const context = options._context || prepare(state, options)
   const { now, timezone, adapted, episodes } = context
@@ -119,8 +157,17 @@ export function buildDailySummary(state = {}, date, options = {}) {
   return { date, ...meta, time, study, sleep, finance, routines }
 }
 
+/**
+ * selectDailySummary
+ * @description Automatically documented.
+ */
 export const selectDailySummary = buildDailySummary
 
+/**
+ * buildRangeSummary function
+ * @param {any} state = {}, range, options = {}
+ * @returns {any}
+ */
 export function buildRangeSummary(state = {}, range, options = {}) {
   const dates = dateRange(range.startDate, range.endDate)
   const context = prepare(state, options)
@@ -168,6 +215,11 @@ export function buildRangeSummary(state = {}, range, options = {}) {
   return { ...meta, days, time, study, sleep, finance, routines, streak: studyStreak(days, state, options) }
 }
 
+/**
+ * formatDuration function
+ * @param {any} value, { unknown = 'Unknown' } = {}
+ * @returns {any}
+ */
 export function formatDuration(value, { unknown = 'Unknown' } = {}) {
   const minutes = value && typeof value === 'object' ? value.value : value
   if (minutes == null || !Number.isFinite(minutes)) return unknown
@@ -175,6 +227,11 @@ export function formatDuration(value, { unknown = 'Unknown' } = {}) {
   return rounded < 60 ? `${rounded}m` : `${Math.floor(rounded / 60)}h${rounded % 60 ? ` ${rounded % 60}m` : ''}`
 }
 
+/**
+ * formatCurrency function
+ * @param {any} value, currency = 'INR'
+ * @returns {any}
+ */
 export function formatCurrency(value, currency = 'INR') {
   if (value?.unit?.startsWith('minor:')) currency = value.unit.slice(6)
   const amount = typeof value === 'object' ? value?.value : value
@@ -182,6 +239,11 @@ export function formatCurrency(value, currency = 'INR') {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(amount / (['JPY', 'KRW'].includes(currency) ? 1 : 100))
 }
 
+/**
+ * formatMetric function
+ * @param {any} value
+ * @returns {any}
+ */
 export function formatMetric(value) {
   if (value?.value == null) return value?.status === 'not-applicable' ? 'Not applicable' : 'Unknown'
   if (value.unit === 'minutes') return formatDuration(value)
@@ -191,4 +253,10 @@ export function formatMetric(value) {
 }
 
 // Convenience for consumers creating approved manual records.
+/**
+ * toOwnerInstant
+ * @description Automatically documented.
+ */
 export const toOwnerInstant = localDateTimeToInstant
+
+

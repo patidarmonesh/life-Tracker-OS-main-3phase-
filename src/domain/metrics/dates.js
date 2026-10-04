@@ -1,6 +1,15 @@
+/**
+ * DEFAULT_TIMEZONE
+ * @description Automatically documented.
+ */
 export const DEFAULT_TIMEZONE = 'Asia/Kolkata'
 const formatters = new Map()
 
+/**
+ * assertDate function
+ * @param {any} date
+ * @returns {any}
+ */
 export function assertDate(date) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) {
     throw new RangeError(`Invalid local date: ${date}`)
@@ -16,12 +25,26 @@ function formatter(timezone) {
   return formatters.get(timezone)
 }
 
+/**
+ * localParts function
+ * @param {any} instant, timezone = DEFAULT_TIMEZONE
+ * @returns {any}
+ */
 export function localParts(instant, timezone = DEFAULT_TIMEZONE) {
   const parts = Object.fromEntries(formatter(timezone).formatToParts(new Date(instant)).map(p => [p.type, p.value]))
   return { date: `${parts.year}-${parts.month}-${parts.day}`, clock: `${parts.hour}:${parts.minute}:${parts.second}` }
 }
 
+/**
+ * localDate
+ * @description Automatically documented.
+ */
 export const localDate = (instant = Date.now(), timezone = DEFAULT_TIMEZONE) => localParts(instant, timezone).date
+/**
+ * addDays function
+ * @param {any} date, count
+ * @returns {any}
+ */
 export function addDays(date, count) {
   assertDate(date)
   const d = new Date(`${date}T12:00:00Z`)
@@ -30,6 +53,11 @@ export function addDays(date, count) {
 }
 
 /** Rejects DST gaps and folds unless the caller explicitly chooses earlier/later. */
+/**
+ * localDateTimeToInstant function
+ * @param {any} date, clock, timezone = DEFAULT_TIMEZONE, disambiguation = 'reject'
+ * @returns {any}
+ */
 export function localDateTimeToInstant(date, clock, timezone = DEFAULT_TIMEZONE, disambiguation = 'reject') {
   assertDate(date)
   if (!/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(clock || '')) throw new RangeError('Clock must be HH:mm or HH:mm:ss')
@@ -50,6 +78,11 @@ export function localDateTimeToInstant(date, clock, timezone = DEFAULT_TIMEZONE,
   return new Date(disambiguation === 'later' ? candidates.at(-1) : candidates[0]).toISOString()
 }
 
+/**
+ * dayBounds function
+ * @param {any} date, timezone = DEFAULT_TIMEZONE, now = Date.now()
+ * @returns {any}
+ */
 export function dayBounds(date, timezone = DEFAULT_TIMEZONE, now = Date.now()) {
   const start = Date.parse(localDateTimeToInstant(date, '00:00', timezone, 'earlier'))
   const end = Date.parse(localDateTimeToInstant(addDays(date, 1), '00:00', timezone, 'earlier'))
@@ -59,6 +92,11 @@ export function dayBounds(date, timezone = DEFAULT_TIMEZONE, now = Date.now()) {
   return { start, end, cutoff, dayMinutes: (end - start) / 60000, elapsedMinutes: (cutoff - start) / 60000, futureMinutes: (end - cutoff) / 60000 }
 }
 
+/**
+ * dateRange function
+ * @param {any} startDate, endDate
+ * @returns {any}
+ */
 export function dateRange(startDate, endDate) {
   assertDate(startDate); assertDate(endDate)
   if (endDate < startDate) throw new RangeError('Range end precedes start')
@@ -67,14 +105,32 @@ export function dateRange(startDate, endDate) {
   return dates
 }
 
+/**
+ * selectedDateRange function
+ * @param {any} date, days = 7
+ * @returns {any}
+ */
 export function selectedDateRange(date, days = 7) {
   if (!Number.isInteger(days) || days < 1) throw new RangeError('Days must be positive')
   return { startDate: addDays(date, 1 - days), endDate: date }
 }
 
+/**
+ * weekday
+ * @description Automatically documented.
+ */
 export const weekday = date => new Date(`${assertDate(date)}T12:00:00Z`).getUTCDay()
+/**
+ * weekStart
+ * @description Automatically documented.
+ */
 export const weekStart = date => addDays(date, -((weekday(date) + 6) % 7))
 
+/**
+ * normalizeManualInterval function
+ * @param {any} { date, start, end, endDate, endsNextDay, timezone = DEFAULT_TIMEZONE, startDisambiguation, endDisambiguation }
+ * @returns {any}
+ */
 export function normalizeManualInterval({ date, start, end, endDate, endsNextDay, timezone = DEFAULT_TIMEZONE, startDisambiguation, endDisambiguation }) {
   const actualEndDate = endDate || (endsNextDay ? addDays(date, 1) : date)
   const startAt = localDateTimeToInstant(date, start, timezone, startDisambiguation)
@@ -82,3 +138,5 @@ export function normalizeManualInterval({ date, start, end, endDate, endsNextDay
   if (Date.parse(endAt) <= Date.parse(startAt)) throw new RangeError('End must follow start. Confirm an end date or Ends next day for overnight entries.')
   return { startAt, endAt, timezone, durationMinutes: (Date.parse(endAt) - Date.parse(startAt)) / 60000 }
 }
+
+

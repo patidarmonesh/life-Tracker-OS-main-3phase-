@@ -1,7 +1,15 @@
 import { adaptActivities, SYNTHETIC_HEALTH_FIELDS, isSyntheticHealth } from './metrics/records.js'
 import { DEFAULT_TIMEZONE, localDate } from './metrics/dates.js'
 
+/**
+ * MIGRATION_VERSION
+ * @description Automatically documented.
+ */
 export const MIGRATION_VERSION = 'lifeos-data/2.0.0'
+/**
+ * BACKUP_FORMAT
+ * @description Automatically documented.
+ */
 export const BACKUP_FORMAT = 'lifeos-original-backup'
 
 function objectState(state) {
@@ -27,6 +35,10 @@ export async function createBackup(original, { createdAt = new Date().toISOStrin
   return { format: BACKUP_FORMAT, version: 1, createdAt, ownerId, checksum: { algorithm: 'SHA-256', value: await checksum(data) }, data }
 }
 
+/**
+ * Item
+ * @description Automatically documented.
+ */
 export async function verifyBackup(input) {
   const backup = typeof input === 'string' ? JSON.parse(input) : input
   if (backup?.format !== BACKUP_FORMAT || backup.version !== 1 || backup.checksum?.algorithm !== 'SHA-256') throw new Error('Unsupported backup format or checksum')
@@ -43,6 +55,11 @@ export async function restoreBackup(input) {
 }
 
 /** Simulator reused manual body rows: remove only known simulated fields, preserving the row. */
+/**
+ * quarantineSyntheticHealth function
+ * @param {any} originalHealth = {}
+ * @returns {any}
+ */
 export function quarantineSyntheticHealth(originalHealth = {}) {
   const health = structuredClone(originalHealth)
   const quarantine = [...(health.quarantine || [])]
@@ -72,6 +89,11 @@ export function quarantineSyntheticHealth(originalHealth = {}) {
 }
 
 /** Non-mutating, deterministic migration. Invalid and uncertain records stay in their source arrays. */
+/**
+ * migrateState function
+ * @param {any} original, { now = Date.now(), timezone } = {}
+ * @returns {any}
+ */
 export function migrateState(original, { now = Date.now(), timezone } = {}) {
   objectState(original)
   const state = structuredClone(original)
@@ -118,3 +140,5 @@ export function migrateState(original, { now = Date.now(), timezone } = {}) {
   const changed = canonicalJSON(state) !== canonicalJSON(original)
   return { state, report, changed }
 }
+
+

@@ -1,3 +1,8 @@
+/**
+ * parseMinorUnits function
+ * @param {any} input
+ * @returns {any}
+ */
 export function parseMinorUnits(input) {
   const value = String(input ?? '').trim().replace(/^(?:₹|INR|Rs\.?)\s*/i, '')
   if (!/^(?:\d+|\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})*,\d{3})(?:\.\d{1,2})?$/.test(value)) return null
@@ -5,9 +10,19 @@ export function parseMinorUnits(input) {
   const minor = Number(whole) * 100 + Number(decimal.padEnd(2, '0'))
   return Number.isSafeInteger(minor) ? minor : null
 }
+/**
+ * canonicalCategories function
+ * @param {any} categories = []
+ * @returns {any}
+ */
 export function canonicalCategories(categories = []) {
   return categories.map(c => typeof c === 'string' ? { id: c, label: c } : { id: c.id || c.name, label: c.name || c.label || c.id }).filter(c => c.id)
 }
+/**
+ * parseMoneyMessage function
+ * @param {any} text, { captureDate, categories = [] } = {}
+ * @returns {any}
+ */
 export function parseMoneyMessage(text, { captureDate, categories = [] } = {}) {
   const raw = String(text || '').trim(), warnings = []
   if (/\b(otp|one[- ]time password|verification code|failed|declined|unsuccessful)\b/i.test(raw)) return { status: 'excluded', warnings: ['This appears to be an OTP or failed payment. No transaction will be created.'] }
@@ -33,6 +48,11 @@ export function parseMoneyMessage(text, { captureDate, categories = [] } = {}) {
   const category = options.find(c => /misc|other/i.test(c.label)) || options[0] || { id: 'Miscellaneous', label: 'Miscellaneous' }
   return { status: amountMinor && type ? 'pending' : 'needs-review', amountMinor, amount: amountMinor == null ? null : amountMinor / 100, currency: 'INR', type: type || 'expense', date, dateAssumed: !dateMatch, reference: ref, account, provider, merchant, categoryId: category.id, category: category.label, warnings }
 }
+/**
+ * duplicateTransaction function
+ * @param {any} candidate, records = []
+ * @returns {any}
+ */
 export function duplicateTransaction(candidate, records = []) {
   if (!candidate.reference) return { kind: 'none' }
   const identity = r => JSON.stringify([r.currency || 'INR', r.provider || r.bankId || r.institutionId || '', r.accountId || r.account || '', r.reference || r.transactionRef || r.upiRef])
@@ -41,3 +61,5 @@ export function duplicateTransaction(candidate, records = []) {
   const amount = same.amountMinor ?? Math.round(Number(same.amount) * 100)
   return { kind: amount === candidate.amountMinor && (same.type || same.transactionType || 'expense') === candidate.type && (same.date || same.localDate) === (candidate.date || candidate.localDate) && (same.linkedTransactionId || null) === (candidate.linkedTransactionId || null) ? 'duplicate' : 'conflict', record: same }
 }
+
+

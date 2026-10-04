@@ -1,86 +1,338 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import Papa from 'papaparse'
-import { useAppActions, useAppState } from '../context/appHooks'
-import { buildRangeSummary, toMinorUnits } from '../domain/metrics/index.js'
-import { parseMoneyMessage, parseMinorUnits, duplicateTransaction, canonicalCategories } from '../domain/capture/index.js'
-import { getTodayDateKey } from '../utils/dateTime'
-import { FinanceCharts } from '../components/AnalysisCharts'
-import Metric from '../components/areas/Metric'
-import { money } from '../components/areas/format'
-import Button from '../components/ui/Button'
-import Modal from '../components/ui/Modal'
+import React, { useMemo, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+  Calendar as CalendarIcon,
+  Plus,
+  IndianRupee,
+  CreditCard,
+  Receipt,
+  PieChart as PieChartIcon,
+  Target
+} from 'lucide-react';
+import {
+  Page, Card, StatCard, Tabs, Button, EmptyState, ProgressBar, Chips, Ring, Sheet
+} from '../ui/index';
+import HeatCalendar from '../ui/calendar/HeatCalendar';
+import YearHeatmap from '../ui/calendar/YearHeatmap';
+import DateNavigator from '../ui/calendar/DateNavigator';
+import { heatColor } from '../ui/calendar/calendarMath';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, BarChart, Bar, XAxis, YAxis } from 'recharts';
+import { useLocalPref } from '../ui/hooks';
+import { fmtDate } from '../ui/format';
+import { localDate } from '../domain/metrics/dates';
+import { isFixedRecord } from '../domain/finance';
+import { useAppState, useAppActions } from '../context/appHooks';
+
+const TABS = [
+  { key: 'today', label: 'Today' },
+  { key: 'month', label: 'Month' },
+  { key: 'year', label: 'Year' },
+  { key: 'bills', label: 'Bills & Recurring' }
+];
 
 export default function Finance() {
-  const state = useAppState(), { updateModule } = useAppActions()
-  const today = getTodayDateKey(state.settings.profile.timezone), currency = state.settings.profile.currency || 'INR'
-  const [month, setMonth] = useState(today.slice(0, 7)), [tab, setTab] = useState('transactions')
-  const [open, setOpen] = useState(false), [editing, setEditing] = useState(null), [error, setError] = useState('')
-  const [sms, setSms] = useState(''), [pending, setPending] = useState(state.finance.pendingImport || [])
-  const categories = canonicalCategories(state.settings.preferences.expenseCategories || [])
-  const supportedCurrencies = ['INR', 'USD', 'EUR', 'GBP', 'AUD', 'CAD']
-  const blank = { amount: '', currency, date: today, type: 'expense', category: categories[0]?.id || 'Miscellaneous', description: '', account: '', reference: '', linkedTransactionId: '', fixed: false }
-  const [form, setForm] = useState(blank), [billForm, setBillForm] = useState({ title: '', amount: '', dueDate: today }), [goalForm, setGoalForm] = useState({ name: '', target: '', saved: '' })
-  const expenses = state.finance.expenses || []
-  const range = useMemo(() => ({ startDate: `${month}-01`, endDate: new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10) }), [month])
-  const summary = useMemo(() => buildRangeSummary(state, range), [state, range])
-  const budget = state.finance.budgets?.[month] ?? state.settings.preferences.monthlyBudget ?? 0
-  const spend = summary.finance.spend.value
-  const records = expenses.filter(e => e.date?.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date))
-  function save(event) {
-    event.preventDefault()
-    try {
-      if (!supportedCurrencies.includes(form.currency)) throw new Error('Choose a supported currency for manual entry: INR, USD, EUR, GBP, AUD or CAD. Original imported records stay intact.')
-      const amountMinor = parseMinorUnits(form.amount)
-      if (!amountMinor) throw new Error('Enter a positive amount with at most two decimal places.')
-      if (form.date > today) throw new Error('Use an upcoming bill for future spending.')
-      const transaction = { ...editing, ...form, id: editing?.id || crypto.randomUUID(), amountMinor, amount: amountMinor / 100, categoryId: form.category, status: 'confirmed', confirmed: true, source: editing?.source || 'manual', updatedAt: new Date().toISOString() }
-      const match = duplicateTransaction(transaction, expenses.filter(e => e.id !== editing?.id))
-      if (match.kind !== 'none') throw new Error(match.kind === 'duplicate' ? 'This transaction reference is already recorded.' : 'This reference has conflicting details. Review the existing transaction first.')
-      updateModule('finance', prev => ({ ...prev, expenses: [transaction, ...prev.expenses.filter(e => e.id !== transaction.id)], bills: (prev.bills || []).map(bill => bill.id === transaction.billId ? { ...bill, linkedExpenseId: transaction.id } : bill), pendingImport: (prev.pendingImport || []).filter(row => row.id !== transaction.id) }))
-      setPending(rows => rows.filter(row => row.id !== transaction.id)); setOpen(false); setEditing(null)
-    } catch (failure) { setError(failure.message) }
-  }
-  function parseSMS() {
-    const result = parseMoneyMessage(sms, { captureDate: today, categories })
-    if (result.status === 'excluded') { setError(result.warnings.join(' ')); return }
-    setSms(''); setForm({ ...blank, ...result, category: result.categoryId, description: result.merchant || '', amount: result.amount ?? '' }); setEditing(null); setOpen(true); setError(result.warnings.join(' '))
-  }
-  async function importCSV(file) {
-    if (!file) return
-    const result = Papa.parse(await file.text(), { header: true, skipEmptyLines: true, transformHeader: h => h.trim().toLowerCase() })
-    const candidates = result.data.map((row, i) => {
-      const debit = parseMinorUnits(row.debit || '0'), credit = parseMinorUnits(row.credit || '0')
-      const ambiguous = debit > 0 && credit > 0
-      const amountMinor = ambiguous ? null : parseMinorUnits(row.amount || (debit > 0 ? row.debit : row.credit))
-      return { id: crypto.randomUUID(), amountMinor, amount: amountMinor == null ? null : amountMinor / 100, date: /^\d{4}-\d{2}-\d{2}$/.test(row.date) ? row.date : '', currency: row.currency || currency, type: row.type || (credit > 0 && !(debit > 0) ? 'income' : 'expense'), category: categories.some(c => c.id === row.category) ? row.category : 'Miscellaneous', description: row.description || row.merchant || `Statement row ${i + 1}`, reference: row.reference || row.utr || '', account: row.account || '', source: 'statement', status: 'pending' }
-    })
-    updateModule('finance', prev => ({ ...prev, pendingImport: candidates })); setPending(candidates); setError(result.errors.length ? 'Some CSV rows need correction. No rows are saved yet.' : '')
-  }
-  function confirmRows() {
-    const confirmed = [], problems = []
-    for (const candidate of pending) {
-      if (!supportedCurrencies.includes(candidate.currency) || !candidate.amountMinor || !candidate.date || candidate.date > today || !['expense', 'income', 'refund', 'transfer', 'fee', 'investment'].includes(candidate.type)) { problems.push(candidate); continue }
-      const duplicate = duplicateTransaction(candidate, [...expenses, ...confirmed])
-      if (duplicate.kind !== 'none') { problems.push({ ...candidate, reviewReason: duplicate.kind }); continue }
-      confirmed.push({ ...candidate, categoryId: candidate.category, status: 'confirmed', confirmed: true })
-    }
-    updateModule('finance', prev => ({ ...prev, expenses: [...confirmed, ...prev.expenses], pendingImport: problems })); setPending(problems); setError(`${confirmed.length} confirmed. ${problems.length} rows need review or have matching references. Equal payments without matching references are retained.`)
-  }
-  return <div className="page-stack"><header className="page-header"><div><p className="area-eyebrow">Money</p><h1>Spending & commitments</h1><p>A period ledger, without a daily productivity penalty.</p></div><Button onClick={() => { setForm(blank); setEditing(null); setError(''); setOpen(true) }}>Add transaction</Button></header>
-    <div className="area-toolbar"><label>Month <input aria-label="Finance month" type="month" value={month} onChange={e => setMonth(e.target.value)} /></label><Link to="/capture">Capture a bill or message</Link></div>
-    <div className="metric-grid"><Metric label={`Spending · ${currency}`} value={money(summary.finance.spend, currency)} detail="Confirmed expenses less refunds; transfers excluded" /><Metric label="Monthly budget" value={budget > 0 ? money(Number(budget) * 100, currency) : 'Not configured'} /><Metric label="Remaining budget" value={budget > 0 && spend != null ? money(Number(budget) * 100 - spend, currency) : 'Unavailable'} /><Metric label="Budget utilization" value={budget > 0 && spend != null ? `${Math.round(spend / Number(budget))}%` : 'Unavailable'} /></div>
-    {Object.keys(summary.finance.byCurrency).length > 1 && <p className="notice">Other currencies are kept separate: {Object.entries(summary.finance.byCurrency).filter(([c]) => c !== currency).map(([c, totals]) => `${c} ${money(totals.netSpendMinor, c)}`).join(' · ')}.</p>}
-    <div className="area-toolbar" role="tablist" aria-label="Money views">{['transactions', 'capture', 'budget', 'bills', 'savings'].map(name => <Button key={name} variant={tab === name ? 'primary' : 'secondary'} role="tab" aria-selected={tab === name} onClick={() => setTab(name)}>{name[0].toUpperCase() + name.slice(1)}</Button>)}</div>
-    <FinanceCharts summary={summary}/>
-    {tab === 'transactions' && <section className="area-card"><h2>Confirmed ledger</h2>{summary.finance.review.length > 0 && <p role="status" className="notice">{summary.finance.review.length} transaction records need review: {summary.finance.review.map(item => item.reason).join('; ')}. Correct the original ledger entry; these values are excluded from spending.</p>}{!records.length && <p>No recorded transactions this month. This does not establish a no-spend month.</p>}<ul className="area-list">{records.map(record => <li key={record.id}><h3>{record.description || record.merchant || record.category}</h3><p>{money(record.amountMinor ?? toMinorUnits(record.amount, ['JPY', 'KRW'].includes(record.currency) ? 0 : 2), record.currency || currency)} · {record.type || 'expense'} · {record.date} · {record.category}</p>{record.fixed && <small>Fixed obligation</small>}<div className="area-toolbar"><Button variant="secondary" onClick={() => { setEditing(record); setForm({ ...blank, ...record, amount: record.amountMinor != null ? record.amountMinor / 100 : record.amount }); setOpen(true); setError('') }}>Edit</Button><Button variant="ghost" onClick={() => { if (window.confirm('Delete this transaction?')) updateModule('finance', prev => ({ ...prev, expenses: prev.expenses.filter(e => e.id !== record.id), bills: (prev.bills || []).map(bill => bill.linkedExpenseId === record.id ? { ...bill, linkedExpenseId: null } : bill) })) }}>Delete</Button></div></li>)}</ul><Button variant="secondary" onClick={() => updateModule('finance', prev => ({ ...prev, noSpendDates: [...new Set([...(prev.noSpendDates || []), today])] }))}>Confirm no spending today</Button><p className="muted">This confirmation does not erase transactions already recorded today.</p></section>}
-    {tab === 'capture' && <section className="area-card"><h2>Review an import</h2><div className="area-form"><label>Paste a transaction message<textarea rows="5" value={sms} onChange={e => setSms(e.target.value)} placeholder="Rs.1,250.00 debited…" /></label><Button onClick={parseSMS} disabled={!sms.trim()}>Extract for review</Button><label>Import CSV statement<input type="file" accept=".csv,text/csv" onChange={e => importCSV(e.target.files?.[0])} /></label><p className="muted">Supported columns: date (YYYY-MM-DD), amount or debit/credit, description, currency, type, reference, account, category. Raw messages are not retained.</p></div>{pending.length > 0 && <><ul className="area-list">{pending.map(row => <li key={row.id}><p>{row.description} · {row.amount ?? 'Invalid amount'} · {row.date || 'Date required'} · {row.reviewReason || row.type}</p><Button variant="secondary" onClick={() => { setEditing(row); setForm({ ...blank, ...row }); setError('Review every field before saving.'); setOpen(true) }}>Correct row</Button><Button variant="ghost" onClick={() => { const next = pending.filter(p => p.id !== row.id); setPending(next); updateModule('finance', prev => ({ ...prev, pendingImport: next })) }}>Remove row</Button></li>)}</ul><Button onClick={confirmRows}>Confirm valid reviewed rows</Button></>}{error && <p role="status">{error}</p>}</section>}
-    {tab === 'budget' && <section className="area-card"><h2>Budget for {month}</h2><form className="area-form" onSubmit={e => { e.preventDefault(); const amount = Number(new FormData(e.currentTarget).get('budget')); updateModule('finance', prev => ({ ...prev, budgets: { ...prev.budgets, [month]: amount } })) }}><label>Period budget in {currency}<input name="budget" key={month} type="number" min="0" step="0.01" defaultValue={budget} required /></label><Button type="submit">Save period budget</Button></form><p>Fixed bills are commitments. Missing transaction coverage limits spending projections, so no forecast is fabricated.</p></section>}
-    {tab === 'bills' && <section className="area-card"><h2>Upcoming bills</h2><ul className="area-list">{(state.finance.bills || []).map(bill => <li key={bill.id}><strong>{bill.title || bill.fileName || 'Bill'}</strong><p>{bill.dueDate || bill.date || 'Date unknown'} · {money(bill.amountMinor ?? (bill.amount != null ? Math.round(bill.amount * 100) : null), bill.currency || currency)} · {bill.linkedExpenseId ? 'Linked to payment' : 'Unpaid / unlinked'}</p>{!bill.linkedExpenseId && <Button variant="secondary" onClick={() => { setEditing(null); setForm({ ...blank, amount: bill.amountMinor != null ? bill.amountMinor / 100 : bill.amount || '', description: bill.title || bill.fileName || '', fixed: true, billId: bill.id }); setOpen(true) }}>Record payment</Button>}</li>)}</ul><form className="area-form" onSubmit={e => { e.preventDefault(); const amountMinor = parseMinorUnits(billForm.amount); if (!amountMinor) return; updateModule('finance', prev => ({ ...prev, bills: [...(prev.bills || []), { ...billForm, id: crypto.randomUUID(), amountMinor, currency }] })); setBillForm({ title: '', amount: '', dueDate: today }) }}><label>Bill title<input required value={billForm.title} onChange={e => setBillForm({ ...billForm, title: e.target.value })} /></label><label>Amount<input required type="number" min="0.01" step="0.01" value={billForm.amount} onChange={e => setBillForm({ ...billForm, amount: e.target.value })} /></label><label>Due date<input type="date" required value={billForm.dueDate} onChange={e => setBillForm({ ...billForm, dueDate: e.target.value })} /></label><Button type="submit">Add commitment</Button></form></section>}
-    {tab === 'savings' && <section className="area-card"><h2>Savings goals</h2><ul className="area-list">{(state.finance.savingsGoals || []).map(goal => <li key={goal.id}><strong>{goal.name || goal.title}</strong><p>{money(goal.savedMinor ?? (goal.saved || 0) * 100, currency)} of {money(goal.targetMinor ?? (goal.target || goal.targetAmount || 0) * 100, currency)}</p></li>)}</ul><form className="area-form" onSubmit={e => { e.preventDefault(); updateModule('finance', prev => ({ ...prev, savingsGoals: [...(prev.savingsGoals || []), { id: crypto.randomUUID(), ...goalForm, targetMinor: parseMinorUnits(goalForm.target), savedMinor: parseMinorUnits(goalForm.saved || '0') }] })); setGoalForm({ name: '', target: '', saved: '' }) }}><label>Name<input required value={goalForm.name} onChange={e => setGoalForm({ ...goalForm, name: e.target.value })} /></label><label>Target<input type="number" min="0.01" step="0.01" required value={goalForm.target} onChange={e => setGoalForm({ ...goalForm, target: e.target.value })} /></label><label>Already saved<input type="number" min="0" step="0.01" value={goalForm.saved} onChange={e => setGoalForm({ ...goalForm, saved: e.target.value })} /></label><Button type="submit">Save goal</Button></form></section>}
-    <Modal isOpen={open} onClose={() => setOpen(false)} title="Review transaction"><form className="area-form" onSubmit={save}><label>Amount<input type="number" min="0.01" step="0.01" required value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} /></label><label>Type<select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>{['expense', 'income', 'refund', 'transfer', 'fee', 'investment'].map(type => <option key={type}>{type}</option>)}</select></label><label>Currency<input required pattern="[A-Z]{3}" value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value.toUpperCase() })} /></label><label>Date<input type="date" required value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></label><label>Category<select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>{categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label><label>Description<input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label><label>Account (optional)<input value={form.account} onChange={e => setForm({ ...form, account: e.target.value })} /></label><label>Transaction reference<input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} /></label>{form.type === 'refund' && <label>Original transaction<select value={form.linkedTransactionId} onChange={e => setForm({ ...form, linkedTransactionId: e.target.value })}><option value="">Select original expense</option>{expenses.filter(e => !e.type || e.type === 'expense').map(e => <option key={e.id} value={e.id}>{e.date} · {e.description} · {e.amount}</option>)}</select></label>}<label className="check-label"><input type="checkbox" checked={form.fixed} onChange={e => setForm({ ...form, fixed: e.target.checked })} />Fixed obligation</label>{error && <p role="alert">{error}</p>}<Button type="submit">Confirm and save transaction</Button></form></Modal>
-  </div>
+  const state = useAppState();
+  const [activeTab, setActiveTab] = useLocalPref('finance_tab', 'today');
+  const [selectedDate, setSelectedDate] = useLocalPref('finance_date', localDate());
+  
+  const expenses = state.finance?.expenses || [];
+  const monthlyBudget = state.settings?.preferences?.monthlyBudget || 30000;
+  
+  const today = localDate();
+  
+  return (
+    <Page title="Money" className="pb-24 max-md:pb-24">
+      <Tabs tabs={TABS} value={activeTab} onChange={setActiveTab} />
+      
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.2 }}
+        >
+          {activeTab === 'today' && (
+            <TodayTab expenses={expenses} today={today} />
+          )}
+          {activeTab === 'month' && (
+            <MonthTab expenses={expenses} selectedDate={selectedDate} onDateChange={setSelectedDate} budget={monthlyBudget} />
+          )}
+          {activeTab === 'year' && (
+            <YearTab expenses={expenses} />
+          )}
+          {activeTab === 'bills' && (
+            <BillsTab expenses={expenses} />
+          )}
+        </motion.div>
+      </AnimatePresence>
+      <div className="pb-24 h-24 min-h-[6rem] mb-12"></div>
+    </Page>
+  );
 }
 
+function TodayTab({ expenses, today }) {
+  const todayExpenses = expenses.filter(e => e.date === today);
+  const totalSpent = todayExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+  const { updateModule } = useAppActions();
+  const fileRef = useRef(null);
+  const [loading, setLoading] = useState(false);
 
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const base64 = evt.target.result.split(',')[1];
+        try {
+          const res = await fetch('/ai/extract-bill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageBase64: base64, purpose: 'bill' })
+          });
+          const data = await res.json();
+          updateModule('finance', prev => ({
+            ...prev,
+            expenses: [...(prev.expenses || []), {
+              id: crypto.randomUUID(),
+              amount: data.total || 0,
+              title: data.merchant || 'Uploaded Receipt',
+              date: today,
+              category: data.category || 'Miscellaneous',
+              billOCRText: JSON.stringify(data.items || []),
+            }]
+          }));
+        } catch (err) {
+          console.error(err);
+          alert("OCR extraction requires Gemini keys in your env to work locally!");
+        } finally {
+          setLoading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="ui-grid gap-4 mt-4">
+      <Card className="p-4 bg-zinc-900 text-white rounded-none flex flex-col gap-1">
+        <div className="text-zinc-400 text-sm">Spent Today</div>
+        <div className="text-3xl font-semibold">₹{totalSpent.toLocaleString('en-IN')}</div>
+      </Card>
+      
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <Button variant="primary" icon={Plus} onClick={() => alert("Add Manual not implemented")}>Add Manual</Button>
+        <Button variant="secondary" icon={Receipt} onClick={() => fileRef.current?.click()} disabled={loading}>
+          {loading ? 'AI Extracting...' : 'Upload Receipt'}
+        </Button>
+        <input type="file" accept="image/*,application/pdf" style={{ display: 'none' }} ref={fileRef} onChange={handleUpload} />
+      </div>
+      
+      <Card title="Transactions" className="mt-4">
+        {todayExpenses.length === 0 ? (
+          <EmptyState
+            emoji="💳"
+            title="No expenses today"
+            text="You haven't logged any expenses yet."
+          />
+        ) : (
+          <div className="ui-col gap-2">
+            {todayExpenses.map(exp => (
+              <div key={exp.id} className="ui-row justify-between items-center p-3 rounded-none bg-zinc-50 dark:bg-zinc-800/50">
+                <div className="ui-row items-center gap-3">
+                  <div className="text-xl">{exp.billOCRText ? '🧾' : (exp.categoryEmoji || '💸')}</div>
+                  <div>
+                    <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">{exp.title}</div>
+                    <div className="text-xs text-zinc-500">{exp.category} {exp.billOCRText ? '· AI Extracted' : ''}</div>
+                  </div>
+                </div>
+                <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  ₹{Number(exp.amount).toLocaleString('en-IN')}
+                </div>
+              </div>
+            ))}
+            <Button variant="ghost" className="mt-2 w-full" onClick={() => alert("Confirmed")}>Confirm no more spending</Button>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function MonthTab({ expenses, selectedDate, onDateChange, budget }) {
+  const currentMonth = selectedDate.substring(0, 7);
+  const monthExpenses = expenses.filter(e => e.date.startsWith(currentMonth));
+  const totalSpent = monthExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+  const dailyBudget = budget / 30; // Approximation
+  
+  const daysInMonth = new Date(selectedDate.substring(0, 4), selectedDate.substring(5, 7), 0).getDate();
+  const today = localDate();
+  const currentDay = today.startsWith(currentMonth) ? parseInt(today.substring(8, 10)) : daysInMonth;
+  const remainingDays = Math.max(1, daysInMonth - currentDay);
+  const safeToSpend = Math.max(0, budget - totalSpent) / remainingDays;
+  
+  const getDay = (dateStr) => {
+    if (dateStr > today) return { status: 'future' };
+    const dayExpenses = expenses.filter(e => e.date === dateStr);
+    const daySpend = dayExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+    
+    if (dayExpenses.length === 0 && dateStr < today) {
+      return { status: 'unknown' };
+    }
+    
+    const hasFixed = dayExpenses.some(isFixedRecord);
+    return {
+      value: '₹' + daySpend,
+      cellBg: heatColor('#EF4444', daySpend / (dailyBudget * 2)),
+      status: daySpend / (dailyBudget * 2) > 0.8 ? 'bad' : 'good', badges: hasFixed ? ['??'] : []
+    };
+  };
+
+  const categories = useMemo(() => {
+    const cats = {};
+    monthExpenses.forEach(e => {
+      cats[e.category] = (cats[e.category] || 0) + e.amount;
+    });
+    return Object.entries(cats)
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [monthExpenses]);
+
+  return (
+    <div className="ui-grid gap-4 mt-4">
+      <div className="ui-row justify-between items-center">
+        <DateNavigator
+          value={selectedDate}
+          onChange={onDateChange}
+          unit="month" today={localDate()}
+        />
+      </div>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <Card className="p-4 bg-zinc-900 text-white rounded-none flex flex-col gap-1">
+          <div className="text-zinc-400 text-sm">Monthly Spend</div>
+          <div className="text-2xl font-semibold">₹{totalSpent.toLocaleString('en-IN')}</div>
+          <div className="text-xs text-zinc-500">of ₹{budget.toLocaleString('en-IN')}</div>
+        </Card>
+        <Card className="p-4 bg-zinc-900 text-white rounded-none flex flex-col gap-1">
+          <div className="text-zinc-400 text-sm">Safe to Spend</div>
+          <div className="text-2xl font-semibold text-blue-400">₹{Math.round(safeToSpend).toLocaleString('en-IN')}</div>
+          <div className="text-xs text-zinc-500">per day remaining</div>
+        </Card>
+      </div>
+
+      <Card title="Daily Spending">
+        <HeatCalendar
+          month={selectedDate.slice(0, 7)}
+          getDay={getDay}
+        />
+      </Card>
+      
+      <Card title="Category Breakdown">
+        {categories.length === 0 ? (
+          <EmptyState emoji="📊" title="No data" text="Log expenses to see breakdown" />
+        ) : (
+          <div className="ui-col gap-6">
+            <div style={{ height: 250, width: '100%' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={categories}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="amount"
+                    animationDuration={1500}
+                    animationEasing="ease-out"
+                  >
+                    {categories.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#F97316', '#06B6D4'][index % 7]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value) => '₹' + value.toLocaleString('en-IN')} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            
+            <div style={{ height: 200, width: '100%' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={categories} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false} tick={{fill: 'var(--text-3)', fontSize: 12}} />
+                  <RechartsTooltip cursor={{fill: 'transparent'}} formatter={(value) => '₹' + value.toLocaleString('en-IN')} />
+                  <Bar dataKey="amount" fill="#6366F1" radius={[0, 4, 4, 0]} animationDuration={1000} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function YearTab({ expenses }) {
+  const today = localDate();
+  const getDay = (dateStr) => {
+    if (dateStr > today) return { status: 'future' };
+    const dayExpenses = expenses.filter(e => e.date === dateStr);
+    const daySpend = dayExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+    if (daySpend === 0 && dateStr < today) return { status: 'unknown' };
+    return {
+      value: daySpend,
+      cellBg: heatColor('#EF4444', daySpend / 2000)
+    };
+  };
+
+  return (
+    <div className="ui-grid gap-4 mt-4">
+      <Card title="Yearly Spending Heatmap">
+        <YearHeatmap
+          year={parseInt(localDate().substring(0, 4))}
+          getDay={getDay}
+        />
+      </Card>
+    </div>
+  );
+}
+
+function BillsTab({ expenses }) {
+  const fixedExpenses = expenses.filter(isFixedRecord);
+  
+  return (
+    <div className="ui-grid gap-4 mt-4">
+      <Card title="Subscriptions & Recurring">
+        {fixedExpenses.length === 0 ? (
+          <EmptyState emoji="🧾" title="No recurring bills" text="You don't have any fixed expenses recorded." />
+        ) : (
+          <div className="ui-col gap-2">
+            {fixedExpenses.map(exp => (
+              <div key={exp.id} className="ui-row justify-between items-center p-3 rounded-none border border-zinc-200 dark:border-zinc-800">
+                <div className="ui-row items-center gap-3">
+                  <Receipt className="w-5 h-5 text-zinc-400" />
+                  <div>
+                    <div className="font-medium text-sm">{exp.title}</div>
+                    <div className="text-xs text-zinc-500">{fmtDate(exp.date)}</div>
+                  </div>
+                </div>
+                <div className="font-semibold">
+                  ₹{Number(exp.amount).toLocaleString('en-IN')}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
 

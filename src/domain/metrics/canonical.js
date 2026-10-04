@@ -1,6 +1,11 @@
 const VOLATILE_FIELDS = new Set(['updatedAt', 'updated_at', 'createdAt', 'created_at', 'lastSynced', 'lastRemoteModified', 'remoteMetadata', 'sourceRevision', 'syncStatus', 'syncError', 'syncConflicts', 'storageError', 'pendingCount', 'hydrated', 'isFromDrive'])
 
 /** Canonical metric input: transport metadata and database row ordering are not evidence. */
+/**
+ * canonicalMetricSource function
+ * @param {any} value
+ * @returns {any}
+ */
 export function canonicalMetricSource(value) {
   if (Array.isArray(value)) {
     return value.map(canonicalMetricSource).sort((a, b) => {
@@ -13,7 +18,14 @@ export function canonicalMetricSource(value) {
 }
 
 /** Audit timestamps, not storage array order, decide which correction is latest. */
+/**
+ * chronologicalCorrections function
+ * @param {any} records = []
+ * @returns {any}
+ */
 export function chronologicalCorrections(records = []) {
   const stamp = record => Date.parse(record.resolvedAt || '') || 0
   return [...records].sort((a, b) => stamp(a) - stamp(b) || String(a.id || '').localeCompare(String(b.id || '')) || JSON.stringify(canonicalMetricSource(a)).localeCompare(JSON.stringify(canonicalMetricSource(b))))
 }
+
+

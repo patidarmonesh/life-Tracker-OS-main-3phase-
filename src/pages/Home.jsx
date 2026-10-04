@@ -1,68 +1,194 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowRight, ArrowUpRight, Sun, Check, CalendarDays, Moon, Wallet, BookOpen, CheckSquare } from 'lucide-react'
-import { useAppState, useAppActions } from '../context/appHooks'
-import { buildDailySummary, formatCurrency, formatDuration } from '../domain/metrics/index'
-import { EMPTY_PLANNING, buildPlanningSummary, commitmentSummary, displayClock, latestApproved, nextDate, ownerDate, uid } from '../domain/planning/index'
-import TaskTimer from '../components/daily/TaskTimer'
-import CheckInDialog from '../components/daily/CheckInDialog'
-import Button from '../components/ui/Button'
-import Input from '../components/ui/Input'
+import React, { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'motion/react';
+import { Clock, IndianRupee, Moon, Plus, Target, CheckCircle2, ChevronRight, Zap } from 'lucide-react';
+import { Page, Card, StatCard, Button, Ring, EmptyState } from '../ui/index';
+import { useLiveNow } from '../ui/hooks';
+import { fmtMinutes, fmtDate, greeting } from '../ui/format';
+import { localDate } from '../domain/metrics/dates';
+import { useAppState } from '../context/appHooks';
+import { computeDaySync } from '../domain/planning/sync';
+import { compactMoney, spendOf } from '../domain/finance';
+
+const EMPTY_ARRAY = [];
+const EMPTY_PLANNING = { drafts: {}, checkins: {} };
 
 export default function Home() {
-  const state = useAppState(), { updateModules } = useAppActions()
-  const timezone = state.settings?.profile?.timezone || 'Asia/Kolkata'
-  const [now, setNow] = useState(Date.now), [checkin, setCheckin] = useState(null)
-  const [win, setWin] = useState(''), [lesson, setLesson] = useState(''), [toJournal, setToJournal] = useState(false), [message, setMessage] = useState('')
-  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(id) }, [])
-  const today = ownerDate(now, timezone), planning = state.planning || EMPTY_PLANNING
-  const summary = useMemo(() => buildDailySummary(state, today, { now, timezone }), [state, today, now, timezone])
-  const approved = latestApproved(planning, today), blocks = approved?.blocks || []
-  const answered = new Set((planning.checkins || []).filter(c => c.localDate === today).map(c => c.blockId))
-  const current = blocks.find(b => Date.parse(b.startAt) <= now && Date.parse(b.endAt) > now && !answered.has(b.id))
-  const next = blocks.filter(b => Date.parse(b.startAt) > now).slice(0, 3)
-  const pending = blocks.filter(b => Date.parse(b.endAt) <= now && !answered.has(b.id))
-  const commitment = commitmentSummary(planning, today)
-  const execution = useMemo(() => buildPlanningSummary(state, today, { now, timezone }), [state, today, now, timezone])
-  const percentLabel = metric => metric.value == null ? 'Not applicable' : `${Math.round(metric.value)}%${metric.status === 'incomplete' ? ' observed' : ''}`
-  const timerBlock = planning.timer && (planning.revisions.flatMap(r => r.blocks).find(b => b.id === planning.timer.blockId) || planning.timer.block)
-  const active = timerBlock || current
-  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', hourCycle: 'h23' }).format(now))
-  const dateLabel = new Intl.DateTimeFormat('en', { timeZone: timezone, weekday: 'long', month: 'long', day: 'numeric' }).format(now)
-  const captures = (state.captures?.items || []).filter(c => !['confirmed', 'archived'].includes(c.status)).length
-  const quickArea = state.settings?.preferences?.quickArea || '/finance'
-  const quickLabel = { '/finance': 'Money', '/study': 'Study', '/health': 'Health & sleep', '/journal': 'Journal', '/habits': 'Routines', '/goals': 'Goals', '/timeflow': 'Actual timeline', '/brain': 'Notes' }[quickArea] || 'Money'
-  const lastReview = (planning.reviews || []).find(r => r.localDate === today)
-  function saveReview() {
-    if (!win.trim() && !lesson.trim()) { setMessage('Add a win or a lesson before saving your review.'); return }
-    const record = { id: lastReview?.id || uid('review'), localDate: today, win, lesson, updatedAt: new Date().toISOString(), originalCommitments: commitment.total, answered: commitment.answered }
-    const patches = { planning: p => ({ ...p, reviews: [...(p.reviews || []).filter(r => r.localDate !== today), record] }) }
-    if (toJournal) patches.journal = j => ({ ...j, entries: [...(j.entries || []).filter(e => e.id !== `review_${record.id}`), { id: `review_${record.id}`, date: today, title: 'Evening review', content: `Win: ${win}\nLesson: ${lesson}`, createdAt: record.updatedAt, source: 'explicit-review' }] })
-    updateModules(patches); setMessage('Review saved. Any unanswered check-ins still remain unknown.')
-  }
-  function carryUnfinished() {
-    const done = new Set((planning.checkins || []).filter(c => c.outcome === 'done').map(c => c.blockId)), tomorrow = nextDate(today)
-    const unfinished = blocks.filter(b => !done.has(b.id))
-    updateModules({ planning: p => {
-      const existing = p.drafts?.[tomorrow]?.blocks || [], sources = new Set(existing.map(b => b.carriedBlockId))
-      return { ...p, drafts: { ...p.drafts, [tomorrow]: { ...p.drafts?.[tomorrow], blocks: [...existing, ...unfinished.filter(b => !sources.has(b.id)).map(b => ({ ...b, id: uid('block'), fixed: false, startTime: '', carriedFrom: today, carriedBlockId: b.id }))] } } }
-    } })
-    setMessage(`Unfinished tasks added to ${tomorrow}'s draft. Original commitments are unchanged.`)
-  }
-  return <div className="page-stack">
-    <header className="page-header"><div><p className="eyebrow">{dateLabel}</p><h1>{hour < 12 ? 'A little intention for today.' : hour < 18 ? 'Make the next moment count.' : 'Time to take stock.'}</h1><p>Your plan, your pace. An honest picture of your day.</p></div><div className="row-actions"><Link className="button button-ghost" to={quickArea}>{quickLabel} <ArrowUpRight size={16}/></Link><Link className="button button-secondary" to={`/plan?date=${today}`}><CalendarDays size={16}/> {approved ? 'Adjust your plan' : 'Plan today'}</Link></div></header>
-    {!(state.timeflow?.entries?.length || state.finance?.expenses?.length || state.study?.sessions?.length || state.journal?.entries?.length) && <section className="notice"><strong>Bring your history back.</strong><p>Used LifeOS before? Import your old Drive records from Me to see your finance, diary and activity history.</p><Link className="button button-secondary" to="/me#drive-import">Import old Drive data</Link></section>}<div className="today-grid"><section className="section-card now-card"><div className="section-heading"><p className="eyebrow">RIGHT NOW</p><span className="badge">{active ? 'Your current commitment' : 'A little breathing room'}</span></div><h2>{active?.title || (approved ? 'You have some free time.' : 'What matters most today?')}</h2><p className="now-copy">{active ? active.completionCriterion || `Planned ${active.startTime}–${active.endTime} · ${active.estimateMinutes} minutes · ${active.fixed ? 'fixed' : 'flexible'}` : approved ? 'Keep it open, take a break, or make a considered change to the rest of your day.' : 'Give your day a shape. Start with a few things you want to move forward, and leave room for life.'}</p>
-    {active ? <><TaskTimer block={active} onStopped={() => setCheckin(active)} compact/><div className="row-actions"><Button variant="secondary" onClick={() => setCheckin(active)}>Check in without a timer</Button><Link to="/plan" className="button button-ghost">Change priority</Link></div></> : <div className="row-actions"><Link to={`/plan?date=${hour >= 21 ? nextDate(today) : today}`} className="button button-primary">{hour >= 21 ? 'Draft tomorrow' : approved ? 'Review your plan' : 'Plan today'} <ArrowRight size={16}/></Link><Link to="/capture" className="button button-ghost">Capture a thought</Link></div>}</section>
-    <section className="section-card"><div className="section-heading"><h2>Up next</h2><Link to={`/calendar?date=${today}`}>Full calendar <ArrowUpRight size={14}/></Link></div>{next.length ? <div className="agenda-list">{next.map(b => <div className="agenda-row" key={b.id}><span className="agenda-time">{b.startTime}<br/><span className="caption">{b.endTime}</span></span><div><h3>{b.title}</h3><p>{b.estimateMinutes} min · {b.fixed ? 'Fixed' : 'Flexible'} · {b.priority}</p></div><span className="agenda-dot" aria-hidden="true"/></div>)}</div> : <div className="empty-state"><Sun size={28}/><h3>{approved ? 'Nothing else scheduled.' : 'Your day is open.'}</h3><p>{approved ? 'Your remaining time is yours to use.' : 'Approved blocks will appear here.'}</p></div>}<Link className="caption" to="/habits">{summary.routines.pending > 0 ? `${summary.routines.pending} routines still available today` : 'See your routines'} <ArrowRight size={13} style={{ display: 'inline' }}/></Link></section></div>
-    {(pending.length > 0 || captures > 0) && <section className="section-card"><div className="section-heading"><h2>A quick check-in</h2><span className="badge">{pending.length + captures} waiting</span></div>{pending.map(b => <div className="agenda-row" key={b.id}><span className="agenda-time">{b.endTime}</span><div><h3>{b.title}</h3><p>What happened? Your outcome and time are still unknown.</p></div><Button variant="secondary" onClick={() => setCheckin(b)}>Check in</Button></div>)}{captures > 0 && <Link className="button button-ghost" to="/capture">Review {captures} pending captures <ArrowRight size={15}/></Link>}</section>}
-    <div className="metric-grid">{[
-      { label: 'Study', value: formatDuration(summary.study.minutes), note: summary.study.minutes.value == null ? 'No study recorded' : 'Observed + reported', to: '/study', icon: BookOpen },
-      { label: 'Last night’s sleep', value: formatDuration(summary.sleep.minutes), note: summary.sleep.minutes.value == null ? 'Log last night’s sleep' : 'On your wake date', to: '/health', icon: Moon },
-      { label: 'Spending today', value: formatCurrency(summary.finance.spend), note: summary.finance.spend.value == null ? 'Not yet confirmed' : 'Confirmed ledger', to: '/finance', icon: Wallet },
-      { label: 'Routines', value: summary.routines.denominator ? `${summary.routines.numerator} / ${summary.routines.denominator}` : 'Not due', note: `${summary.routines.pending} still pending`, to: '/habits', icon: CheckSquare },
-    ].map(({ label, value, note, to, icon: Icon }) => <Link className="metric-card" to={to} key={label}><span className="metric-label">{label}<Icon size={16}/></span><strong className="metric-value">{value}</strong><span className="metric-note">{note}</span></Link>)}</div>
-    <section className="section-card"><div className="section-heading"><div><h2>The shape of your day</h2><p className="caption">Planned intentions and actual evidence stay separate.</p></div><Link to={`/calendar?date=${today}`}>Open day calendar <ArrowUpRight size={15}/></Link></div><div className="plan-summary" style={{ marginBottom: '1.25rem' }}><span className="badge">{formatDuration(summary.time.loggedMinutes)} recorded</span><span className="badge">{formatDuration(summary.time.unloggedMinutes)} elapsed, unlogged</span><span className="badge">{formatDuration(summary.time.futureMinutes)} still ahead</span>{summary.time.conflictingMinutes.value > 0 && <Link className="badge" to="/timeflow">{formatDuration(summary.time.conflictingMinutes)} conflicting</Link>}</div><div className="timeline-grid"><div className="timeline-column"><h3>APPROVED PLAN</h3>{blocks.length ? blocks.map(b => <div className="timeline-entry planned" key={b.id}><p>{b.startTime}–{b.endTime} · {answered.has(b.id) ? 'Check-in answered' : 'Planned'}</p><h4>{b.title}</h4></div>) : <p className="caption">No approved plan for today.</p>}</div><div className="timeline-column"><h3>ACTUAL EVIDENCE</h3>{summary.time.segments.length ? summary.time.segments.map((s, i) => <div className="timeline-entry" key={i}><p>{displayClock(s.startAt, timezone)}–{displayClock(s.endAt, timezone)} · {formatDuration(s.minutes)}</p><h4>{s.bucket}{s.isStudy ? ' · Study' : ''}{s.estimated ? ' · estimated' : ''}</h4></div>) : <p className="caption">No timed activity yet. An unanswered plan is not evidence of execution.</p>}{summary.time.durationOnly.length > 0 && <p className="notice">{summary.time.durationOnly.length} duration-only records are retained with unknown timing.</p>}</div></div></section>
-    <section className="section-card"><div className="section-heading"><h2>Follow-through, explained</h2><span className="badge">Original commitments</span></div><div className="metric-grid">{[["Outcomes", execution.outcomeCompletion], ["Timing adherence", execution.timingAdherence], ["Effort fulfillment", execution.effortFulfillment], ["Due check-ins", execution.checkinResponse]].map(([label, metric]) => <div className="metric-card" key={label}><span className="metric-label">{label}</span><strong className="metric-value">{percentLabel(metric)}</strong><span className="metric-note">{metric.status === "incomplete" ? "Lower bound · evidence incomplete" : metric.status === "not-applicable" ? "No applicable commitments" : "Confirmed evidence"}</span></div>)}</div><p className="caption" style={{ marginTop: "1rem" }}>Timing measures work inside the original window; effort measures linked work at any time. Completing an outcome early still counts as done. Unanswered check-ins remain unknown.</p></section><section className="section-card"><div className="section-heading"><div><p className="eyebrow">CLOSE THE LOOP</p><h2>One win. One lesson.</h2></div><Link to="/insights">See the bigger picture <ArrowUpRight size={15}/></Link></div>{commitment.total > 0 && <p className="notice" style={{ marginBottom: '1rem' }}>{commitment.completed}/{commitment.total} original outcomes completed · {commitment.answered}/{commitment.total} check-ins answered · {commitment.unknown} with missing timing evidence. Current revision {commitment.currentRevision}; original revision {commitment.originalRevision} retained.</p>}{lastReview && <p className="caption" style={{ marginBottom: '1rem' }}>Saved review: {lastReview.win} {lastReview.lesson}</p>}<div className="form-grid"><Input label="A small win" value={win} onChange={e => setWin(e.target.value)} placeholder="What moved forward?"/><Input label="A useful lesson" value={lesson} onChange={e => setLesson(e.target.value)} placeholder="What could tomorrow need?"/></div><label className="row-actions caption" style={{ margin: '1rem 0' }}><input type="checkbox" checked={toJournal} onChange={e => setToJournal(e.target.checked)}/>Also save this reflection in Journal</label><div className="row-actions"><Button onClick={saveReview}><Check size={16}/>Save review</Button>{blocks.length > 0 && <Button variant="secondary" onClick={carryUnfinished}>Carry unfinished tasks to tomorrow</Button>}</div>{message && <p className="notice" role="status" style={{ marginTop: '1rem' }}>{message}</p>}</section>
-    {checkin && <CheckInDialog key={checkin.id} block={checkin} onClose={() => setCheckin(null)}/>}
-  </div>
+  const navigate = useNavigate();
+  const state = useAppState();
+  const today = localDate();
+  const now = useLiveNow();
+
+  const expenses = state.finance?.expenses || EMPTY_ARRAY;
+  const timeflow = state.timeflow?.entries || EMPTY_ARRAY;
+  const planning = state.planning || EMPTY_PLANNING;
+  const sleepLogs = state.health?.sleepLogs || EMPTY_ARRAY;
+
+  const todayExpenses = expenses.filter(e => e.date === today);
+  const spentToday = todayExpenses.length > 0 ? spendOf(todayExpenses) : null;
+
+  const todayTime = timeflow.filter(t => (t.startAt || '').startsWith(today));
+  const focusTime = todayTime.filter(t => t.category === 'Focus' || t.bucket === 'Focus').reduce((acc, t) => {
+    if (t.duration) return acc + t.duration;
+    if (t.startAt && t.endAt) {
+      const s = new Date(t.startAt).getTime();
+      const e = new Date(t.endAt).getTime();
+      return acc + (e - s) / 60000;
+    }
+    return acc;
+  }, 0);
+
+  const lastSleep = sleepLogs.find(s => s.date === today) || sleepLogs[sleepLogs.length - 1];
+
+  const syncResult = useMemo(() => {
+    try {
+      return computeDaySync(today, planning, timeflow, now);
+    } catch {
+      return { score: null, maxScore: null, currentBlock: null, pendingCheckins: [] };
+    }
+  }, [today, planning, timeflow, now]);
+
+  const score = syncResult?.score ?? syncResult?.value ?? null;
+  const maxScore = syncResult?.maxScore ?? syncResult?.upper ?? 100;
+  const currentBlock = syncResult?.currentBlock;
+  const pendingCheckins = syncResult?.pendingCheckins || [];
+
+  return (
+    <Page className="ui-page max-w-4xl mx-auto">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-none bg-slate-900 p-8 mb-6 border border-slate-800 shadow-none">
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+           <motion.div 
+             animate={{ x: [0, 20, 0], y: [0, -20, 0], opacity: [0.3, 0.5, 0.3] }}
+             transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+             className="absolute -top-20 -left-20 w-64 h-64 bg-indigo-500/20 rounded-none blur-3xl"
+           />
+           <motion.div 
+             animate={{ x: [0, -30, 0], y: [0, 30, 0], opacity: [0.2, 0.4, 0.2] }}
+             transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+             className="absolute top-10 -right-10 w-72 h-72 bg-purple-500/20 rounded-none blur-3xl"
+           />
+        </div>
+        
+        <div className="relative z-10">
+          <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-transparent   mb-2">
+            {greeting()}, Mayan
+          </h1>
+          <p className="text-slate-400 text-lg">{fmtDate(today, 'long')}</p>
+        </div>
+      </div>
+
+      {/* NOW / NEXT */}
+      <Card className="mb-6 bg-slate-900/50 border-indigo-500/20">
+        <div className="p-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Zap className="w-6 h-6 text-indigo-400" />
+            <div>
+              <p className="text-sm text-slate-400 uppercase tracking-wider font-semibold">Right Now</p>
+              {currentBlock ? (
+                <div>
+                  <p className="text-lg font-medium text-slate-200">{currentBlock.title}</p>
+                </div>
+              ) : (
+                <p className="text-lg font-medium text-slate-400">No plan for today</p>
+              )}
+            </div>
+          </div>
+          {!currentBlock && (
+            <Button variant="ghost" onClick={() => navigate('/plan')}>
+              View Plan <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      {/* Quick Stats */}
+            <div className="ui-grid cols-4 mb-8">
+        <Card className="p-4 bg-slate-900/50 border border-slate-800 rounded-none cursor-pointer hover:bg-slate-800/50 transition-colors" onClick={() => navigate(`/plan?date=${today}`)}>
+          <div className="flex justify-between items-start mb-2">
+            <div className="text-sm font-medium text-slate-400">Plan Sync</div>
+            <Target className="w-4 h-4 text-slate-500" />
+          </div>
+          <div className="text-xl font-semibold text-slate-200 mt-2">
+            {score !== null && score !== undefined ? (
+              <div className="flex items-center gap-3">
+                <Ring value={score} max={maxScore} size={36} className="text-indigo-500" />
+                <span className="text-lg">{score}/{maxScore}</span>
+              </div>
+            ) : <span className="text-slate-500 text-sm font-normal">+ Log today</span>}
+          </div>
+        </Card>
+        
+        <Card className="p-4 bg-slate-900/50 border border-slate-800 rounded-none cursor-pointer hover:bg-slate-800/50 transition-colors" onClick={() => navigate('/capture?type=expense')}>
+          <div className="flex justify-between items-start mb-2">
+            <div className="text-sm font-medium text-slate-400">Spent Today</div>
+            <IndianRupee className="w-4 h-4 text-slate-500" />
+          </div>
+          <div className="text-2xl font-semibold text-slate-200 mt-2">
+            {spentToday !== null ? compactMoney(spentToday) : <span className="text-slate-500 text-sm font-normal">+ Log today</span>}
+          </div>
+        </Card>
+
+        <Card className="p-4 bg-slate-900/50 border border-slate-800 rounded-none cursor-pointer hover:bg-slate-800/50 transition-colors" onClick={() => navigate('/capture?type=time')}>
+          <div className="flex justify-between items-start mb-2">
+            <div className="text-sm font-medium text-slate-400">Focus Time</div>
+            <Clock className="w-4 h-4 text-slate-500" />
+          </div>
+          <div className="text-2xl font-semibold text-slate-200 mt-2">
+            {focusTime > 0 ? fmtMinutes(focusTime) : <span className="text-slate-500 text-sm font-normal">+ Log today</span>}
+          </div>
+        </Card>
+
+        <Card className="p-4 bg-slate-900/50 border border-slate-800 rounded-none cursor-pointer hover:bg-slate-800/50 transition-colors" onClick={() => navigate('/capture?type=sleep')}>
+          <div className="flex justify-between items-start mb-2">
+            <div className="text-sm font-medium text-slate-400">Sleep</div>
+            <Moon className="w-4 h-4 text-slate-500" />
+          </div>
+          <div className="text-2xl font-semibold text-slate-200 mt-2">
+            {lastSleep ? fmtMinutes(lastSleep.durationMinutes || 0) : <span className="text-slate-500 text-sm font-normal">+ Log today</span>}
+          </div>
+        </Card>
+      </div>
+
+      {/* Pending Check-ins */}
+      {pendingCheckins && pendingCheckins.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-purple-400" />
+            Pending Check-ins
+          </h3>
+          <div className="space-y-3">
+            {pendingCheckins.map((block, idx) => (
+              <Card key={block.id || idx} className="p-4 flex items-center justify-between hover:border-indigo-500/30 transition-colors">
+                <div>
+                  <p className="font-medium text-slate-200">{block.title || 'Untitled Block'}</p>
+                  {block.timeStr && <p className="text-sm text-slate-400">{block.timeStr}</p>}
+                </div>
+                <Button size="sm" onClick={() => navigate(`/plan?date=${today}&checkin=${block.id || idx}`)}>
+                  Check In
+                </Button>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quick Actions */}
+      <div>
+        <h3 className="text-lg font-semibold text-slate-200 mb-4">Quick Actions</h3>
+        <div className="flex gap-4">
+          <Button onClick={() => navigate('/capture?type=expense')} className="bg-slate-800 hover:bg-slate-700">
+            <Plus className="w-4 h-4 mr-2" /> Expense
+          </Button>
+          <Button onClick={() => navigate('/capture?type=time')} className="bg-slate-800 hover:bg-slate-700">
+            <Plus className="w-4 h-4 mr-2" /> Time Log
+          </Button>
+          <Button onClick={() => navigate('/plan')} className="bg-indigo-600 hover:bg-indigo-500 text-white">
+            Write Plan
+          </Button>
+        </div>
+      </div>
+      <div className="pb-24 h-24 min-h-[6rem] mb-12"></div>
+    </Page>
+  );
 }

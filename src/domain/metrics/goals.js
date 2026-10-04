@@ -1,5 +1,10 @@
 import { addDays, localDate, weekday } from './dates.js'
 
+/**
+ * effectiveStudyGoal function
+ * @param {any} state, date
+ * @returns {any}
+ */
 export function effectiveStudyGoal(state, date) {
   const prefs = state.settings?.preferences || {}
   const history = state.settings?.studyGoalHistory || prefs.studyGoalHistory || []
@@ -11,6 +16,11 @@ export function effectiveStudyGoal(state, date) {
 }
 
 /** Today may be pending; historical unknown stops a *verified* streak without declaring failure. */
+/**
+ * studyStreak function
+ * @param {any} days, state, { now = Date.now(), timezone = state.settings?.profile?.timezone || 'Asia/Kolkata', thresholdMinutes = 30 } = {}
+ * @returns {any}
+ */
 export function studyStreak(days, state, { now = Date.now(), timezone = state.settings?.profile?.timezone || 'Asia/Kolkata', thresholdMinutes = 30 } = {}) {
   const today = localDate(now, timezone)
   const byDate = new Map(days.map(d => [d.date, d]))
@@ -35,3 +45,5 @@ export function studyStreak(days, state, { now = Date.now(), timezone = state.se
   }
   return { current, best, status: stoppedBy === 'unknown' ? 'incomplete' : 'observed', stoppedBy, todayPending, thresholdMinutes, firstDate: first }
 }
+
+

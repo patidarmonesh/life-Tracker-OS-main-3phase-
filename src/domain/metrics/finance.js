@@ -1,4 +1,9 @@
 /** Decimal conversion avoids binary multiplication errors and never treats balances as payments. */
+/**
+ * toMinorUnits function
+ * @param {any} value, decimals = 2
+ * @returns {any}
+ */
 export function toMinorUnits(value, decimals = 2) {
   const text = String(value ?? '').trim().replace(/,/g, '').replace(/^(?:₹|Rs\.?|INR|\$)\s*/i, '')
   const match = text.match(/^(-?)(\d+)(?:\.(\d+))?$/)
@@ -7,6 +12,11 @@ export function toMinorUnits(value, decimals = 2) {
   return Number.isSafeInteger(amount) ? (match[1] ? -amount : amount) : null
 }
 
+/**
+ * ledgerSummary function
+ * @param {any} state, dates
+ * @returns {any}
+ */
 export function ledgerSummary(state, dates) {
   const records = [...(state.finance?.expenses || []), ...(state.finance?.transactions || [])]
   const byCurrency = {}, review = [], parents = new Map(), normalized = []
@@ -74,3 +84,5 @@ export function ledgerSummary(state, dates) {
   const confirmedZero = dates.every(date => confirmations.includes(date) || (state.finance?.confirmations || []).some(c => c.date === date && c.noSpend === true))
   return { byCurrency, included, excluded, review, confirmedZero }
 }
+
+
