@@ -1396,6 +1396,30 @@ export default function AIChat() {
           />
           <button
             type="button"
+            onClick={async () => {
+              try {
+                const text = await navigator.clipboard.readText()
+                if (text) setInput(prev => prev + text)
+              } catch (err) {}
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '6px',
+              borderRadius: '8px',
+              transition: 'all 0.15s ease',
+            }}
+            title="Paste from clipboard"
+          >
+            📋
+          </button>
+          <button
+            type="button"
             onClick={toggleListening}
             style={{
               background: 'none',

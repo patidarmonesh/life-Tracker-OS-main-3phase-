@@ -646,7 +646,32 @@ export default function AppShell({ children }) {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <label style={{ ...labelStyle, margin: 0 }}>Entry Content</label>
-                <button
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText()
+                        if (text) setJournalForm(f => ({ ...f, content: f.content + (f.content ? ' ' : '') + text }))
+                      } catch (err) {}
+                    }}
+                    style={{
+                      border: 'none',
+                      color: 'var(--accent-indigo)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      padding: '2px 6px',
+                      borderRadius: '6px',
+                      background: 'rgba(99, 102, 241, 0.1)',
+                    }}
+                  >
+                    📋 Paste
+                  </button>
+                  <button
                   type="button"
                   onClick={handleVoiceInput}
                   style={{
@@ -674,6 +699,7 @@ export default function AppShell({ children }) {
                     </>
                   )}
                 </button>
+                </div>
               </div>
               <textarea
                 rows={4}
@@ -731,7 +757,33 @@ export default function AppShell({ children }) {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div>
-              <label style={labelStyle}>Core Learning / Quote / Vichar</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <label style={{ ...labelStyle, margin: 0 }}>Core Learning / Quote / Vichar</label>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText()
+                      if (text) setWisdomForm(f => ({ ...f, text: f.text + (f.text ? ' ' : '') + text }))
+                    } catch (err) {}
+                  }}
+                  style={{
+                    border: 'none',
+                    color: 'var(--accent-indigo)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    padding: '2px 6px',
+                    borderRadius: '6px',
+                    background: 'rgba(99, 102, 241, 0.1)',
+                  }}
+                >
+                  📋 Paste
+                </button>
+              </div>
               <textarea
                 rows={3}
                 style={{ ...inputStyle, resize: 'vertical' }}

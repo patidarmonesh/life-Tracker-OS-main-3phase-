@@ -1754,7 +1754,35 @@ export default function Finance() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div>
-            <label style={labelStyle}>Paste UPI SMS Text</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Paste UPI SMS Text</label>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const text = await navigator.clipboard.readText()
+                    if (text) setSmsInput(text)
+                  } catch (err) {
+                    // Ignore or fallback
+                  }
+                }}
+                style={{
+                  background: 'rgba(99,102,241,0.1)',
+                  border: 'none',
+                  color: 'var(--accent-indigo)',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                📋 Paste
+              </button>
+            </div>
             <textarea
               rows={4}
               style={{ ...inputStyle, resize: 'vertical', fontSize: '13px' }}

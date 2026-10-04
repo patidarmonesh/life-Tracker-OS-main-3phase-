@@ -891,7 +891,33 @@ export default function Journal() {
           </div>
 
           <div>
-            <label style={labelStyle}>Entry</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <label style={{ ...labelStyle, margin: 0 }}>Entry</label>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const text = await navigator.clipboard.readText()
+                    if (text) setForm(f => ({ ...f, content: f.content + (f.content ? ' ' : '') + text }))
+                  } catch (err) {}
+                }}
+                style={{
+                  border: 'none',
+                  color: 'var(--accent-indigo)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  padding: '2px 6px',
+                  borderRadius: '6px',
+                  background: 'rgba(99, 102, 241, 0.1)',
+                }}
+              >
+                📋 Paste
+              </button>
+            </div>
             <textarea
               rows={7}
               value={form.content}

@@ -991,12 +991,26 @@ export default function Settings() {
               
               {isEditingGoogle ? (
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    style={inputStyle}
-                    value={googleClientId}
-                    onChange={e => setGoogleClientId(e.target.value)}
-                    placeholder="xxxxxxxxx.apps.googleusercontent.com"
-                  />
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input
+                      style={inputStyle}
+                      value={googleClientId}
+                      onChange={e => setGoogleClientId(e.target.value)}
+                      placeholder="xxxxxxxxx.apps.googleusercontent.com"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const text = await navigator.clipboard.readText()
+                          if (text) setGoogleClientId(text)
+                        } catch (err) {}
+                      }}
+                      style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(99,102,241,0.1)', border: 'none', color: 'var(--accent-indigo)', fontSize: '11px', fontWeight: '700', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px' }}
+                    >
+                      📋 Paste
+                    </button>
+                  </div>
                   <Button onClick={saveGoogleClientId}>Save</Button>
                 </div>
               ) : (
@@ -1028,13 +1042,27 @@ export default function Settings() {
               
               {isEditingGemini ? (
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="password"
-                    style={inputStyle}
-                    value={geminiKeyInput}
-                    onChange={e => handleGeminiKeyChange(e.target.value)}
-                    placeholder="AIzaSy..."
-                  />
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input
+                      type="password"
+                      style={inputStyle}
+                      value={geminiKeyInput}
+                      onChange={e => handleGeminiKeyChange(e.target.value)}
+                      placeholder="AIzaSy..."
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const text = await navigator.clipboard.readText()
+                          if (text) handleGeminiKeyChange(text)
+                        } catch (err) {}
+                      }}
+                      style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(99,102,241,0.1)', border: 'none', color: 'var(--accent-indigo)', fontSize: '11px', fontWeight: '700', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px' }}
+                    >
+                      📋 Paste
+                    </button>
+                  </div>
                   <Button onClick={saveGeminiKey}>Save</Button>
                 </div>
               ) : (
