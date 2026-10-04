@@ -67,8 +67,6 @@ export function AuthProvider({ children }) {
               console.log('[AuthContext] Boot: session restored (token expired, Reconnect needed)')
             }
           }
-        } else if (isLoggedOut) {
-          console.log('[AuthContext] Boot: User is explicitly logged out')
         }
 
         if (mounted) setIsAuthReady(true)
