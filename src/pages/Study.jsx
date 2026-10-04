@@ -4,7 +4,7 @@ import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Plus, Pencil, Timer, CheckSquare, Sparkles, BookOpen, Award, AlertCircle, Calendar } from 'lucide-react'
+import { Plus, Pencil, Timer, Sparkles } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -62,10 +62,11 @@ export default function Study() {
     rating: 3, pagesRead: 0, problemsSolved: 0, understood: true,
   })
 
-  // Synchronize form date when selectedDate changes
-  useEffect(() => {
+  const [prevSelectedDate, setPrevSelectedDate] = useState(selectedDate)
+  if (selectedDate !== prevSelectedDate) {
+    setPrevSelectedDate(selectedDate)
     setForm(f => ({ ...f, date: selectedDate }))
-  }, [selectedDate])
+  }
 
   const sessions = state.study?.sessions || EMPTY_ARRAY
 

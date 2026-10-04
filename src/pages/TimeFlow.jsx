@@ -6,8 +6,11 @@ import { useLocation } from 'react-router-dom'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis } from 'recharts'
-import { Plus, Pencil, Mic, MicOff, MessageSquare, Send, Zap, Target, Sparkles, TrendingUp, Camera, ImageIcon, Copy, Check, Upload } from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { Plus, Pencil, Mic, MicOff, Send, Zap, Target, Sparkles, TrendingUp, Camera, ImageIcon, Copy, Upload, ChevronDown } from 'lucide-react'
+import { DayRibbon, ChartTooltip } from '../components/ui/TimeCharts'
+import { categoryColor, formatMinutes } from '../utils/timeColors'
+import { useReadOnly } from '../context/readOnlyContext'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -295,7 +298,7 @@ export default function TimeFlow() {
   const [showQuickAI, setShowQuickAI] = useState(false)
   const [quickAIText, setQuickAIText] = useState('')
   const [quickAILoading, setQuickAILoading] = useState(false)
-  const [quickAIParsed, setQuickAIParsed] = useState(null)
+  const [, setQuickAIParsed] = useState(null)
   const [isListening, setIsListening] = useState(false)
   const [quickAIChatHistory, setQuickAIChatHistory] = useState([])
   const [showOptimizerModal, setShowOptimizerModal] = useState(false)
@@ -329,13 +332,26 @@ export default function TimeFlow() {
   const timeSummary = useMemo(() => summarizeDay(allEntries, selectedDate), [allEntries, selectedDate])
   const { productiveMins, wasteMins, sleepMins, unloggedMins } = timeSummary
   const donutData = Object.entries(timeSummary.categories).map(([name, value]) => ({ name, value }))
+  const donutSorted = [...donutData].sort((a, b) => b.value - a.value).map(d => ({ ...d, fill: CATEGORY_COLORS[d.name] || categoryColor(d.name) }))
+  const donutTotal = donutSorted.reduce((a, d) => a + d.value, 0)
+  const nowDate = new Date()
+  const nowMinute = nowDate.getHours() * 60 + nowDate.getMinutes()
 
-  // Weekly data (last 7 days)
+  // Weekly data: 7 days ending on the selected date (browse back in time with the date picker)
   const weeklyData = useMemo(() => Array.from({ length: 7 }, (_, i) => {
-    const d = toDateKey(subDays(new Date(), 6 - i), timezone)
-    const { productiveMins: prod, wasteMins: waste } = summarizeDay(allEntries, d)
-    return { day: formatDateKey(d, timezone, { weekday: 'short' }), productive: +(prod / 60).toFixed(1), waste: +(waste / 60).toFixed(1) }
-  }), [allEntries, timezone])
+    const base = new Date(`${selectedDate}T00:00:00Z`)
+    base.setUTCDate(base.getUTCDate() - (6 - i))
+    const d = Number.isFinite(base.getTime()) ? base.toISOString().slice(0, 10) : toDateKey(subDays(new Date(), 6 - i), timezone)
+    const s = summarizeDay(allEntries, d)
+    const meals = Math.max(0, s.loggedMins - s.productiveMins - s.wasteMins - s.sleepMins)
+    const h = (m) => +(m / 60).toFixed(1)
+    return {
+      date: d,
+      day: formatDateKey(d, timezone, { weekday: 'short' }),
+      productive: h(s.productiveMins), waste: h(s.wasteMins), sleep: h(s.sleepMins), meals: h(meals), unlogged: h(s.unloggedMins),
+      entries: allEntries.filter(e => e.date === d),
+    }
+  }), [allEntries, timezone, selectedDate])
 
   // ── Smart Time Auto-fill ────────────────────────────────
   function getSmartStartTime() {
@@ -1418,7 +1434,7 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
       {/* Header */}
       <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
         <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '1.4rem' }}>⏱️ Time Flow</h1>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div className="tf-actions" data-edit-action style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <Button variant="secondary" onClick={() => {
             setQuickAIChatHistory([])
             setQuickAIText('')
@@ -1499,24 +1515,39 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
         {activeTab === 'day' && <>
 
           {/* Stats row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+          <div className="tf-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
             <StatCard label="Productive" value={`${(productiveMins/60).toFixed(1)}h`} color="#10B981" />
             <StatCard label="Waste Time" value={`${(wasteMins/60).toFixed(1)}h`} color="#EF4444" />
             <StatCard label="Sleep" value={`${(sleepMins/60).toFixed(1)}h`} color="#8B5CF6" />
             <StatCard label="Logged" value={`${dayEntries.length} entries`} color="#3B82F6" />
           </div>
 
+          {/* Day at a glance — 24h ribbon */}
+          <Card>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+              <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', margin: 0 }}>Your day at a glance</h3>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatMinutes(timeSummary.loggedMins)} logged · {formatMinutes(timeSummary.unloggedMins)} unlogged</span>
+            </div>
+            <DayRibbon entries={dayEntries} height={40} nowMinute={selectedDate === today ? nowMinute : null} />
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+              {dayEntries.length ? 'Tap a block for details · striped = waste time · empty = not logged' : 'Nothing logged yet — logged activities appear here on a 24-hour line.'}
+            </div>
+          </Card>
+
           {/* Timeline */}
           <Card>
-            <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '14px' }}>
-              Actual timeline — {selectedDate === today ? 'Today' : selectedDate}
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: '10px' }}>
+              <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', margin: 0 }}>
+                Actual timeline — {selectedDate === today ? 'Today' : selectedDate}
+              </h3>
+              {dayEntries.length > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Tap an activity to expand</span>}
+            </div>
             {dayEntries.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--text-muted)' }}>
                 <div style={{ fontSize: '40px', marginBottom: '10px' }}>📋</div>
                 <div style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '15px' }}>No entries for this day</div>
-                <div style={{ fontSize: '13px', marginTop: '4px' }}>Upload your diary photo, write in plain text, or add entries manually</div>
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '14px', flexWrap: 'wrap' }}>
+                <div data-edit-action style={{ fontSize: '13px', marginTop: '4px' }}>Upload your diary photo, write in plain text, or add entries manually</div>
+                <div data-edit-action style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '14px', flexWrap: 'wrap' }}>
                   <Button variant="secondary" onClick={() => {
                     setAiResult(null)
                     setIsSaved(false)
@@ -1546,29 +1577,42 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
             )}
           </Card>
 
-          {/* Donut chart */}
+          {/* Category breakdown */}
           {donutData.length > 0 && (
             <Card>
-              <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '14px' }}>Today's Time Distribution</h3>
-              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-                <ResponsiveContainer width={160} height={160}>
-                  <PieChart>
-                    <Pie data={donutData} cx="50%" cy="50%" innerRadius={45} outerRadius={72} dataKey="value" paddingAngle={2}>
-                      {donutData.map((entry, i) => (
-                        <Cell key={i} fill={CATEGORY_COLORS[entry.name] || '#6B7280'} />
+              <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '14px' }}>Where the time went</h3>
+              <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <div style={{ position: 'relative', width: 180, height: 180, flexShrink: 0 }}>
+                  <PieChart width={180} height={180}>
+                    <Pie data={donutSorted} cx="50%" cy="50%" innerRadius={58} outerRadius={84} dataKey="value" paddingAngle={2} stroke="none" isAnimationActive={false}>
+                      {donutSorted.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v) => `${(v/60).toFixed(1)}h`} contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px' }} />
+                    <Tooltip content={<ChartTooltip unit="m" />} />
                   </PieChart>
-                </ResponsiveContainer>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '140px' }}>
-                  {donutData.map(({ name, value }) => (
-                    <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: CATEGORY_COLORS[name] || '#6B7280', flexShrink: 0 }} />
-                      <span style={{ fontSize: '12px', flex: 1, color: 'var(--text-secondary)' }}>{name}</span>
-                      <span style={{ fontSize: '12px', fontFamily: 'JetBrains Mono, monospace' }}>{(value/60).toFixed(1)}h</span>
-                    </div>
-                  ))}
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'JetBrains Mono, monospace' }}>{(donutTotal / 60).toFixed(1)}h</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>logged</div>
+                  </div>
+                </div>
+                <div style={{ flex: '1 1 220px', minWidth: 0, display: 'grid', gap: '9px' }}>
+                  {donutSorted.map(({ name, value, fill }) => {
+                    const pct = donutTotal ? Math.round((value / donutTotal) * 100) : 0
+                    return (
+                      <div key={name}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+                          <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: fill, flexShrink: 0 }} />
+                          <span style={{ flex: 1, minWidth: 0, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                          <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{formatMinutes(value)}</span>
+                          <span style={{ width: 34, textAlign: 'right', color: 'var(--text-muted)' }}>{pct}%</span>
+                        </div>
+                        <div style={{ height: 5, borderRadius: 4, background: 'rgba(148,163,184,0.10)', marginTop: 4, overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: fill, borderRadius: 4, transition: 'width .4s ease' }} />
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             </Card>
@@ -1578,35 +1622,71 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
         {/* ══ WEEK VIEW ══════════════════════════════════════ */}
         {activeTab === 'week' && <>
           <Card>
-            <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '16px' }}>Productive vs Waste Time (Last 7 Days)</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={weeklyData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+              <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', margin: 0 }}>How each day filled up (24h)</h3>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>7 days ending {selectedDate === today ? 'today' : selectedDate} · tap a bar to open that day</span>
+            </div>
+            <ResponsiveContainer width="100%" height={230}>
+              <BarChart
+                data={weeklyData}
+                margin={{ top: 4, right: 4, bottom: 0, left: -22 }}
+                barCategoryGap="22%"
+                onClick={(s) => {
+                  const idx = s?.activeIndex ?? s?.activeTooltipIndex
+                  const d = s?.activePayload?.[0]?.payload?.date
+                    || weeklyData[Number(idx)]?.date
+                    || weeklyData.find(x => x.day === s?.activeLabel)?.date
+                  if (d) { setSelectedDate(d); setActiveTab('day') }
+                }}
+              >
+                <CartesianGrid vertical={false} stroke="rgba(148,163,184,0.08)" />
                 <XAxis dataKey="day" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  formatter={(v, name) => [`${v}h`, name === 'productive' ? 'Productive' : 'Waste']}
-                  contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px' }}
-                />
-                <Line type="monotone" dataKey="productive" stroke="#3B82F6" strokeWidth={2.5} dot={{ fill: '#3B82F6', r: 4 }} />
-                <Line type="monotone" dataKey="waste" stroke="#EF4444" strokeWidth={2.5} dot={{ fill: '#EF4444', r: 4 }} />
-              </LineChart>
+                <YAxis domain={[0, 24]} ticks={[0, 6, 12, 18, 24]} unit="h" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                <Tooltip content={<ChartTooltip unit="h" labelFormatter={(l) => { const d = weeklyData.find(x => x.day === l); return d ? `${l} · ${d.date}` : l }} />} cursor={{ fill: 'rgba(148,163,184,0.06)' }} />
+                <Bar dataKey="productive" name="Productive" stackId="day" fill="#10B981" cursor="pointer" />
+                <Bar dataKey="sleep" name="Sleep" stackId="day" fill="#8B5CF6" cursor="pointer" />
+                <Bar dataKey="meals" name="Meals" stackId="day" fill="#F97316" cursor="pointer" />
+                <Bar dataKey="waste" name="Waste" stackId="day" fill="#EF4444" cursor="pointer" />
+                <Bar dataKey="unlogged" name="Unlogged" stackId="day" fill="rgba(148,163,184,0.16)" radius={[6, 6, 0, 0]} cursor="pointer" />
+              </BarChart>
             </ResponsiveContainer>
-            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginTop: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                <div style={{ width: '12px', height: '3px', background: '#3B82F6', borderRadius: '2px' }} /> Productive
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                <div style={{ width: '12px', height: '3px', background: '#EF4444', borderRadius: '2px' }} /> Waste
-              </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '8px' }}>
+              {[['Productive', '#10B981'], ['Sleep', '#8B5CF6'], ['Meals', '#F97316'], ['Waste', '#EF4444'], ['Unlogged', 'rgba(148,163,184,0.35)']].map(([label, color]) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                  <div style={{ width: '10px', height: '10px', background: color, borderRadius: '3px' }} /> {label}
+                </div>
+              ))}
             </div>
           </Card>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+          {/* Week at a glance — one 24h ribbon per day */}
+          <Card>
+            <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '12px' }}>Week at a glance</h3>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {weeklyData.map((d, i) => (
+                <button
+                  key={d.date}
+                  type="button"
+                  onClick={() => { setSelectedDate(d.date); setActiveTab('day') }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', textAlign: 'left', minHeight: 0, minWidth: 0, width: '100%' }}
+                  aria-label={`Open ${d.date}`}
+                >
+                  <span style={{ width: 34, flexShrink: 0, fontSize: 11, fontWeight: d.date === selectedDate ? 800 : 600, color: d.date === selectedDate ? 'var(--accent-amber)' : 'var(--text-muted)' }}>{d.day}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <DayRibbon entries={d.entries} height={18} compact showAxis={i === weeklyData.length - 1} />
+                  </span>
+                  <span style={{ width: 44, flexShrink: 0, textAlign: 'right', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#10B981', alignSelf: 'flex-start', paddingTop: 2 }}>{d.productive}h</span>
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          <div className="tf-week-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
             {[
-              { label: 'Avg Productive/day', value: `${(weeklyData.reduce((a, d) => a + d.productive, 0) / 7).toFixed(1)}h`, color: '#3B82F6' },
+              { label: 'Avg Productive/day', value: `${(weeklyData.reduce((a, d) => a + d.productive, 0) / 7).toFixed(1)}h`, color: '#10B981' },
               { label: 'Avg Waste/day', value: `${(weeklyData.reduce((a, d) => a + d.waste, 0) / 7).toFixed(1)}h`, color: '#EF4444' },
-              { label: 'Best Day', value: weeklyData.reduce((a, d) => d.productive > a.productive ? d : a, weeklyData[0])?.day || '-', color: '#10B981' },
-              { label: 'Worst Day', value: weeklyData.reduce((a, d) => d.waste > a.waste ? d : a, weeklyData[0])?.day || '-', color: '#F43F5E' },
+              { label: 'Best Day', value: weeklyData.some(d => d.productive > 0) ? weeklyData.reduce((a, d) => d.productive > a.productive ? d : a, weeklyData[0]).day : '-', color: '#3B82F6' },
+              { label: 'Most Waste', value: weeklyData.some(d => d.waste > 0) ? weeklyData.reduce((a, d) => d.waste > a.waste ? d : a, weeklyData[0]).day : '-', color: '#F43F5E' },
             ].map(({ label, value, color }) => (
               <Card key={label} style={{ padding: '16px', textAlign: 'center' }}>
                 <div style={{ fontSize: '20px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color }}>{value}</div>
@@ -2625,84 +2705,127 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
 
 // ── Timeline Entry Component ──────────────────────────────
 function TimelineEntry({ entry, onDelete, onEdit, isLast, index }) {
-  const color = CATEGORY_COLORS[entry.category] || '#6B7280'
-  const hrs = (entry.durationMinutes / 60).toFixed(1)
+  const readOnly = useReadOnly()
+  const [open, setOpen] = useState(false)
+  const color = CATEGORY_COLORS[entry.category] || categoryColor(entry.category)
+  const mins = Number(entry.durationMinutes) || slotDuration(entry.start, entry.end)
+  const score = Number(entry.productivityScore) || 0
 
   return (
-    <div style={{
+    <div className="tl-entry" style={{
       display: 'flex', gap: '0', position: 'relative',
-      animation: `fadeSlideIn 0.3s ease ${index * 0.05}s both`,
+      animation: `fadeSlideIn 0.3s ease ${Math.min(index, 10) * 0.04}s both`,
     }}>
       {/* Time column */}
-      <div style={{ width: '60px', flexShrink: 0, paddingTop: '12px' }}>
-        <div style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-muted)', textAlign: 'right', paddingRight: '12px' }}>
+      <div className="tl-time" style={{ width: '52px', flexShrink: 0, paddingTop: '16px' }}>
+        <div style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-muted)', textAlign: 'right', paddingRight: '8px' }}>
           {entry.start}
         </div>
       </div>
 
       {/* Line + dot */}
-      <div style={{ width: '20px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ width: '16px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div style={{
-          width: '12px', height: '12px', borderRadius: '50%', background: color,
-          marginTop: '14px', flexShrink: 0, zIndex: 1,
-          boxShadow: `0 0 8px ${color}60`,
+          width: '11px', height: '11px', borderRadius: '50%', background: color,
+          marginTop: '18px', flexShrink: 0, zIndex: 1,
+          boxShadow: `0 0 0 3px ${color}25, 0 0 8px ${color}60`,
         }} />
         {!isLast && <div style={{ width: '2px', flex: 1, background: 'var(--border)', marginTop: '2px' }} />}
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, paddingBottom: '12px', paddingLeft: '10px' }}>
-        <div style={{ padding: '10px 12px', background: `${color}12`, border: `1px solid ${color}30`, borderRadius: '10px', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>{entry.name}</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', display: 'flex', gap: '8px' }}>
-              <span style={{ color }}>{entry.category}</span>
-              <span>• {entry.start}–{entry.end}</span>
-              <span>• {hrs}h</span>
-              {entry.isWaste && <span style={{ color: '#EF4444' }}>• waste ⚠️</span>}
+      <div style={{ flex: 1, minWidth: 0, paddingBottom: '10px', paddingLeft: '8px' }}>
+        <div style={{
+          marginTop: '6px', borderRadius: '12px', overflow: 'hidden',
+          background: open ? `${color}1A` : `${color}10`, border: `1px solid ${color}30`, borderLeft: `3px solid ${color}`,
+          transition: 'background .15s ease',
+        }}>
+          <button
+            type="button"
+            onClick={() => setOpen(o => !o)}
+            aria-expanded={open}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px',
+              background: 'none', border: 'none', color: 'inherit', textAlign: 'left', cursor: 'pointer', minHeight: 44,
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)',
+                ...(open ? { wordBreak: 'break-word' } : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
+              }}>{entry.name || entry.category}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px', display: 'flex', flexWrap: 'wrap', gap: '2px 8px' }}>
+                <span style={{ color, fontWeight: 600 }}>{entry.category}</span>
+                <span>{entry.start}–{entry.end}</span>
+                {entry.isWaste && <span style={{ color: '#EF4444' }}>⚠️ waste</span>}
+                {(entry.notes || entry.tags?.length > 0) && !open && <span>· details</span>}
+              </div>
             </div>
-            {entry.notes && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', fontStyle: 'italic' }}>{entry.notes}</div>}
-            {entry.tags?.length > 0 && (
-              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
-                {entry.tags.map(tag => (
-                  <span
-                    key={tag}
+            <span style={{
+              flexShrink: 0, fontSize: '12px', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace',
+              padding: '3px 8px', borderRadius: 8, background: `${color}22`, color,
+            }}>{formatMinutes(mins)}</span>
+            <ChevronDown size={16} style={{ flexShrink: 0, color: 'var(--text-muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s ease' }} />
+          </button>
+
+          {open && (
+            <div style={{ padding: '0 12px 12px', display: 'grid', gap: '10px', animation: 'fadeSlideIn 0.2s ease both' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>Productivity</span>
+                <span style={{ display: 'inline-flex', gap: 4 }}>
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <span key={n} style={{ width: 16, height: 6, borderRadius: 3, background: n <= score ? color : 'var(--border)' }} />
+                  ))}
+                </span>
+                <span>{score ? `${score}/5` : '—'}</span>
+                {entry.planOutcome && <span style={{ marginLeft: 'auto', fontSize: 11 }}>Plan: {entry.planOutcome}</span>}
+              </div>
+              {entry.notes && (
+                <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{entry.notes}</div>
+              )}
+              {entry.deviationReason && (
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Why it changed: {entry.deviationReason}</div>
+              )}
+              {entry.tags?.length > 0 && (
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                  {entry.tags.map(tag => (
+                    <span
+                      key={tag}
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        background: 'rgba(99,102,241,0.12)',
+                        border: '1px solid rgba(99,102,241,0.25)',
+                        fontSize: '11px',
+                        color: 'var(--accent-indigo)',
+                        fontWeight: '600',
+                      }}
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {!readOnly && (
+                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center', borderTop: `1px dashed ${color}30`, paddingTop: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => onEdit?.(entry)}
+                    aria-label="Edit entry"
                     style={{
-                      padding: '2px 8px',
-                      borderRadius: '999px',
-                      background: 'rgba(99,102,241,0.12)',
-                      border: '1px solid rgba(99,102,241,0.25)',
-                      fontSize: '11px',
-                      color: 'var(--accent-indigo)',
-                      fontWeight: '600',
+                      background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', color: 'var(--text-secondary)',
+                      padding: '6px 12px', minHeight: 40, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600,
+                      WebkitTapHighlightColor: 'transparent',
                     }}
                   >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            {[1,2,3,4,5].map(n => (
-              <div key={n} style={{ width: '6px', height: '6px', borderRadius: '50%', background: n <= entry.productivityScore ? color : 'var(--border)' }} />
-            ))}
-            <button
-              type="button"
-              onClick={() => onEdit?.(entry)}
-              aria-label="Edit entry"
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
-                padding: 8, minHeight: 44, minWidth: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                WebkitTapHighlightColor: 'transparent',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = 'var(--accent-indigo)' }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)' }}
-            >
-              <Pencil size={13} />
-            </button>
-            <ConfirmDeleteButton onConfirm={() => onDelete(entry.id)} size={13} label="Delete time entry" />
-          </div>
+                    <Pencil size={13} /> Edit
+                  </button>
+                  <ConfirmDeleteButton onConfirm={() => onDelete(entry.id)} size={14} label="Delete time entry" />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

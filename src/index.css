@@ -848,3 +848,84 @@ input, textarea, select {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* ── Shared read-only view: hide anything that edits data ── */
+.readonly-view [data-edit-action] {
+  display: none !important;
+}
+
+/* ── Charts everywhere: consistent dark theme for Recharts ── */
+.recharts-default-tooltip {
+  background: rgba(15, 23, 42, 0.96) !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  padding: 8px 12px !important;
+  font-size: 12px;
+}
+.recharts-default-tooltip .recharts-tooltip-label {
+  color: var(--text-primary) !important;
+  font-weight: 700;
+  margin-bottom: 4px !important;
+}
+.recharts-default-tooltip .recharts-tooltip-item {
+  padding: 1px 0 !important;
+}
+.recharts-cartesian-axis-tick-value {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+.recharts-cartesian-axis-line,
+.recharts-cartesian-axis-tick-line {
+  stroke: rgba(148, 163, 184, 0.15);
+}
+.recharts-cartesian-grid line {
+  stroke: rgba(148, 163, 184, 0.08);
+}
+.recharts-legend-item-text {
+  color: var(--text-secondary) !important;
+  font-size: 12px;
+}
+.recharts-tooltip-cursor {
+  fill: rgba(148, 163, 184, 0.06);
+}
+.recharts-wrapper,
+.recharts-surface {
+  overflow: visible;
+}
+.recharts-wrapper:focus,
+.recharts-surface:focus,
+.recharts-sector:focus,
+.recharts-rectangle:focus {
+  outline: none;
+}
+
+/* ── Time Flow on phones ───────────────────────────────── */
+@media (max-width: 640px) {
+  /* Header actions: one swipeable row instead of 3 wrapped rows */
+  .tf-actions {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    width: 100%;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tf-actions::-webkit-scrollbar { display: none; }
+  .tf-actions > button {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 9px 14px !important;
+    font-size: 12.5px !important;
+  }
+  .tf-stats {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .tl-time {
+    width: 42px !important;
+  }
+  .tl-time > div {
+    font-size: 10px !important;
+    padding-right: 6px !important;
+  }
+}

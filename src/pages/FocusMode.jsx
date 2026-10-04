@@ -643,7 +643,7 @@ export default function FocusMode() {
   /* ── Cleanup on unmount ── */
   useEffect(() => {
     return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+       
       const n = nodesRef.current
       Object.values(n).forEach((node) => {
         if (node.source) try { node.source.stop() } catch { /* noop */ }

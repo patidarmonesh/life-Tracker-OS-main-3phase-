@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { v4 as uuid } from 'uuid'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { ChevronDown } from 'lucide-react'
 import { useAppActions, useAppState } from '../../context/appHooks'
 import { useToast } from '../../context/toastContextCore'
 import { draftDayPlan } from '../../services/geminiService'
@@ -10,6 +10,8 @@ import { normalizeTimezone, getTodayDateKey } from '../../utils/dateTime'
 import Card from './Card'
 import Button from './Button'
 import Modal from './Modal'
+import { PlanVsActual } from './TimeCharts'
+import { categoryColor, formatMinutes } from '../../utils/timeColors'
 
 const input = { width: '100%', padding: '9px 10px', borderRadius: 9, background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }
 const row = { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }
@@ -38,6 +40,7 @@ export default function DayPlanner({ date, categories }) {
   const entries = (state.timeflow?.entries || []).filter(e => e.date === date)
   const comparison = planComparison(plans, entries)
   const [open, setOpen] = useState(false)
+  const [expanded, setExpanded] = useState(null)
   const [draftDate, setDraftDate] = useState(date)
   const [draft, setDraft] = useState([])
   const [text, setText] = useState('')
@@ -90,6 +93,7 @@ export default function DayPlanner({ date, categories }) {
         }
       })
       setOpen(false)
+      setExpanded(slots.length ? true : null)
       showToast(!slots.length ? 'Plan removed. Actual logs kept; Calendar cleanup queued.' : calendarEnabled ? 'Plan saved. Calendar sync queued.' : 'Tentative plan saved.', 'success')
     } catch (e) { setError(e.message) }
   }
@@ -126,35 +130,73 @@ export default function DayPlanner({ date, categories }) {
   }
   const pendingSync = plans.filter(p => p.calendarEnabled && p.calendarFingerprint !== slotFingerprint(p)).length
   const unplanned = entries.filter(e => !plans.some(p => p.id === e.planSlotId))
-  return <Card>
-    <div style={{ ...row, justifyContent: 'space-between' }}><h3 style={{ margin: 0 }}>✦ Daily plan · tentative vs actual</h3><Button onClick={editPlan} variant="secondary">{plans.length ? 'Edit plan' : 'Plan my day'}</Button></div>
-    <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Diary photo or typed notes → editable plan → Calendar reminders → actual check-ins.</p>
+  const isOpen = expanded ?? plans.length > 0
+  const chip = (text, color) => <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: `${color}1F`, color, border: `1px solid ${color}40`, whiteSpace: 'nowrap' }}>{text}</span>
+  return <Card style={{ padding: 0, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', flexWrap: 'wrap' }}>
+      <button
+        type="button"
+        onClick={() => setExpanded(!isOpen)}
+        aria-expanded={isOpen}
+        aria-controls="day-plan-body"
+        style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: 'inherit', minHeight: 44 }}
+      >
+        <span style={{ width: 34, height: 34, borderRadius: 10, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, rgba(99,102,241,0.22), rgba(56,189,248,0.14))', flexShrink: 0 }}>✦</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 14 }}>Daily plan · tentative vs actual</span>
+          <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+            {plans.length ? <>
+              {chip(`${plans.length} slot${plans.length === 1 ? '' : 's'} · ${formatMinutes(comparison.planned)}`, '#818CF8')}
+              {comparison.adherence !== null && chip(`${comparison.adherence}% on plan`, comparison.adherence >= 70 ? '#34D399' : comparison.adherence >= 40 ? '#FBBF24' : '#FB7185')}
+              {comparison.pending > 0 && chip(`${formatMinutes(comparison.pending)} to check in`, '#94A3B8')}
+            </> : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No plan yet — tap to see how it works</span>}
+          </span>
+        </span>
+        <ChevronDown size={18} style={{ flexShrink: 0, color: 'var(--text-muted)', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s ease' }} />
+      </button>
+      <Button data-edit-action onClick={editPlan} variant="secondary" style={{ padding: '9px 14px' }}>{plans.length ? 'Edit plan' : 'Plan my day'}</Button>
+    </div>
+    {isOpen && <div id="day-plan-body" style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)' }}>
+    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0' }}>Diary photo or typed notes → editable plan → Calendar reminders → actual check-ins.</p>
     {plans.length > 0 && <>
-      <div style={{ ...row, fontSize: 12, marginBottom: 12 }}>
-        <span>{comparison.planned}m planned</span><span>· {comparison.followed}m followed on time</span><span>· {comparison.changed}m changed</span><span>· {comparison.pending}m awaiting check-in</span>
-        <strong>{comparison.adherence === null ? 'No check-ins yet' : `${comparison.adherence}% adherence (reviewed time)`}</strong>
+      <div style={{ padding: 12, borderRadius: 12, background: 'rgba(148,163,184,0.04)', border: '1px solid var(--border)', marginBottom: 12 }}>
+        <PlanVsActual plans={plans} entries={entries.filter(e => plans.some(p => p.id === e.planSlotId))} />
       </div>
-      <div aria-label="Plan adherence breakdown" style={{ display: 'flex', height: 12, borderRadius: 8, overflow: 'hidden', background: 'var(--border)' }}>
-        {[['Followed', comparison.followed, '#34D399'], ['Changed', comparison.changed, '#FB7185'], ['Pending', comparison.pending, '#64748B']].map(([label, value, color]) => <div key={label} title={`${label}: ${value} minutes`} style={{ width: `${comparison.planned ? value / comparison.planned * 100 : 0}%`, background: color }} />)}
+      <div style={{ ...row, fontSize: 12, marginBottom: 8, color: 'var(--text-secondary)' }}>
+        <span>{comparison.planned}m planned</span><span>· {comparison.followed}m followed on time</span><span>· {comparison.changed}m changed</span><span>· {comparison.pending}m awaiting check-in</span>
+      </div>
+      <div style={{ ...row, justifyContent: 'space-between', marginBottom: 6 }}>
+        <strong style={{ fontSize: 13 }}>{comparison.adherence === null ? 'No check-ins yet' : `${comparison.adherence}% adherence (reviewed time)`}</strong>
+      </div>
+      <div aria-label="Plan adherence breakdown" style={{ display: 'flex', height: 10, borderRadius: 8, overflow: 'hidden', background: 'var(--border)' }}>
+        {[['Followed', comparison.followed, '#34D399'], ['Changed', comparison.changed, '#FB7185'], ['Pending', comparison.pending, '#64748B']].map(([label, value, color]) => <div key={label} title={`${label}: ${value} minutes`} style={{ width: `${comparison.planned ? value / comparison.planned * 100 : 0}%`, background: color, transition: 'width .4s ease' }} />)}
+      </div>
+      <div style={{ ...row, gap: 12, fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+        {[['Followed', '#34D399'], ['Changed', '#FB7185'], ['Pending', '#64748B']].map(([label, color]) => <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: color }} />{label}</span>)}
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{pendingSync ? `${pendingSync} Calendar event(s) pending sync` : plans.some(p => p.calendarEnabled) ? 'Calendar up to date · reminders at start and your selected lead time' : 'Calendar sync off'} · {timezone}</p>
       <div style={{ display: 'grid', gap: 8 }}>
         {plans.map(slot => {
           const actual = entries.find(e => e.planSlotId === slot.id)
           const due = isDue(slot)
-          return <div key={slot.id} style={{ padding: 12, border: '1px solid var(--border)', borderRadius: 10 }}>
-            <div style={{ ...row, justifyContent: 'space-between' }}><div><strong>{slot.start}–{slot.end} · {slot.name}</strong><div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{slot.category} · {durationMinutes(slot.start, slot.end)}m</div></div>
-              <Button variant="secondary" onClick={() => openCheck(slot)} disabled={!actual && !due}>{actual ? 'Edit check-in' : due ? 'What did you do?' : 'Upcoming'}</Button></div>
+          const color = categoryColor(slot.category)
+          const status = actual ? (actual.planOutcome === 'followed' ? ['Done', '#34D399'] : ['Changed', '#FB7185']) : due ? ['Check in', '#FBBF24'] : ['Upcoming', '#94A3B8']
+          return <div key={slot.id} style={{ padding: 12, border: '1px solid var(--border)', borderLeft: `4px solid ${color}`, borderRadius: 10, background: `${color}0A` }}>
+            <div style={{ ...row, justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+                <strong style={{ display: 'block', fontSize: 14, wordBreak: 'break-word' }}>{slot.start}–{slot.end} · {slot.name}</strong>
+                <div style={{ ...row, gap: 6, fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{slot.category} · {durationMinutes(slot.start, slot.end)}m {chip(status[0], status[1])}</div>
+              </div>
+              <Button data-edit-action variant="secondary" onClick={() => openCheck(slot)} disabled={!actual && !due} style={{ padding: '8px 12px', fontSize: 12.5 }}>{actual ? 'Edit check-in' : due ? 'What did you do?' : 'Upcoming'}</Button>
+            </div>
             <div style={{ marginTop: 6, fontSize: 12, color: actual ? 'var(--text-secondary)' : 'var(--text-muted)' }}>{actual ? `Actual: ${actual.start}–${actual.end} · ${actual.name} (${actual.planOutcome})` : 'Actual: awaiting your confirmation'}</div>
             {actual?.deviationReason && <div style={{ fontSize: 12, marginTop: 4 }}>Why: {actual.deviationReason}</div>}
           </div>
         })}
       </div>
-      <div style={{ height: Math.max(200, Math.min(600, plans.length * 45)), marginTop: 18 }}>
-        <ResponsiveContainer width="100%" height="100%"><BarChart data={comparison.rows} layout="vertical" margin={{ left: 5, right: 10 }}><XAxis type="number" unit="m" /><YAxis dataKey="name" type="category" width={95} tick={{ fontSize: 11 }} /><Tooltip /><Legend /><Bar dataKey="planned" name="Planned minutes" fill="#818CF8" /><Bar dataKey="actual" name="Actual minutes" fill="#38BDF8" /><Bar dataKey="followed" name="Followed on time" fill="#34D399" /></BarChart></ResponsiveContainer>
-      </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Adherence = minutes of the same activity inside its planned slot ÷ reviewed planned minutes. Pending slots are excluded. {unplanned.length} unlinked actual {unplanned.length === 1 ? 'entry' : 'entries'} in the timeline below.</p>
     </>}
+    </div>}
     <Modal isOpen={open} onClose={() => { if (!busy) setOpen(false) }} title={`Plan your day · ${draftDate}`}>
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Review AI assumptions and times before saving. Only saved plans sync to Calendar. Photos/notes are sent to Gemini when you generate.</p>
       <textarea aria-label="Tentative day plan" style={input} rows={4} value={text} onChange={e => setText(e.target.value)} placeholder="Kal 7 baje gym, 9–12 study, lunch ke baad project…" />

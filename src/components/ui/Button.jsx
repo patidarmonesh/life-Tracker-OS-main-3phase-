@@ -7,9 +7,10 @@ const variants = {
   ghost: { background: 'transparent', color: 'var(--text-secondary)', border: 'none', boxShadow: 'none' },
 }
 
-export default function Button({ children, variant = 'primary', onClick, disabled, className = '', type = 'button', style = {} }) {
+export default function Button({ children, variant = 'primary', onClick, disabled, className = '', type = 'button', style = {}, ...rest }) {
   return (
     <button
+      {...rest}
       type={type}
       onClick={e => {
         if (!disabled) hapticLight()

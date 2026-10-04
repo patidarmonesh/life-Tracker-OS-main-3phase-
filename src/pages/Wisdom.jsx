@@ -17,7 +17,8 @@ export default function Wisdom() {
   const [form, setForm] = useState({ text: '', source: 'Bhagavad Gita' })
   const [search, setSearch] = useState('')
 
-  const entries = state.wisdom?.entries || []
+  const EMPTY_ARRAY = useMemo(() => [], [])
+  const entries = state.wisdom?.entries || EMPTY_ARRAY
 
   // Derived filtered wisdom entries
   const filteredEntries = useMemo(() => {

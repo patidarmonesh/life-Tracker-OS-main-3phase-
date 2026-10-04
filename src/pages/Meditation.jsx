@@ -7,7 +7,7 @@ import ConfirmDeleteButton from '../components/ui/ConfirmDeleteButton'
 import { useToast } from '../context/toastContextCore'
 import { playSuccessSound, playSubtleClick, playWarningBeep } from '../hooks/useAudio'
 import { hapticSuccess, hapticLight } from '../hooks/useHaptic'
-import { Wind, Play, Square, Calendar, Flame, AlertCircle } from 'lucide-react'
+import { Wind, Play, Square, Calendar } from 'lucide-react'
 
 export default function Meditation() {
   const state = useAppState()
@@ -55,7 +55,7 @@ export default function Meditation() {
       clearInterval(timerRef.current)
     }
     return () => clearInterval(timerRef.current)
-  }, [isActive, timeLeft])
+  }, [isActive, timeLeft, handleComplete])
 
   // Guided breath loop
   useEffect(() => {

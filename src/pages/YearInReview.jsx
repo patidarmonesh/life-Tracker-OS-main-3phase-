@@ -3,8 +3,8 @@ import { useAppState } from '../context/appHooks'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import { playSuccessSound, playSubtleClick, playNoticeChime } from '../hooks/useAudio'
-import { hapticSuccess, hapticMedium, hapticLight } from '../hooks/useHaptic'
-import { Sparkles, Trophy, Calendar, DollarSign, Clock, Brain, Heart, Award, ArrowLeft, ArrowRight, RefreshCw, BarChart2 } from 'lucide-react'
+import { hapticSuccess, hapticMedium } from '../hooks/useHaptic'
+import { Trophy, DollarSign, Clock, Heart, Award, ArrowLeft, ArrowRight, RefreshCw } from 'lucide-react'
 
 export default function YearInReview() {
   const state = useAppState()
@@ -141,7 +141,7 @@ export default function YearInReview() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [currentSlide])
+  }, [currentSlide, handleNext, handlePrev])
 
   // Slide content renderers
   const renderSlide = () => {

@@ -476,7 +476,8 @@ function modulesAreEqual(module, a, b) {
   )
 }
 
-function mergeWithInitialState(data = {}) {
+// eslint-disable-next-line react-refresh/only-export-components
+export function mergeWithInitialState(data = {}) {
   const safeData = asPlainObject(data)
   const finance = asPlainObject(safeData.finance)
   const timeflow = asPlainObject(safeData.timeflow)

@@ -1,12 +1,42 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { hapticLight } from '../../hooks/useHaptic'
+import { useReadOnly } from '../../context/readOnlyContext'
+import { ToastContext } from '../../context/toastContextCore'
 
-export default function Modal({ isOpen, onClose, title, children }) {
+export default function Modal(props) {
+  const readOnly = useReadOnly()
+  const toast = useContext(ToastContext)
+  const { isOpen, onClose, allowInReadOnly } = props
+  const blocked = readOnly && !allowInReadOnly
+  const onCloseRef = useRef(onClose)
+  const toastRef = useRef(toast)
+  useEffect(() => { onCloseRef.current = onClose; toastRef.current = toast })
+
+  // Shared (read-only) view: edit dialogs never open.
+  useEffect(() => {
+    if (!blocked || !isOpen) return
+    toastRef.current?.showToast?.('👀 Read-only view — editing is disabled', 'info')
+    onCloseRef.current?.()
+  }, [blocked, isOpen])
+
+  if (blocked) return null
+  return <ModalInner {...props} />
+}
+
+function ModalInner({ isOpen, onClose, title, children }) {
   const backdropRef = useRef(null)
   const contentRef = useRef(null)
-  const [rendered, setRendered] = useState(false)
+  const [rendered, setRendered] = useState(isOpen)
   const [closing, setClosing] = useState(false)
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
+
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen)
+    setRendered(isOpen)
+    setClosing(false)
+  }
 
   const handleClose = useCallback(() => {
     hapticLight()
@@ -25,8 +55,6 @@ export default function Modal({ isOpen, onClose, title, children }) {
 
   useEffect(() => {
     if (isOpen) {
-      setRendered(true)
-      setClosing(false)
       document.addEventListener('keydown', handleKeyDown)
       document.body.style.overflow = 'hidden'
       return () => {
@@ -34,8 +62,6 @@ export default function Modal({ isOpen, onClose, title, children }) {
         document.body.style.overflow = ''
       }
     }
-    setRendered(false)
-    setClosing(false)
     document.body.style.overflow = ''
   }, [isOpen, handleKeyDown])
 
@@ -46,8 +72,9 @@ export default function Modal({ isOpen, onClose, title, children }) {
   }, [rendered, closing])
 
   if (!rendered && !isOpen) return null
+  if (typeof document === 'undefined') return null
 
-  return (
+  return createPortal(
     <div
       ref={backdropRef}
       onClick={handleClose}
@@ -129,6 +156,7 @@ export default function Modal({ isOpen, onClose, title, children }) {
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
