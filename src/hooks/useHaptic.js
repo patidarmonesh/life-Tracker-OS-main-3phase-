@@ -47,14 +47,14 @@ function isHapticsEnabled() {
       const parsed = JSON.parse(rawMeta)
       return parsed.preferences?.hapticsEnabled !== false
     }
-  } catch { /* Optional device capability unavailable. */ }
+  } catch {}
   return true
 }
 
 function triggerHaptic(pattern, audioType = 'light') {
   if (!isHapticsEnabled()) return
   if (hasVibrationAPI) {
-    try { navigator.vibrate(pattern) } catch { /* Optional device capability unavailable. */ }
+    try { navigator.vibrate(pattern) } catch {}
   } else {
     playAudioTap(audioType)
   }

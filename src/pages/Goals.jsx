@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { v4 as uuid } from 'uuid'
 import Card from '../components/ui/Card'
@@ -16,6 +16,8 @@ export default function Goals() {
   const { showToast } = useToast()
 
   const entries = state.goals?.entries || []
+  const habits = state.habits?.checkpoints || []
+  const subjects = state.study?.subjects || ['Mathematics', 'Physics', 'CS Theory', 'Machine Learning', 'Deep Learning', 'DSA', 'Other']
 
   const [form, setForm] = useState({
     title: '',
@@ -69,7 +71,7 @@ export default function Goals() {
 
     const apiKey = getGeminiApiKey()
     if (!apiKey) {
-      showToast('AI is unavailable for this session. Configure the server integration to use suggestions.', 'error')
+      showToast('Add your Gemini API key in Settings to use the AI Coach!', 'error')
       return
     }
 
@@ -209,7 +211,7 @@ export default function Goals() {
   }
 
   return (
-    <div className="legacy-area" style={{ maxWidth: '840px', margin: '0 auto', paddingBottom: '48px' }}>
+    <div style={{ maxWidth: '840px', margin: '0 auto', paddingBottom: '48px' }}>
       {/* Header */}
       <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -222,7 +224,7 @@ export default function Goals() {
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Goals Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
           <Card style={{ padding: '16px', textAlign: 'center' }}>
             <div style={{ fontSize: '24px' }}>📈</div>
             <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--accent-indigo)', marginTop: '4px' }}>{activeCount} Active</div>
@@ -241,7 +243,7 @@ export default function Goals() {
             <Plus size={16} color="var(--accent-indigo)" /> Define New SMART Objective
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
               <div>
                 <label style={labelStyle}>Objective Title</label>
                 <input
@@ -251,7 +253,7 @@ export default function Goals() {
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                 />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                 <div>
                   <label style={labelStyle}>Timeframe</label>
                   <select
@@ -290,7 +292,7 @@ export default function Goals() {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '12px' }}>
               <div>
                 <label style={labelStyle}>Target Deadline</label>
                 <input
@@ -300,7 +302,7 @@ export default function Goals() {
                   onChange={e => setForm(f => ({ ...f, targetDate: e.target.value }))}
                 />
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
                 <Button
                   onClick={handleAIDecompose}
                   disabled={aiLoading || !form.title.trim()}
@@ -357,7 +359,7 @@ export default function Goals() {
           {entries.map(g => {
             const totalMilestones = g.milestones?.length || 0
             const completedMilestones = g.milestones?.filter(m => m.isCompleted)?.length || 0
-            const progress = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : null
+            const progress = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : 0
             const isFinished = totalMilestones > 0 && completedMilestones === totalMilestones
 
             return (
@@ -417,7 +419,7 @@ export default function Goals() {
                 <div style={{ marginTop: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
                     <span>Milestones progress</span>
-                    <span>{totalMilestones ? String(completedMilestones) + ' / ' + totalMilestones + ' (' + progress + '%)' : 'No milestones defined'}</span>
+                    <span>{completedMilestones} / {totalMilestones} ({progress}%)</span>
                   </div>
                   <div style={{ height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '999px', overflow: 'hidden' }}>
                     <div style={{
@@ -436,7 +438,7 @@ export default function Goals() {
                     {g.milestones.map(m => (
                       <div
                         key={m.id}
-                        role="checkbox" tabIndex={0} aria-checked={m.isCompleted} onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleMilestone(g.id, m.id) } }} onClick={() => toggleMilestone(g.id, m.id)}
+                        onClick={() => toggleMilestone(g.id, m.id)}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -480,5 +482,3 @@ export default function Goals() {
     </div>
   )
 }
-
-

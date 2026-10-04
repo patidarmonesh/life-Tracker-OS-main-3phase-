@@ -101,7 +101,7 @@ export default function SecondBrain() {
     hapticLight()
   }
 
-  const _labelStyle = {
+  const labelStyle = {
     fontSize: '11px',
     color: 'var(--text-muted)',
     fontWeight: '700',
@@ -124,7 +124,7 @@ export default function SecondBrain() {
   }
 
   return (
-    <div className="legacy-area" style={{ maxWidth: '960px', margin: '0 auto', paddingBottom: '48px' }}>
+    <div style={{ maxWidth: '960px', margin: '0 auto', paddingBottom: '48px' }}>
       {/* Header */}
       <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -135,7 +135,7 @@ export default function SecondBrain() {
         </div>
       </div>
 
-      <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '20px' }}>
+      <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: '1.2fr 2fr', gap: '20px' }}>
         {/* Left column: Create and List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Quick Create Note */}
@@ -156,7 +156,7 @@ export default function SecondBrain() {
                 value={form.content}
                 onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
               />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' }}>
                 <input
                   style={{ ...inputStyle, padding: '8px 10px', fontSize: '12px' }}
                   placeholder="Tags (tag1, tag2)"

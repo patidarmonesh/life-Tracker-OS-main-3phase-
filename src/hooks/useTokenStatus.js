@@ -1,10 +1,86 @@
-import { useState } from 'react'
-import { useAuth } from '../context/appContextCore'
+/**
+ * useTokenStatus.js
+ *
+ * A hook that monitors the Google access token status and exposes
+ * a `needsReconnect` boolean + a `reconnect()` function.
+ *
+ * How it works:
+ *  - Every 30 seconds, checks if the stored token is expired.
+ *  - When the tab gets focus / comes back online, re-checks immediately.
+ *  - Sets needsReconnect=true when the token is dead AND we have a session
+ *    (user is "logged in" but token expired — not logged out).
+ *
+ * UPDATED: reconnect() now uses reconnectGoogle() which opens a popup
+ * ONCE with prompt:'' (auto-selects existing account). No more silent
+ * refresh attempts that caused repeated popup spam.
+ */
+
+import { useCallback, useEffect, useState } from 'react'
+import {
+  getStoredSession,
+  getAccessToken,
+  reconnectGoogle,
+} from '../services/authService'
+
+const CHECK_INTERVAL_MS = 30_000 // 30 seconds
+
 export function useTokenStatus() {
-  const { integration, reconnect } = useAuth()
+  const [needsReconnect, setNeedsReconnect] = useState(false)
   const [isReconnecting, setIsReconnecting] = useState(false)
-  return { needsReconnect: integration?.state === 'reconnect_required', isReconnecting, reconnect: async () => {
+
+  const checkStatus = useCallback(() => {
+    const session = getStoredSession()
+    if (!session?.user) {
+      // No session at all — user is logged out, not our job
+      setNeedsReconnect(false)
+      return
+    }
+
+    const token = getAccessToken()
+    // Has session but no valid token → needs reconnect
+    setNeedsReconnect(!token)
+  }, [])
+
+  useEffect(() => {
+    // Check immediately on mount
+    checkStatus()
+
+    // Poll every 30 s
+    const id = setInterval(checkStatus, CHECK_INTERVAL_MS)
+
+    // Also check on focus / visibility / online
+    const onFocus = () => checkStatus()
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') checkStatus()
+    }
+    const onOnline = () => checkStatus()
+
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('online', onOnline)
+
+    return () => {
+      clearInterval(id)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('online', onOnline)
+    }
+  }, [checkStatus])
+
+  const reconnect = useCallback(async () => {
     setIsReconnecting(true)
-    try { await reconnect(); return true } catch { return false } finally { setIsReconnecting(false) }
-  } }
+    try {
+      const result = await reconnectGoogle()
+      if (result?.accessToken) {
+        setNeedsReconnect(false)
+      }
+      return !!result?.accessToken
+    } catch {
+      return false
+    } finally {
+      setIsReconnecting(false)
+    }
+  }, [])
+
+  return { needsReconnect, isReconnecting, reconnect }
 }

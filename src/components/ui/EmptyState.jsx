@@ -38,15 +38,15 @@ export default function EmptyState({
       </div>
 
       <div style={{
-        fontFamily: 'Inter, sans-serif', fontWeight: 700,
-        fontSize: '18px', color: 'var(--text-3)',
+        fontFamily: 'Syne, sans-serif', fontWeight: 700,
+        fontSize: '18px', color: 'var(--text-primary)',
         marginBottom: '8px',
       }}>
         {title}
       </div>
 
       <div style={{
-        fontSize: '13px', color: 'var(--text-3)',
+        fontSize: '13px', color: 'var(--text-muted)',
         maxWidth: '320px', lineHeight: 1.6,
       }}>
         {subtitle}
@@ -57,10 +57,10 @@ export default function EmptyState({
           onClick={action.onClick}
           style={{
             marginTop: '20px', padding: '10px 20px',
-            borderRadius: '0px', fontSize: '13px', fontWeight: 700,
-            background: 'var(--bg-card-hover)',
-            border: '1px solid var(--border)',
-            color: 'var(--text-3)', cursor: 'pointer',
+            borderRadius: '12px', fontSize: '13px', fontWeight: 700,
+            background: 'rgba(99,102,241,0.14)',
+            border: '1px solid rgba(129,140,248,0.22)',
+            color: '#B9C2FF', cursor: 'pointer',
             transition: 'all 0.2s ease',
           }}
         >

@@ -96,7 +96,7 @@ async function driveFetch(url, options = {}) {
       },
     })
   } catch (error) {
-    throw new Error(`Drive request failed: ${error?.message || 'network error'}`, { cause: error })
+    throw new Error(`Drive request failed: ${error?.message || 'network error'}`)
   }
 
   if (res.status === 401) {

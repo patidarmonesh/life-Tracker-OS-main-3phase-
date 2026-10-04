@@ -1,45 +1,59 @@
-import { useState } from 'react'
-import { apiRequest } from '../services/apiClient'
-import { useAuth } from '../context/appContextCore'
-const supported = () => typeof window !== 'undefined' && 'Notification' in window && 'PushManager' in window && 'serviceWorker' in navigator
-function decodeKey(value) {
-  const bytes = atob(value.replace(/-/g, '+').replace(/_/g, '/'))
-  return Uint8Array.from(bytes, char => char.charCodeAt(0))
-}
+import { useEffect, useState } from 'react'
+
+/**
+ * Custom React Hook to manage local browser Web Notifications
+ */
 export function useNotifications() {
-  const { capabilities, user } = useAuth()
-  const [permission, setPermission] = useState(() => typeof Notification === 'undefined' ? 'unsupported' : Notification.permission)
-  const [error, setError] = useState('')
-  const [status, setStatus] = useState('idle')
+  const [permission, setPermission] = useState('default')
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setPermission(Notification.permission)
+    }
+  }, [])
+
   async function requestPermission() {
-    if (!supported()) { setError('Web Push is unavailable here. On supported iPhones, install LifeOS on the Home Screen first. In-app check-ins remain available.'); return 'unsupported' }
-    if (user?.isGuest || !capabilities.push) { setError('Server push is not configured for this account. In-app check-ins remain available.'); return 'unconfigured' }
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return 'unsupported'
+    }
     try {
-      const result = await Notification.requestPermission(); setPermission(result)
-      if (result !== 'granted') return result
-      const registration = await navigator.serviceWorker.ready
-      const subscription = await registration.pushManager.getSubscription() || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeKey(capabilities.vapidPublicKey) })
-      await apiRequest('push/subscribe', { method: 'POST', body: { subscription: subscription.toJSON() } })
-      setStatus('subscribed'); setError(''); return result
-    } catch (failure) { setError(failure.message); setStatus('failed'); return 'failed' }
+      const result = await Notification.requestPermission()
+      setPermission(result)
+      return result
+    } catch (e) {
+      return 'denied'
+    }
   }
-  async function disable() {
-    if (!supported()) return
+
+  function sendNotification(title, options = {}) {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return false
+    }
+    if (Notification.permission !== 'granted') {
+      return false
+    }
+
     try {
-      const registration = await navigator.serviceWorker.ready
-      const subscription = await registration.pushManager.getSubscription()
-      if (subscription) { await apiRequest('push/subscribe', { method: 'POST', body: { subscription: subscription.toJSON(), enabled: false } }); await subscription.unsubscribe() }
-      setStatus('disabled')
-    } catch (failure) { setError(failure.message) }
+      const notification = new Notification(title, {
+        icon: '/logo.png',
+        badge: '/logo.png',
+        silent: false,
+        ...options,
+      })
+
+      // Auto close notification after 5 seconds
+      setTimeout(() => notification.close(), 5000)
+      return true
+    } catch (e) {
+      console.error('Failed to dispatch Web Notification:', e)
+      return false
+    }
   }
-  async function sendTest() {
-    try { const result = await apiRequest('push/test', { method: 'POST', body: {} }); setStatus(result.status); return result }
-    catch (failure) { setError(failure.message); throw failure }
+
+  return {
+    permission,
+    requestPermission,
+    sendNotification,
+    isSupported: typeof window !== 'undefined' && 'Notification' in window,
   }
-  // Local foreground callers remain explicitly best-effort; the server schedules closed-app reminders.
-  async function sendNotification(title, options = {}) {
-    if (!supported() || Notification.permission !== 'granted') return false
-    try { const registration = await navigator.serviceWorker.ready; await registration.showNotification(title, { ...options, icon: '/icon-192.png', badge: '/icon-192.png', data: { url: '/' } }); return true } catch { return false }
-  }
-  return { permission, requestPermission, sendNotification, sendTest, disable, status, error, isSupported: supported() }
 }

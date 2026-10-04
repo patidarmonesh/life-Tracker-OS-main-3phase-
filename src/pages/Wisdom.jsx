@@ -17,7 +17,7 @@ export default function Wisdom() {
   const [form, setForm] = useState({ text: '', source: 'Bhagavad Gita' })
   const [search, setSearch] = useState('')
 
-  const entries = useMemo(() => state.wisdom?.entries || [], [state.wisdom?.entries])
+  const entries = state.wisdom?.entries || []
 
   // Derived filtered wisdom entries
   const filteredEntries = useMemo(() => {
@@ -122,7 +122,7 @@ export default function Wisdom() {
   }
 
   return (
-    <div className="legacy-area" style={{ maxWidth: '820px', margin: '0 auto', paddingBottom: '32px' }}>
+    <div style={{ maxWidth: '820px', margin: '0 auto', paddingBottom: '32px' }}>
       <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '1.4rem', margin: 0 }}>🧘 Wisdom Log</h1>
@@ -188,7 +188,7 @@ export default function Wisdom() {
                 onChange={e => setForm(f => ({ ...f, text: e.target.value }))}
               />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '10px', alignItems: 'end' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px', alignItems: 'end' }}>
               <div>
                 <label style={labelStyle}>Source / Book</label>
                 <input
@@ -301,4 +301,3 @@ export default function Wisdom() {
     </div>
   )
 }
-
