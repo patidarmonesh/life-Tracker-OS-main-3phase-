@@ -141,14 +141,7 @@ export default function SharedDashboard() {
         setFailedModules(failed)
         setLastUpdated(new Date())
         setError(null)
-        // Open Time Flow on the latest logged day if nothing is logged today yet
-        if (first && next.timeflow?.entries?.length) {
-          const today = getTodayDateKey('Asia/Kolkata')
-          const dates = next.timeflow.entries.map(e => e.date).filter(Boolean).sort()
-          const hasToday = dates.includes(today)
-          const latest = dates.filter(d => d <= today).pop() || dates[dates.length - 1]
-          if (!hasToday && latest) navigate(`${location.pathname}${location.search}`, { replace: true, state: { selectedDate: latest } })
-        }
+        // Removed the redirect to latest logged day, so it defaults to today.
       } else if (!isRefresh) {
         setError(firstError?.message || 'Failed to load shared data. The link may be invalid or access was revoked.')
       }

@@ -35,7 +35,7 @@ export default function Home() {
   const timezone = state.settings?.profile?.timezone
   const currency = state.settings?.profile?.currency || 'INR'
   const today = getTodayDateKey(timezone)
-  const [fabOpen, setFabOpen] = useState(false)
+
   const [aiInsight, setAiInsight] = useState('')
   const [aiInsightLoading, setAiInsightLoading] = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
@@ -497,14 +497,7 @@ Return ONLY valid JSON, no markdown:
     showToast('Life Coach report saved to Journal ✓', 'success')
   }
 
-  const fabActions = [
-    { icon: '💸', label: 'Add Expense', action: () => navigate('/finance') },
-    { icon: '⏱️', label: 'Log Time', action: () => navigate('/timeflow') },
-    { icon: '✅', label: 'Checkpoint', action: () => navigate('/habits') },
-    { icon: '📚', label: 'Study Session', action: () => navigate('/study') },
-    { icon: '📝', label: 'Journal', action: () => navigate('/journal') },
-    { icon: '🏥', label: 'Log Health', action: () => navigate('/health') },
-  ]
+
 
   const scoreBreakdown = [
     { label: 'Habits', val: animatedCheckpointScore, color: '#7C82FF' },
@@ -1871,67 +1864,7 @@ Return ONLY valid JSON, no markdown:
         </div>
       </Modal>
 
-      <div
-        style={{
-          position: 'fixed',
-          bottom: '80px',
-          right: '20px',
-          zIndex: 200,
-          display: 'flex',
-          flexDirection: 'column-reverse',
-          alignItems: 'flex-end',
-          gap: '8px',
-        }}
-      >
-        {fabOpen &&
-          fabActions.map(({ icon, label, action }) => (
-            <button
-              key={label}
-              onClick={() => {
-                action()
-                setFabOpen(false)
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                background: 'rgba(15,23,42,0.88)',
-                border: '1px solid rgba(148,163,184,0.12)',
-                borderRadius: '14px',
-                padding: '11px 16px',
-                color: 'var(--text-primary)',
-                fontSize: '13px',
-                fontWeight: 700,
-                whiteSpace: 'nowrap',
-                boxShadow: '0 10px 30px rgba(2,6,23,0.35)',
-                animation: 'fadeInUp 0.18s ease',
-              }}
-            >
-              <span style={{ fontSize: '18px' }}>{icon}</span>
-              {label}
-            </button>
-          ))}
 
-        <button
-          onClick={() => setFabOpen(o => !o)}
-          aria-label="Quick add"
-          style={{
-            width: '56px',
-            height: '56px',
-            borderRadius: '999px',
-            background: 'linear-gradient(135deg, #6366F1, #7C3AED)',
-            border: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 12px 30px rgba(99,102,241,0.45)',
-            transform: fabOpen ? 'rotate(45deg)' : 'rotate(0deg)',
-            transition: 'transform 0.22s ease',
-          }}
-        >
-          <Plus size={24} color="#fff" />
-        </button>
-      </div>
 
       <style>{`
         @keyframes fadeInUp {

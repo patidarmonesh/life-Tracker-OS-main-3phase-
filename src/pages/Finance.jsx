@@ -927,27 +927,30 @@ export default function Finance() {
   }
 
   const tabStyle = active => ({
-    padding: '8px 18px',
-    borderRadius: '8px 8px 0 0',
+    padding: '10px 20px',
+    borderRadius: '12px',
     border: 'none',
     cursor: 'pointer',
-    background: active ? 'var(--bg-card)' : 'transparent',
-    color: active ? 'var(--accent-emerald)' : 'var(--text-muted)',
-    fontWeight: active ? '700' : '400',
+    background: active ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+    color: active ? 'var(--accent-indigo)' : 'var(--text-muted)',
+    fontWeight: active ? '700' : '500',
     fontSize: '14px',
     fontFamily: 'DM Sans, sans-serif',
-    borderBottom: active ? '2px solid var(--accent-emerald)' : '2px solid transparent',
-    transition: 'all 0.15s',
+    transition: 'all 0.2s',
   })
 
   return (
-    <div className="finance-container">
-      <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-        <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '1.4rem', margin: 0 }}>💸 Finance</h1>
-        <div style={{ display: 'flex', gap: '8px' }}>
+    <div className="finance-container" style={{ paddingBottom: '100px', maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{ padding: '32px 24px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '2rem', margin: '0 0 4px', color: 'var(--text-primary)' }}>Finance</h1>
+          <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>Manage your wealth and track expenses</p>
+        </div>
+        <div style={{ display: 'flex', gap: '12px' }}>
           <Button
             variant="secondary"
             onClick={() => { playSubtleClick(); hapticLight(); setShowSMSModal(true); }}
+            style={{ borderRadius: '14px', padding: '10px 16px' }}
           >
             📥 UPI SMS Import
           </Button>
@@ -958,13 +961,14 @@ export default function Finance() {
               resetForm()
               setShowAddModal(true)
             }}
+            style={{ borderRadius: '14px', padding: '10px 20px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: 'white', border: 'none' }}
           >
-            <Plus size={16} /> Add Expense
+            <Plus size={18} style={{ marginRight: 6 }} /> Add Expense
           </Button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '4px', padding: '16px 24px 0', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
+      <div style={{ display: 'flex', gap: '8px', padding: '0 24px 24px', overflowX: 'auto', scrollbarWidth: 'none' }}>
         {[
           { key: 'today', label: 'Today' },
           { key: 'month', label: 'This Month' },
@@ -980,21 +984,22 @@ export default function Finance() {
       </div>
 
       {/* Account filter row */}
-      <div style={{ padding: '10px 24px 0', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600', marginRight: '4px' }}>Account:</span>
+      <div style={{ padding: '0 24px 16px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: '600', marginRight: '4px' }}>Filter by Account:</span>
         <button
           onClick={() => setAccountFilter('all')}
           style={{
-            padding: '4px 12px',
+            padding: '6px 14px',
             borderRadius: '16px',
             border: '1px solid',
             borderColor: accountFilter === 'all' ? 'var(--accent-indigo)' : 'var(--border)',
             background: accountFilter === 'all' ? 'rgba(99,102,241,0.15)' : 'transparent',
             color: accountFilter === 'all' ? 'var(--accent-indigo)' : 'var(--text-muted)',
-            fontSize: '12px',
+            fontSize: '13px',
             cursor: 'pointer',
             fontWeight: '600',
             fontFamily: 'DM Sans, sans-serif',
+            transition: 'all 0.2s',
           }}
         >
           All

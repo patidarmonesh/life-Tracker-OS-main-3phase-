@@ -218,7 +218,7 @@ export default function DayPlanner({ date, categories }) {
       </div>
       <Button variant="secondary" onClick={() => setDraft(items => [...items, blank()])} disabled={busy} style={{ marginTop: 10 }}>+ Add activity</Button>
       <div style={{ marginTop: 14 }}><label><input type="checkbox" checked={calendarEnabled} onChange={e => setCalendarEnabled(e.target.checked)} /> Automatically sync to Google Calendar</label></div>
-      <label style={{ display: 'block', marginTop: 8, fontSize: 12 }}>Reminder before start <select value={reminder} onChange={e => setReminder(Number(e.target.value))}>{[0, 5, 10, 15, 30].map(n => <option key={n} value={n}>{n} minutes</option>)}</select></label>
+      <label style={{ display: 'block', marginTop: 8, fontSize: 12 }}>Reminder before start <select style={{ ...input, width: 'auto', display: 'inline-block', marginLeft: 8 }} value={reminder} onChange={e => setReminder(Number(e.target.value))}>{[0, 5, 10, 15, 30].map(n => <option key={n} value={n}>{n} minutes</option>)}</select></label>
       {error && <p role="alert" style={{ color: '#F87171' }}>{error}</p>}
       <Button onClick={savePlan} disabled={busy || (!draft.length && !plans.length)} style={{ marginTop: 16 }}>{draft.length ? 'Save tentative plan' : 'Delete day plan (keep actual logs)'}</Button>
     </Modal>
