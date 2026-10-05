@@ -176,15 +176,15 @@ export default function DayPlanner({ date, categories }) {
       const { slot, outcome, name, start, end, category, reason } = check
       validateSlots([{ name, start, end }])
       if (!isDue({ ...slot, start, end })) throw new Error('Actual time cannot be in the future. Check in after the activity ends.')
-      const deviated = outcome !== 'followed' || start !== slot.start || end !== slot.end
-      if (deviated && !reason.trim()) throw new Error('Please add why the plan changed.')
+      
+      const actualOutcome = outcome === 'partial' ? 'followed' : outcome;
       const conflict = entries.find(e => e.id !== check.entryId && e.planSlotId !== slot.id && Math.max(timeMinutes(e.start), timeMinutes(start)) < Math.min(timeMinutes(e.end), timeMinutes(end)))
-      if (conflict) throw new Error(`Overlaps “${conflict.name}”. Link that existing log below, or adjust the actual times.`)
+      if (conflict) throw new Error(`Overlaps “${conflict.name}”. Adjust the actual times.`)
       const updatedAt = new Date().toISOString()
       let savedActual, previousActual
       setModule('timeflow', current => {
         const existing = (current.entries || []).find(e => e.id === check.entryId || e.planSlotId === slot.id)
-        const actual = { ...existing, id: existing?.id || uuid(), date: slot.date, start, end, name: name.trim(), category, durationMinutes: durationMinutes(start, end), planSlotId: slot.id, planOutcome: outcome, deviationReason: reason.trim(), isWaste: WASTE_CATEGORIES.includes(category), productivityScore: existing?.productivityScore || 3, mood: existing?.mood || 3, source: 'plan-check-in', createdAt: existing?.createdAt || updatedAt, updatedAt }
+        const actual = { ...existing, id: existing?.id || uuid(), date: slot.date, start, end, name: name.trim(), category, durationMinutes: durationMinutes(start, end), planSlotId: slot.id, planOutcome: actualOutcome, deviationReason: reason.trim(), isWaste: WASTE_CATEGORIES.includes(category), productivityScore: existing?.productivityScore || 3, mood: existing?.mood || 3, source: 'plan-check-in', createdAt: existing?.createdAt || updatedAt, updatedAt }
         actual.studySessionId = category === 'Study' ? existing?.studySessionId || `plan-study-${actual.id}` : null
         savedActual = actual; previousActual = existing
         return { ...current, entries: [...(current.entries || []).filter(e => e.id !== actual.id && e.planSlotId !== slot.id), actual] }
@@ -356,18 +356,62 @@ export default function DayPlanner({ date, categories }) {
     </Modal>
     <Modal isOpen={!!check} onClose={() => setCheck(null)} title="Plan check-in">
       {check && <div style={{ display: 'grid', gap: 12 }}>
-        <p>Planned: {check.slot.start}–{check.slot.end} · {check.slot.name}</p>
-        <label>Did you do the planned activity?<select style={input} value={check.outcome} onChange={e => setCheck(c => ({ ...c, outcome: e.target.value, name: e.target.value === 'followed' ? c.slot.name : '', category: e.target.value === 'followed' ? c.slot.category : 'Other' }))}><option value="followed">Yes, fully or partly (enter actual times)</option><option value="changed">I did something different</option><option value="missed">I did not do the planned activity</option></select></label>
-        <label>Link an existing actual log (optional)<select style={input} value={check.entryId} onChange={e => {
-          const actual = entries.find(item => item.id === e.target.value)
-          setCheck(c => ({ ...c, entryId: e.target.value, ...(actual ? { name: actual.name, start: actual.start, end: actual.end, category: actual.category } : {}) }))
-        }}><option value="">Create a new actual log</option>{entries.filter(e => !e.planSlotId || e.planSlotId === check.slot.id).map(e => <option key={e.id} value={e.id}>{e.start}–{e.end} {e.name}</option>)}</select></label>
-        <label>What did you actually do?<input style={input} value={check.name} onChange={e => setCheck(c => ({ ...c, name: e.target.value }))} placeholder="e.g. rested, studied maths, phone calls" /></label>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}><label>Actual start<input type="time" style={input} value={check.start} onChange={e => setCheck(c => ({ ...c, start: e.target.value }))} /></label><label>Actual end<input style={input} value={check.end} onChange={e => setCheck(c => ({ ...c, end: e.target.value }))} /></label></div>
-        <label>Actual category<select style={input} value={check.category} onChange={e => setCheck(c => ({ ...c, category: e.target.value }))}>{[...new Set([...categories, 'Other', check.category])].map(c => <option key={c}>{c}</option>)}</select></label>
-        <label>Why did the plan change? / reflection<textarea style={input} rows={3} value={check.reason} onChange={e => setCheck(c => ({ ...c, reason: e.target.value }))} placeholder="Required if activity or time changed" /></label>
+        <div style={{ padding: 12, background: 'rgba(99,102,241,0.1)', borderRadius: 8, border: '1px solid var(--accent-indigo)' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Planned Activity</div>
+          <div style={{ fontWeight: 600 }}>{check.slot.start} – {check.slot.end}</div>
+          <div style={{ color: 'var(--text-secondary)' }}>{check.slot.name}</div>
+        </div>
+
+        <label>
+          <div style={{ marginBottom: 6, fontWeight: 500, fontSize: 13 }}>Did you do this as planned?</div>
+          <select style={input} value={check.outcome} onChange={e => {
+            const val = e.target.value
+            setCheck(c => ({
+              ...c,
+              outcome: val,
+              name: val === 'followed' || val === 'partial' ? c.slot.name : (val === 'missed' ? 'Missed' : ''),
+              category: val === 'followed' || val === 'partial' ? c.slot.category : (val === 'missed' ? 'Other' : ''),
+              start: c.slot.start,
+              end: c.slot.end
+            }))
+          }}>
+            <option value="followed">Yes, exactly as planned</option>
+            <option value="partial">Yes, but times changed</option>
+            <option value="changed">No, I did something else</option>
+            <option value="missed">No, I missed it entirely</option>
+          </select>
+        </label>
+
+        {check.outcome !== 'followed' && (
+          <div style={{ padding: 12, background: 'var(--bg-secondary)', borderRadius: 8, display: 'grid', gap: 12 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Actual Details</div>
+            
+            {check.outcome !== 'missed' && (
+              <>
+                <label style={{ fontSize: 13 }}>What did you actually do?
+                  <input style={{ ...input, marginTop: 4 }} value={check.name} onChange={e => setCheck(c => ({ ...c, name: e.target.value }))} placeholder="e.g. studied maths" />
+                </label>
+                <label style={{ fontSize: 13 }}>Category
+                  <select style={{ ...input, marginTop: 4 }} value={check.category} onChange={e => setCheck(c => ({ ...c, category: e.target.value }))}>
+                    {[...new Set([...categories, 'Other', check.category])].map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </label>
+              </>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <label style={{ fontSize: 13 }}>Start time<input type="time" style={{ ...input, marginTop: 4 }} value={check.start} onChange={e => setCheck(c => ({ ...c, start: e.target.value }))} /></label>
+              <label style={{ fontSize: 13 }}>End time<input type="time" style={{ ...input, marginTop: 4 }} value={check.end} onChange={e => setCheck(c => ({ ...c, end: e.target.value }))} /></label>
+            </div>
+
+            {check.outcome !== 'partial' && <label style={{ fontSize: 13 }}>Briefly, why did the plan change?
+              <input style={{ ...input, marginTop: 4 }} value={check.reason} onChange={e => setCheck(c => ({ ...c, reason: e.target.value }))} placeholder="Optional reflection" />
+            </label>}
+          </div>
+        )}
+
         {error && <p role="alert" style={{ color: '#F87171' }}>{error}</p>}
-        <Button onClick={saveCheck}>Save actual & reflection</Button>
+        <Button onClick={saveCheck}>Save check-in</Button>
       </div>}
     </Modal>
   </Card>
