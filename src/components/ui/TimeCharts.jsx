@@ -169,6 +169,7 @@ export function DayRibbon({ entries = [], height = 48, showAxis = true, compact 
  * so it is obvious at a glance where the day followed or drifted from the plan.
  */
 export function PlanVsActual({ plans = [], entries = [], onSelect }) {
+  const [selected, setSelected] = useState(null)
   const [hover, setHover] = useState({ visible: false, item: null, kind: '', x: 0, y: 0 })
   const items = [...plans, ...entries].map(toRange).filter(Boolean)
   if (!items.length) return null
@@ -196,10 +197,14 @@ export function PlanVsActual({ plans = [], entries = [], onSelect }) {
               const outcome = item.planOutcome
               const isDev = kind === 'deviations'
               const isUnplanned = kind === 'actual' && !item.planSlotId
+              const isSel = selected && (selected.id === item.id || selected.name === item.name)
               return (
                 <div
                   key={item.id || `${item.start}-${item.name}-${kind}`}
-                  onClick={() => onSelect && kind === 'plan' && onSelect(item)}
+                  onClick={() => {
+                    setSelected(item)
+                    if (onSelect && kind === 'plan') onSelect(item)
+                  }}
                   onMouseEnter={e => setHover({ visible: true, item, kind, x: e.clientX, y: e.clientY })}
                   onMouseMove={e => setHover(h => ({ ...h, x: e.clientX, y: e.clientY }))}
                   onMouseLeave={() => setHover({ visible: false, item: null, kind: '', x: 0, y: 0 })}
@@ -208,9 +213,10 @@ export function PlanVsActual({ plans = [], entries = [], onSelect }) {
                     background: kind === 'plan' || outcome === 'missed' ? `${color}33` : color,
                     border: kind === 'plan' || outcome === 'missed' ? `1.5px dashed ${color}` : 'none',
                     borderRight: kind === 'plan' || outcome === 'missed' ? 'none' : '1px solid rgba(15,23,42,0.6)',
-                    opacity: hover.item === item ? 1 : (hover.item ? 0.4 : 0.95),
-                    transition: 'opacity .15s ease',
-                    cursor: kind === 'plan' ? (onSelect ? 'pointer' : 'default') : 'default',
+                    opacity: selected && !isSel ? 0.45 : (hover.item === item ? 1 : (hover.item ? 0.4 : 0.95)),
+                    boxShadow: isSel ? `inset 0 0 0 2px #fff` : 'none',
+                    transition: 'all .15s ease',
+                    cursor: 'pointer',
                   }}
                 />
               )
@@ -260,6 +266,19 @@ export function PlanVsActual({ plans = [], entries = [], onSelect }) {
           ))}
         </div>
       </div>
+      {/* Click selection detail */}
+      {selected && (
+        <div style={{
+          marginTop: 8, padding: '10px 12px', borderRadius: 10, display: 'flex', gap: 10, alignItems: 'center',
+          background: `${categoryColor(selected.category)}14`, border: `1px solid ${categoryColor(selected.category)}40`,
+        }}>
+          <span style={{ width: 10, height: 10, borderRadius: 3, background: categoryColor(selected.category), flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected.name || selected.category}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{selected.category} · {selected.start}–{selected.end} · {formatMinutes((toRange(selected)?.end || 0) - (toRange(selected)?.start || 0))}</div>
+          </div>
+        </div>
+      )}
       {/* Legend */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 9, borderRadius: 3, border: '1.5px dashed #94A3B8' }} /> Planned</span>

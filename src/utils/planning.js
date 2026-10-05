@@ -71,7 +71,7 @@ export function planComparison(slots = [], entries = []) {
     const minutes = durationMinutes(slot.start, slot.end)
     const actual = entries.find(e => e.planSlotId === slot.id)
     const actualMinutes = actual ? durationMinutes(actual.start, actual.end) : 0
-    const matched = actual?.planOutcome === 'followed' ? Math.max(0, Math.min(timeMinutes(slot.end), timeMinutes(actual.end)) - Math.max(timeMinutes(slot.start), timeMinutes(actual.start))) : 0
+    const matched = (actual && actual.planOutcome !== 'missed') ? Math.max(0, Math.min(timeMinutes(slot.end), timeMinutes(actual.end)) - Math.max(timeMinutes(slot.start), timeMinutes(actual.start))) : 0
     planned += minutes
     followed += matched
     if (actual) changed += minutes - matched
