@@ -120,22 +120,7 @@ export function DayRibbon({ entries = [], height = 48, showAxis = true, compact 
           <div aria-hidden style={{ position: 'absolute', top: -2, bottom: -2, left: `${(nowMinute / 1440) * 100}%`, width: 2, background: '#F8FAFC', boxShadow: '0 0 8px rgba(255,255,255,0.8)', pointerEvents: 'none' }} />
         )}
       </div>
-      {/* Time labels below the ribbon */}
-      {showAxis && (
-        <div style={{ position: 'relative', height: 18, marginTop: 2 }}>
-          {blocks.map(({ entry, range }) => {
-            const leftPct = (range.start / 1440) * 100
-            const endPct = (range.end / 1440) * 100
-            const widthPct = endPct - leftPct
-            return (
-              <div key={entry.id || `t-${entry.start}`} style={{ position: 'absolute', left: `${leftPct}%`, width: `${widthPct}%`, display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', overflow: 'hidden' }}>
-                <span>{entry.start}</span>
-                {widthPct > 5 && <span>{entry.end}</span>}
-              </div>
-            )
-          })}
-        </div>
-      )}
+
       {/* Axis */}
       {showAxis && (
         <div style={{ position: 'relative', height: 16, marginTop: 2, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
@@ -163,7 +148,7 @@ export function DayRibbon({ entries = [], height = 48, showAxis = true, compact 
       {/* Hover tooltip */}
       {hover.visible && hover.entry && (
         <div style={{
-          position: 'fixed', left: hover.x, top: hover.y - 12,
+          position: 'fixed', left: Math.min(Math.max(hover.x, 80), typeof window !== 'undefined' ? window.innerWidth - 80 : hover.x), top: hover.y - 12,
           transform: 'translate(-50%, -100%)',
           pointerEvents: 'none', zIndex: 9999,
           background: 'rgba(15,23,42,0.97)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 10,
@@ -183,7 +168,7 @@ export function DayRibbon({ entries = [], height = 48, showAxis = true, compact 
  * Two aligned lanes (Plan on top, Actual below) over the active part of the day,
  * so it is obvious at a glance where the day followed or drifted from the plan.
  */
-export function PlanVsActual({ plans = [], entries = [] }) {
+export function PlanVsActual({ plans = [], entries = [], onSelect }) {
   const [hover, setHover] = useState({ visible: false, item: null, kind: '', x: 0, y: 0 })
   const items = [...plans, ...entries].map(toRange).filter(Boolean)
   if (!items.length) return null
@@ -194,71 +179,63 @@ export function PlanVsActual({ plans = [], entries = [] }) {
   const step = span > 12 * 60 ? 3 : span > 6 * 60 ? 2 : 1
   for (let m = from; m <= to; m += step * 60) hours.push(m)
 
-  const lane = (label, list, kind) => (
-    <div style={{ marginBottom: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 55, flexShrink: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{label}</div>
-        <div style={{ position: 'relative', flex: 1, height: 42, borderRadius: 10, background: 'rgba(148,163,184,0.06)', border: '1px solid rgba(148,163,184,0.08)', overflow: 'hidden' }}>
-          {list.map(item => {
-            const r = toRange(item)
-            if (!r) return null
-            const color = categoryColor(item.category)
-            const left = ((Math.max(r.start, from) - from) / span) * 100
-            const width = Math.max(((Math.min(r.end, to) - Math.max(r.start, from)) / span) * 100, 0.8)
-            const outcome = kind === 'actual' ? item.planOutcome : null
-            return (
-              <div
-                key={item.id || `${item.start}-${item.name}`}
-                onMouseEnter={e => setHover({ visible: true, item, kind, x: e.clientX, y: e.clientY })}
-                onMouseMove={e => setHover(h => ({ ...h, x: e.clientX, y: e.clientY }))}
-                onMouseLeave={() => setHover({ visible: false, item: null, kind: '', x: 0, y: 0 })}
-                style={{
-                  position: 'absolute', top: 4, bottom: 4, left: `${left}%`, width: `${width}%`, borderRadius: 6,
-                  background: kind === 'plan' ? `${color}33` : color,
-                  border: kind === 'plan' ? `1.5px dashed ${color}` : 'none',
-                  color: kind === 'plan' ? 'var(--text-primary)' : '#fff',
-                  fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center',
-                  overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                  outline: outcome && outcome !== 'followed' ? '2px solid #FB7185' : 'none', outlineOffset: -2,
-                  cursor: 'default',
-                }}
-              >
-                {width > 8 ? (
-                  <span style={{ padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || item.category}</span>
-                ) : ''}
-              </div>
-            )
-          })}
+  const lane = (label, list, kind) => {
+    if (!list.length && kind === 'deviations') return null
+    return (
+      <div style={{ marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 65, flexShrink: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{label}</div>
+          <div style={{ position: 'relative', flex: 1, height: 42, borderRadius: 10, background: 'rgba(148,163,184,0.06)', border: '1px solid rgba(148,163,184,0.08)', overflow: 'hidden' }}>
+            {list.map(item => {
+              const r = toRange(item)
+              if (!r) return null
+              const color = categoryColor(item.category)
+              const left = ((Math.max(r.start, from) - from) / span) * 100
+              const width = Math.max(((Math.min(r.end, to) - Math.max(r.start, from)) / span) * 100, 0.8)
+              const outcome = item.planOutcome
+              const isDev = kind === 'deviations'
+              return (
+                <div
+                  key={item.id || `${item.start}-${item.name}`}
+                  onClick={() => onSelect && onSelect(item)}
+                  onMouseEnter={e => setHover({ visible: true, item, kind, x: e.clientX, y: e.clientY })}
+                  onMouseMove={e => setHover(h => ({ ...h, x: e.clientX, y: e.clientY }))}
+                  onMouseLeave={() => setHover({ visible: false, item: null, kind: '', x: 0, y: 0 })}
+                  style={{
+                    position: 'absolute', top: 4, bottom: 4, left: `${left}%`, width: `${width}%`, borderRadius: 6,
+                    background: kind === 'plan' ? `${color}33` : color,
+                    border: kind === 'plan' ? `1.5px dashed ${color}` : 'none',
+                    color: kind === 'plan' ? 'var(--text-primary)' : '#fff',
+                    fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center',
+                    overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                    outline: (isDev || (kind === 'actual' && outcome && outcome !== 'followed')) ? '2px solid #FB7185' : 'none', outlineOffset: -2,
+                    cursor: onSelect ? 'pointer' : 'default',
+                  }}
+                >
+                  {width > 12 ? (
+                    <span style={{ padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.start}-{item.end} {item.name || item.category}</span>
+                  ) : width > 6 ? (
+                    <span style={{ padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || item.category}</span>
+                  ) : ''}
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
-      {/* Time labels below lane */}
-      <div style={{ display: 'flex', gap: 12 }}>
-        <div style={{ width: 55, flexShrink: 0 }} />
-        <div style={{ position: 'relative', flex: 1, height: 14 }}>
-          {list.map(item => {
-            const r = toRange(item)
-            if (!r) return null
-            const leftPct = ((Math.max(r.start, from) - from) / span) * 100
-            const widthPct = Math.max(((Math.min(r.end, to) - Math.max(r.start, from)) / span) * 100, 0.8)
-            return (
-              <div key={`t-${item.id || item.start}`} style={{ position: 'absolute', left: `${leftPct}%`, width: `${widthPct}%`, display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', overflow: 'hidden' }}>
-                <span>{item.start}</span>
-                {widthPct > 6 && <span>{item.end}</span>}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
+    )
+  }
+
+  const deviations = entries.filter(e => e.planOutcome === 'missed' || e.planOutcome === 'changed')
 
   return (
     <div style={{ display: 'grid', gap: 2 }}>
       {lane('Plan', plans, 'plan')}
       {lane('Actual', entries, 'actual')}
+      {lane('Deviated', deviations, 'deviations')}
       {/* Shared axis */}
       <div style={{ display: 'flex', gap: 12 }}>
-        <div style={{ width: 55, flexShrink: 0 }} />
+        <div style={{ width: 65, flexShrink: 0 }} />
         <div style={{ position: 'relative', flex: 1, height: 14, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
           {hours.map((m, i) => (
             <span key={m} style={{ position: 'absolute', left: `${((m - from) / span) * 100}%`, transform: i === 0 ? 'none' : m >= to ? 'translateX(-100%)' : 'translateX(-50%)' }}>{hhmm(m)}</span>
@@ -274,7 +251,7 @@ export function PlanVsActual({ plans = [], entries = [] }) {
       {/* Hover tooltip */}
       {hover.visible && hover.item && (
         <div style={{
-          position: 'fixed', left: hover.x, top: hover.y - 12,
+          position: 'fixed', left: Math.min(Math.max(hover.x, 80), typeof window !== 'undefined' ? window.innerWidth - 80 : hover.x), top: hover.y - 12,
           transform: 'translate(-50%, -100%)',
           pointerEvents: 'none', zIndex: 9999,
           background: 'rgba(15,23,42,0.97)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 10,
@@ -287,7 +264,7 @@ export function PlanVsActual({ plans = [], entries = [] }) {
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: categoryColor(hover.item.category) }} />
             <span style={{ color: '#818CF8', fontSize: 11 }}>{hover.item.category}</span>
           </div>
-          {hover.kind === 'actual' && hover.item.planOutcome && (
+          {(hover.kind === 'actual' || hover.kind === 'deviations') && hover.item.planOutcome && (
             <div style={{ marginTop: 2, fontSize: 11, color: hover.item.planOutcome === 'followed' ? '#34D399' : '#FB7185' }}>
               {hover.item.planOutcome === 'followed' ? '✓ Followed plan' : `✗ ${hover.item.planOutcome}`}
             </div>

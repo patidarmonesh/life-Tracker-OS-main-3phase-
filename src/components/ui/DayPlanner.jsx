@@ -232,7 +232,18 @@ export default function DayPlanner({ date, categories }) {
     <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0' }}>Diary photo or typed notes → editable plan → Calendar reminders → actual check-ins.</p>
     {plans.length > 0 && <>
       <div style={{ padding: 12, borderRadius: 12, background: 'rgba(148,163,184,0.04)', border: '1px solid var(--border)', marginBottom: 12 }}>
-        <PlanVsActual plans={plans} entries={entries.filter(e => plans.some(p => p.id === e.planSlotId))} />
+        <PlanVsActual 
+          plans={plans} 
+          entries={entries.filter(e => plans.some(p => p.id === e.planSlotId))} 
+          onSelect={(item) => {
+            if (item.planSlotId) {
+              const plan = plans.find(p => p.id === item.planSlotId)
+              if (plan) openCheck(plan)
+            } else {
+              openCheck(item)
+            }
+          }} 
+        />
       </div>
       <div style={{ ...row, fontSize: 12, marginBottom: 8, color: 'var(--text-secondary)' }}>
         <span>{comparison.planned}m planned</span><span>· {comparison.followed}m followed on time</span><span>· {comparison.changed}m changed</span><span>· {comparison.pending}m awaiting check-in</span>
