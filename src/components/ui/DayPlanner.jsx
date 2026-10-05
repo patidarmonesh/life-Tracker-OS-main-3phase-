@@ -12,14 +12,18 @@ import Button from './Button'
 import Modal from './Modal'
 import { PlanVsActual } from './TimeCharts'
 import { categoryColor, formatMinutes } from '../../utils/timeColors'
+import { reconcile } from '../../utils/timeModel'
 
 const input = { width: '100%', padding: '9px 10px', borderRadius: 9, background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }
 const row = { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }
 const blank = () => ({ id: uuid(), name: '', start: '09:00', end: '10:00', category: 'Study' })
-function isDue(slot) {
+function getSlotStatus(slot) {
   const today = getTodayDateKey(slot.timezone)
   const time = new Intl.DateTimeFormat('en-GB', { timeZone: slot.timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date())
-  return slot.date < today || (slot.date === today && slot.end <= time)
+  const isPastDay = slot.date < today
+  const due = isPastDay || (slot.date === today && slot.end <= time)
+  const inProgress = !isPastDay && slot.date === today && slot.start <= time && slot.end > time
+  return { due, inProgress }
 }
 function readImage(file) {
   return new Promise((resolve, reject) => {
@@ -38,7 +42,8 @@ export default function DayPlanner({ date, categories }) {
   const timezone = normalizeTimezone(state.settings?.profile?.timezone)
   const plans = (state.timeflow?.plans || []).filter(p => p.date === date).sort((a, b) => a.start.localeCompare(b.start))
   const entries = (state.timeflow?.entries || []).filter(e => e.date === date)
-  const comparison = planComparison(plans, entries)
+  const nowMin = timeMinutes(new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()))
+  const comparison = planComparison(plans, entries, nowMin)
   const [open, setOpen] = useState(false)
   const [actualsOpen, setActualsOpen] = useState(false)
   const [expanded, setExpanded] = useState(null)
@@ -99,16 +104,17 @@ export default function DayPlanner({ date, categories }) {
           date: draftDate,
           start: act.start,
           end: act.end,
-          name: act.name?.trim() || act.category,
-          category: act.category,
+          name: act.planOutcome === 'missed' ? 'Missed' : (act.name?.trim() || act.category),
+          category: act.planOutcome === 'missed' ? 'Other' : act.category,
           durationMinutes: durationMinutes(act.start, act.end),
           planSlotId: act.planSlotId,
           planOutcome: act.planOutcome || 'followed',
           deviationReason: act.deviationReason?.trim() || '',
-          isWaste: WASTE_CATEGORIES.includes(act.category),
+          isWaste: WASTE_CATEGORIES.includes(act.planOutcome === 'missed' ? 'Other' : act.category),
           productivityScore: 3,
           mood: 3,
           source: 'auto-diary',
+          ghost: act.planOutcome === 'missed',
           createdAt: updatedAt,
           updatedAt,
           studySessionId
@@ -150,10 +156,22 @@ export default function DayPlanner({ date, categories }) {
   function savePlan() {
     try {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(draftDate) || new Date(`${draftDate}T00:00:00Z`).toISOString().slice(0, 10) !== draftDate) throw new Error('Choose a valid plan date.')
-      const slots = draft.length ? validateSlots(draft) : []
+      const today = getTodayDateKey(timezone)
+      if (draftDate < today) throw new Error('Cannot edit past plans.')
+      
+      let slots = draft.length ? validateSlots(draft) : []
+      const nowM = timeMinutes(new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()))
+      
       const updatedAt = new Date().toISOString()
       setModule('timeflow', current => {
         const old = (current.plans || []).filter(p => p.date === draftDate)
+        
+        if (draftDate === today) {
+           const pastOld = old.filter(p => timeMinutes(p.start) < nowM)
+           const futureNew = slots.filter(s => timeMinutes(s.start) >= nowM)
+           slots = [...pastOld, ...futureNew].sort((a, b) => a.start.localeCompare(b.start))
+        }
+
         const kept = new Set(slots.map(s => s.id))
         const removed = old.filter(p => (!kept.has(p.id) || !calendarEnabled) && p.calendarEnabled)
         return { ...current,
@@ -173,7 +191,7 @@ export default function DayPlanner({ date, categories }) {
   }
   function saveCheck() {
     try {
-      const { slot, outcome, name, start, end, category, reason } = check
+      const { slot, outcome, name, start, end, category, reason = '' } = check
       validateSlots([{ name, start, end }])
       if (!isDue({ ...slot, start, end })) throw new Error('Actual time cannot be in the future. Check in after the activity ends.')
       
@@ -184,8 +202,28 @@ export default function DayPlanner({ date, categories }) {
       let savedActual, previousActual
       setModule('timeflow', current => {
         const existing = (current.entries || []).find(e => e.id === check.entryId || e.planSlotId === slot.id)
-        const actual = { ...existing, id: existing?.id || uuid(), date: slot.date, start, end, name: name.trim(), category, durationMinutes: durationMinutes(start, end), planSlotId: slot.id, planOutcome: actualOutcome, deviationReason: reason.trim(), isWaste: WASTE_CATEGORIES.includes(category), productivityScore: existing?.productivityScore || 3, mood: existing?.mood || 3, source: 'plan-check-in', createdAt: existing?.createdAt || updatedAt, updatedAt }
-        actual.studySessionId = category === 'Study' ? existing?.studySessionId || `plan-study-${actual.id}` : null
+        const isMissed = outcome === 'missed'
+        const actual = { 
+          ...existing, 
+          id: existing?.id || uuid(), 
+          date: slot.date, 
+          start, 
+          end, 
+          name: isMissed ? 'Missed' : name.trim(), 
+          category: isMissed ? 'Other' : category, 
+          durationMinutes: durationMinutes(start, end), 
+          planSlotId: slot.id, 
+          planOutcome: actualOutcome, 
+          deviationReason: reason.trim(), 
+          isWaste: WASTE_CATEGORIES.includes(isMissed ? 'Other' : category), 
+          productivityScore: existing?.productivityScore || 3, 
+          mood: existing?.mood || 3, 
+          source: 'plan-check-in',
+          ghost: isMissed, 
+          createdAt: existing?.createdAt || updatedAt, 
+          updatedAt 
+        }
+        actual.studySessionId = (!isMissed && category === 'Study') ? existing?.studySessionId || `plan-study-${actual.id}` : null
         savedActual = actual; previousActual = existing
         return { ...current, entries: [...(current.entries || []).filter(e => e.id !== actual.id && e.planSlotId !== slot.id), actual] }
       })
@@ -225,7 +263,7 @@ export default function DayPlanner({ date, categories }) {
       </button>
       <div style={{ display: 'flex', gap: '8px' }}>
         {plans.length > 0 && <Button data-edit-action onClick={() => { setActualsOpen(true); setText(''); setPhoto(null); setError('') }} variant="secondary" style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>Log actuals</Button>}
-        <Button data-edit-action onClick={editPlan} variant="secondary" style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>{plans.length ? 'Edit plan' : 'Plan my day'}</Button>
+        <Button data-edit-action onClick={editPlan} variant="secondary" disabled={date < getTodayDateKey(timezone)} style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>{plans.length ? 'Edit plan' : 'Plan my day'}</Button>
       </div>
     </div>
     {isOpen && <div id="day-plan-body" style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)' }}>
@@ -235,14 +273,6 @@ export default function DayPlanner({ date, categories }) {
         <PlanVsActual 
           plans={plans} 
           entries={entries.filter(e => plans.some(p => p.id === e.planSlotId))} 
-          onSelect={(item) => {
-            if (item.planSlotId) {
-              const plan = plans.find(p => p.id === item.planSlotId)
-              if (plan) openCheck(plan)
-            } else {
-              openCheck(item)
-            }
-          }} 
         />
       </div>
       <div style={{ ...row, fontSize: 12, marginBottom: 8, color: 'var(--text-secondary)' }}>
@@ -261,19 +291,31 @@ export default function DayPlanner({ date, categories }) {
       <div style={{ display: 'grid', gap: 8 }}>
         {plans.map(slot => {
           const actual = entries.find(e => e.planSlotId === slot.id)
-          const due = isDue(slot)
+          const { due, inProgress } = getSlotStatus(slot)
           const color = categoryColor(slot.category)
-          const status = actual ? (actual.planOutcome === 'followed' ? ['Done', '#34D399'] : ['Changed', '#FB7185']) : due ? ['Check in', '#FBBF24'] : ['Upcoming', '#94A3B8']
-          return <div key={slot.id} style={{ padding: 12, border: '1px solid var(--border)', borderLeft: `4px solid ${color}`, borderRadius: 10, background: `${color}0A` }}>
-            <div style={{ ...row, justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ flex: '1 1 160px', minWidth: 0 }}>
-                <strong style={{ display: 'block', fontSize: 14, wordBreak: 'break-word' }}>{slot.start}–{slot.end} · {slot.name}</strong>
-                <div style={{ ...row, gap: 6, fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{slot.category} · {durationMinutes(slot.start, slot.end)}m {chip(status[0], status[1])}</div>
-              </div>
-              <Button data-edit-action variant="secondary" onClick={() => openCheck(slot)} disabled={!actual && !due} style={{ padding: '8px 12px', fontSize: 12.5 }}>{actual ? 'Edit check-in' : due ? 'What did you do?' : 'Upcoming'}</Button>
+          const status = actual ? (actual.planOutcome === 'followed' ? ['Done', '#34D399'] : actual.planOutcome === 'missed' ? ['Missed', '#F87171'] : ['Changed', '#FB7185']) : due ? ['Check in', '#FBBF24'] : inProgress ? ['In Progress', '#60A5FA'] : ['Upcoming', '#94A3B8']
+          return <div key={slot.id} style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
+            <div style={{ width: 42, flexShrink: 0, textAlign: 'right', paddingTop: 14, fontFamily: 'JetBrains Mono, monospace', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{slot.start}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{slot.end}</div>
             </div>
-            <div style={{ marginTop: 6, fontSize: 12, color: actual ? 'var(--text-secondary)' : 'var(--text-muted)' }}>{actual ? `Actual: ${actual.start}–${actual.end} · ${actual.name} (${actual.planOutcome})` : 'Actual: awaiting your confirmation'}</div>
-            {actual?.deviationReason && <div style={{ fontSize: 12, marginTop: 4 }}>Why: {actual.deviationReason}</div>}
+            <div style={{ flex: 1, padding: 12, border: '1px solid var(--border)', borderLeft: `4px solid ${color}`, borderRadius: 10, background: `${color}0A` }}>
+              <div style={{ ...row, justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+                  <strong style={{ display: 'block', fontSize: 14, wordBreak: 'break-word' }}>{slot.name}</strong>
+                  <div style={{ ...row, gap: 6, fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{slot.category} · {durationMinutes(slot.start, slot.end)}m {chip(status[0], status[1])}</div>
+                </div>
+                <Button data-edit-action variant="secondary" onClick={() => openCheck(slot)} disabled={!actual && !due && !inProgress} style={{ padding: '8px 12px', fontSize: 12.5 }}>{actual ? 'Edit check-in' : (due || inProgress) ? 'Check in' : 'Upcoming'}</Button>
+              </div>
+              <div style={{ marginTop: 8, padding: 8, background: 'var(--bg-primary)', borderRadius: 6, fontSize: 12, color: actual ? 'var(--text-secondary)' : 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                {actual ? (
+                  actual.planOutcome === 'missed' ? 
+                    <span><strong style={{ color: 'var(--text-primary)' }}>Actual:</strong> Missed completely</span> : 
+                    <span><strong style={{ color: 'var(--text-primary)' }}>Actual:</strong> {actual.start}–{actual.end} · {actual.name} <span style={{ color: actual.planOutcome === 'followed' ? '#34D399' : '#FB7185' }}>({actual.planOutcome})</span></span>
+                ) : 'Actual: awaiting your confirmation'}
+                {actual?.deviationReason && <div style={{ marginTop: 4, color: 'var(--text-secondary)' }}><strong style={{ color: 'var(--text-primary)' }}>Why:</strong> {actual.deviationReason}</div>}
+              </div>
+            </div>
           </div>
         })}
       </div>
@@ -281,7 +323,7 @@ export default function DayPlanner({ date, categories }) {
     </>}
     </div>}
     <Modal isOpen={open} onClose={() => { if (!busy) setOpen(false) }} title={`Plan your day · ${draftDate}`}>
-      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Review AI assumptions and times before saving. Only saved plans sync to Calendar. Photos/notes are sent to Gemini when you generate.</p>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Review AI assumptions and times before saving. Past slots are locked to prevent adherence spoofing.</p>
       <textarea
         aria-label="Tentative day plan"
         style={input}
@@ -310,7 +352,20 @@ export default function DayPlanner({ date, categories }) {
       />
       <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={choosePhoto} />
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={choosePhoto} />
-      <div style={{ ...row, margin: '10px 0' }}><Button variant="secondary" onClick={() => fileRef.current.click()} disabled={busy}>Upload diary</Button><Button variant="secondary" onClick={() => cameraRef.current.click()} disabled={busy}>Take photo</Button><Button onClick={generate} disabled={busy || (!text.trim() && !photo)}>{busy ? 'Reading plan…' : 'Generate timeline'}</Button></div>
+      <div style={{ ...row, margin: '10px 0', flexWrap: 'wrap' }}><Button variant="secondary" onClick={() => fileRef.current.click()} disabled={busy}>Upload diary</Button><Button variant="secondary" onClick={() => cameraRef.current.click()} disabled={busy}>Take photo</Button><Button variant="secondary" onClick={async () => {
+        try {
+          const items = await navigator.clipboard.read()
+          for (const item of items) {
+            const imgType = item.types.find(t => t.startsWith('image/'))
+            if (imgType) {
+              const blob = await item.getType(imgType)
+              readImage(new File([blob], 'pasted.png', { type: blob.type })).then(setPhoto).catch(e => showToast(e.message, 'error'))
+              return
+            }
+          }
+          showToast('No image in clipboard.', 'error')
+        } catch (e) { showToast('Clipboard read failed. Try Ctrl+V inside the text box.', 'error') }
+      }} disabled={busy}>Paste image</Button><Button onClick={generate} disabled={busy || (!text.trim() && !photo)}>{busy ? 'Reading plan…' : 'Generate timeline'}</Button></div>
       {photo && <div style={row}><img src={photo.preview} alt="Selected diary page" style={{ maxHeight: 130, maxWidth: '100%', borderRadius: 8 }} /><button onClick={() => setPhoto(null)}>Remove photo</button></div>}
       {notes.length > 0 && <ul style={{ fontSize: 12 }}>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
       <p style={{ fontSize: 12 }}>You can also build the schedule manually. Use 24:00 for midnight at the end of this day.</p>
@@ -357,9 +412,23 @@ export default function DayPlanner({ date, categories }) {
         }}
         placeholder="E.g. Woke up at 7:30 instead of 7... or PASTE (Ctrl+V) a photo of your diary."
       />
-      <div style={{ ...row, margin: '10px 0' }}>
+      <div style={{ ...row, margin: '10px 0', flexWrap: 'wrap' }}>
         <Button variant="secondary" onClick={() => fileRef.current.click()} disabled={busy}>Upload diary</Button>
         <Button variant="secondary" onClick={() => cameraRef.current.click()} disabled={busy}>Take photo</Button>
+        <Button variant="secondary" onClick={async () => {
+          try {
+            const items = await navigator.clipboard.read()
+            for (const item of items) {
+              const imgType = item.types.find(t => t.startsWith('image/'))
+              if (imgType) {
+                const blob = await item.getType(imgType)
+                readImage(new File([blob], 'pasted.png', { type: blob.type })).then(setPhoto).catch(e => showToast(e.message, 'error'))
+                return
+              }
+            }
+            showToast('No image in clipboard.', 'error')
+          } catch (e) { showToast('Clipboard read failed. Try Ctrl+V inside the text box.', 'error') }
+        }} disabled={busy}>Paste image</Button>
         <Button onClick={generateActuals} disabled={busy || (!text.trim() && !photo)}>{busy ? 'Reading actuals…' : 'Log Actuals'}</Button>
       </div>
       {photo && <div style={row}><img src={photo.preview} alt="Selected diary page" style={{ maxHeight: 130, maxWidth: '100%', borderRadius: 8 }} /><button onClick={() => setPhoto(null)}>Remove photo</button></div>}
@@ -386,18 +455,18 @@ export default function DayPlanner({ date, categories }) {
               end: c.slot.end
             }))
           }}>
-            <option value="followed">Yes, exactly as planned</option>
-            <option value="partial">Yes, but times changed</option>
-            <option value="changed">No, I did something else</option>
-            <option value="missed">No, I missed it entirely</option>
+            <option value="followed">Yes, same as planned</option>
+            <option value="partial">Partial (times changed)</option>
+            <option value="changed">No, something else</option>
+            <option value="missed">No, missed it entirely</option>
           </select>
         </label>
 
-        {check.outcome !== 'followed' && (
+        {check.outcome !== 'followed' && check.outcome !== 'missed' && (
           <div style={{ padding: 12, background: 'var(--bg-secondary)', borderRadius: 8, display: 'grid', gap: 12 }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Actual Details</div>
             
-            {check.outcome !== 'missed' && (
+            {check.outcome === 'changed' && (
               <>
                 <label style={{ fontSize: 13 }}>What did you actually do?
                   <input style={{ ...input, marginTop: 4 }} value={check.name} onChange={e => setCheck(c => ({ ...c, name: e.target.value }))} placeholder="e.g. studied maths" />
@@ -414,10 +483,6 @@ export default function DayPlanner({ date, categories }) {
               <label style={{ fontSize: 13 }}>Start time<input type="time" style={{ ...input, marginTop: 4 }} value={check.start} onChange={e => setCheck(c => ({ ...c, start: e.target.value }))} /></label>
               <label style={{ fontSize: 13 }}>End time<input type="time" style={{ ...input, marginTop: 4 }} value={check.end} onChange={e => setCheck(c => ({ ...c, end: e.target.value }))} /></label>
             </div>
-
-            {check.outcome !== 'partial' && <label style={{ fontSize: 13 }}>Briefly, why did the plan change?
-              <input style={{ ...input, marginTop: 4 }} value={check.reason} onChange={e => setCheck(c => ({ ...c, reason: e.target.value }))} placeholder="Optional reflection" />
-            </label>}
           </div>
         )}
 

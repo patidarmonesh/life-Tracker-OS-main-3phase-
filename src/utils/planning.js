@@ -23,34 +23,43 @@ export function validateSlots(slots) {
   return sorted
 }
 
-// Allocate each minute once. For conflicting legacy logs the latest edited entry wins.
-export function summarizeTime(entries = []) {
-  const minutes = Array(1440).fill(null)
-  const sorted = [...entries].sort((a, b) => String(a.updatedAt || a.createdAt || '').localeCompare(String(b.updatedAt || b.createdAt || '')))
-  let recorded = 0
-  for (const entry of sorted) {
-    const duration = durationMinutes(entry.start, entry.end)
-    if (!duration) continue
-    recorded += duration
-    for (let i = timeMinutes(entry.start); i < timeMinutes(entry.end); i++) minutes[i] = entry
+import { reconcile } from './timeModel'
+
+// Allocate each minute once.
+export function summarizeTime(entries = [], nowMin = 1440) {
+  const result = reconcile({ plans: [], entries, nowMin })
+  
+  const categories = {}
+  let loggedMins = 0
+  let wasteMins = 0
+  let sleepMins = 0
+  let productiveMins = 0
+
+  Object.entries(result.byGroup).forEach(([g, v]) => {
+    categories[g] = v.actual
+    loggedMins += v.actual
+    if (g === 'Waste Time' || g === 'waste' || WASTE_CATEGORIES.includes(g) || /waste/i.test(g)) wasteMins += v.actual
+    else if (g === 'Sleep') sleepMins += v.actual
+    else if (g !== 'Meals' && g !== 'maintenance') productiveMins += v.actual
+  })
+
+  const pastUnloggedMins = result.gaps.reduce((a, g) => a + g.min, 0)
+
+  return { 
+    productiveMins, 
+    wasteMins, 
+    sleepMins, 
+    loggedMins, 
+    unloggedMins: 1440 - loggedMins, 
+    pastUnloggedMins,
+    overlapMins: result.conflictMins, 
+    categories 
   }
-  const result = { productiveMins: 0, wasteMins: 0, sleepMins: 0, loggedMins: 0, unloggedMins: 0, overlapMins: 0, categories: {} }
-  for (const entry of minutes) {
-    if (!entry) { result.unloggedMins++; continue }
-    result.loggedMins++
-    const category = entry.category || 'Other'
-    result.categories[category] = (result.categories[category] || 0) + 1
-    if (entry.isWaste || WASTE_CATEGORIES.includes(category)) result.wasteMins++
-    else if (category === 'Sleep') result.sleepMins++
-    else if (category !== 'Meals') result.productiveMins++
-  }
-  result.overlapMins = recorded - result.loggedMins
-  return result
 }
 
 // Legacy quick-add could store overnight logs in one row. Attribute each portion
 // to its calendar day without changing or deleting the stored record.
-export function summarizeDay(entries = [], date) {
+export function normalizeDay(entries = [], date) {
   const dayEntries = []
   for (const entry of entries) {
     const start = timeMinutes(entry.start), end = timeMinutes(entry.end)
@@ -62,22 +71,36 @@ export function summarizeDay(entries = [], date) {
       if (nextDay.toISOString().slice(0, 10) === date && end > 0) dayEntries.push({ ...entry, start: '00:00' })
     } else if (entry.date === date) dayEntries.push(entry)
   }
-  return summarizeTime(dayEntries)
+  return dayEntries
 }
 
-export function planComparison(slots = [], entries = []) {
-  let planned = 0, followed = 0, changed = 0, pending = 0
-  const rows = slots.map(slot => {
-    const minutes = durationMinutes(slot.start, slot.end)
-    const actual = entries.find(e => e.planSlotId === slot.id)
-    const actualMinutes = actual ? durationMinutes(actual.start, actual.end) : 0
-    const matched = (actual && actual.planOutcome !== 'missed') ? Math.max(0, Math.min(timeMinutes(slot.end), timeMinutes(actual.end)) - Math.max(timeMinutes(slot.start), timeMinutes(actual.start))) : 0
-    planned += minutes
-    followed += matched
-    if (actual) changed += minutes - matched
-    else pending += minutes
-    return { name: slot.name, planned: minutes, actual: actualMinutes, followed: matched }
-  })
+export function summarizeDay(entries = [], date, nowMin = 1440) {
+  return summarizeTime(normalizeDay(entries, date), nowMin)
+}
+
+export function planComparison(slots = [], entries = [], nowMin = 1440) {
+  const r = reconcile({ plans: slots, entries, nowMin })
+  
+  const rows = r.slots.map(s => ({
+    name: s.name,
+    planned: s.minutes,
+    actual: s.lived > 0 ? (s.on + s.subs.reduce((a, b) => a + b.min, 0)) : 0,
+    followed: s.on
+  }))
+
+  const planned = r.slots.reduce((a, s) => a + s.minutes, 0)
+  const followed = r.slots.reduce((a, s) => a + s.on, 0)
+  const pending = r.slots.reduce((a, s) => a + s.fut, 0)
+  const changed = planned - followed - pending
   const reviewed = planned - pending
-  return { planned, followed, changed, pending, reviewed, adherence: reviewed ? Math.round(followed / reviewed * 100) : null, rows }
+  
+  return { 
+    planned, 
+    followed, 
+    changed, 
+    pending, 
+    reviewed, 
+    adherence: r.adherence, 
+    rows 
+  }
 }

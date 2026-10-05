@@ -36,24 +36,19 @@ export function ChartTooltip({ active, payload, label, unit = 'h', labelFormatte
 }
 
 /* ─── Hover Tooltip ─── */
-function BlockTooltip({ entry, range, x, visible }) {
+import HoverCard from './HoverCard'
+
+function BlockTooltip({ entry, range, x, y, visible }) {
   if (!visible || !entry) return null
   const dur = range.end - range.start
   return (
-    <div style={{
-      position: 'fixed', left: x, top: 'auto', bottom: 'auto',
-      transform: 'translate(-50%, -110%)',
-      pointerEvents: 'none', zIndex: 9999,
-      background: 'rgba(15,23,42,0.97)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 10,
-      padding: '8px 12px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-      fontSize: 12, color: '#F8FAFC', whiteSpace: 'nowrap', minWidth: 140,
-    }}>
+    <HoverCard point={{ x, y: y || 0 }}>
       <div style={{ fontWeight: 700, marginBottom: 4 }}>{entry.name || entry.category}</div>
       <div style={{ color: '#94A3B8' }}>
         {entry.start} – {entry.end} · {formatMinutes(dur)}
       </div>
       {entry.category && <div style={{ color: '#818CF8', fontSize: 11, marginTop: 2 }}>{entry.category}</div>}
-    </div>
+    </HoverCard>
   )
 }
 
@@ -146,20 +141,7 @@ export function DayRibbon({ entries = [], height = 48, showAxis = true, compact 
         </div>
       )}
       {/* Hover tooltip */}
-      {hover.visible && hover.entry && (
-        <div style={{
-          position: 'fixed', left: Math.min(Math.max(hover.x, 80), typeof window !== 'undefined' ? window.innerWidth - 80 : hover.x), top: hover.y - 12,
-          transform: 'translate(-50%, -100%)',
-          pointerEvents: 'none', zIndex: 9999,
-          background: 'rgba(15,23,42,0.97)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 10,
-          padding: '8px 12px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-          fontSize: 12, color: '#F8FAFC', whiteSpace: 'nowrap',
-        }}>
-          <div style={{ fontWeight: 700, marginBottom: 2 }}>{hover.entry.name || hover.entry.category}</div>
-          <div style={{ color: '#94A3B8' }}>{hover.entry.start} – {hover.entry.end} · {formatMinutes(hover.range.end - hover.range.start)}</div>
-          <div style={{ color: '#818CF8', fontSize: 11 }}>{hover.entry.category}</div>
-        </div>
-      )}
+      <BlockTooltip entry={hover.entry} range={hover.range} x={hover.x} y={hover.y} visible={hover.visible} />
     </div>
   )
 }
@@ -168,7 +150,7 @@ export function DayRibbon({ entries = [], height = 48, showAxis = true, compact 
  * Two aligned lanes (Plan on top, Actual below) over the active part of the day,
  * so it is obvious at a glance where the day followed or drifted from the plan.
  */
-export function PlanVsActual({ plans = [], entries = [], onSelect }) {
+export function PlanVsActual({ plans = [], entries = [] }) {
   const [selected, setSelected] = useState(null)
   const [hover, setHover] = useState({ visible: false, item: null, kind: '', x: 0, y: 0 })
   const items = [...plans, ...entries].map(toRange).filter(Boolean)
@@ -197,14 +179,16 @@ export function PlanVsActual({ plans = [], entries = [], onSelect }) {
               const outcome = item.planOutcome
               const isDev = kind === 'deviations'
               const isUnplanned = kind === 'actual' && !item.planSlotId
-              const isSel = selected && (selected.id === item.id || selected.name === item.name)
+              const isSel = selected && (
+                selected.id === item.id || 
+                selected.planSlotId === item.id || 
+                item.planSlotId === selected.id || 
+                (selected.id && item.id && (String(selected.id).startsWith(String(item.id)) || String(item.id).startsWith(String(selected.id))))
+              )
               return (
                 <div
                   key={item.id || `${item.start}-${item.name}-${kind}`}
-                  onClick={() => {
-                    setSelected(item)
-                    if (onSelect && kind === 'plan') onSelect(item)
-                  }}
+                  onClick={() => setSelected(item)}
                   onMouseEnter={e => setHover({ visible: true, item, kind, x: e.clientX, y: e.clientY })}
                   onMouseMove={e => setHover(h => ({ ...h, x: e.clientX, y: e.clientY }))}
                   onMouseLeave={() => setHover({ visible: false, item: null, kind: '', x: 0, y: 0 })}
@@ -229,26 +213,40 @@ export function PlanVsActual({ plans = [], entries = [], onSelect }) {
 
   const hhmmFmt = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
   const deviations = []
+  
+  // 1. Plan deviations (missed parts)
+  plans.forEach(p => {
+    const pr = toRange(p)
+    if (!pr) return
+    const actuals = entries.filter(e => e.planSlotId === p.id && !e.ghost && e.planOutcome !== 'missed').map(toRange).filter(Boolean)
+    if (!actuals.length) {
+      deviations.push({ ...p, name: p.name + ' (missed completely)', planOutcome: 'missed', id: p.id + '-missed' })
+      return
+    }
+    // Simplistic diff for one matching actual
+    const a = actuals[0]
+    if (a.start > pr.start) deviations.push({ ...p, start: hhmmFmt(pr.start), end: hhmmFmt(Math.min(a.start, pr.end)), name: p.name + ' (missed start)', planOutcome: 'missed', id: p.id + '-missed-start' })
+    if (a.end < pr.end) deviations.push({ ...p, start: hhmmFmt(Math.max(a.end, pr.start)), end: hhmmFmt(pr.end), name: p.name + ' (missed end)', planOutcome: 'missed', id: p.id + '-missed-end' })
+  })
+
+  // 2. Extra/unplanned parts
   entries.forEach(e => {
-    if (e.planOutcome === 'missed') {
+    if (e.ghost || e.planOutcome === 'missed') return
+    const er = toRange(e)
+    if (!er) return
+    if (!e.planSlotId) {
       deviations.push(e)
-    } else if (e.planOutcome === 'changed' && e.planSlotId) {
+    } else {
       const p = plans.find(plan => plan.id === e.planSlotId)
       if (p) {
-        const er = toRange(e)
         const pr = toRange(p)
-        if (er && pr) {
-          if (er.start < pr.start) deviations.push({ ...e, start: hhmmFmt(er.start), end: hhmmFmt(pr.start), name: e.name + ' (early)', id: e.id + '-early' })
-          if (er.end > pr.end) deviations.push({ ...e, start: hhmmFmt(pr.end), end: hhmmFmt(er.end), name: e.name + ' (extra)', id: e.id + '-extra' })
-          if (er.start > pr.start) deviations.push({ ...p, start: hhmmFmt(pr.start), end: hhmmFmt(er.start), name: p.name + ' (missed start)', planOutcome: 'missed', id: p.id + '-missed-start' })
-          if (er.end < pr.end) deviations.push({ ...p, start: hhmmFmt(er.end), end: hhmmFmt(pr.end), name: p.name + ' (missed end)', planOutcome: 'missed', id: p.id + '-missed-end' })
+        if (pr) {
+          if (er.start < pr.start) deviations.push({ ...e, start: hhmmFmt(er.start), end: hhmmFmt(Math.min(er.end, pr.start)), name: e.name + ' (early)', id: e.id + '-early' })
+          if (er.end > pr.end) deviations.push({ ...e, start: hhmmFmt(Math.max(er.start, pr.end)), end: hhmmFmt(er.end), name: e.name + ' (extra)', id: e.id + '-extra' })
         }
       } else {
         deviations.push(e)
       }
-    } else if (!e.planSlotId) {
-      // Unplanned activity completely
-      deviations.push(e)
     }
   })
 
@@ -287,14 +285,7 @@ export function PlanVsActual({ plans = [], entries = [], onSelect }) {
       </div>
       {/* Hover tooltip */}
       {hover.visible && hover.item && (
-        <div style={{
-          position: 'fixed', left: Math.min(Math.max(hover.x, 80), typeof window !== 'undefined' ? window.innerWidth - 80 : hover.x), top: hover.y - 12,
-          transform: 'translate(-50%, -100%)',
-          pointerEvents: 'none', zIndex: 9999,
-          background: 'rgba(15,23,42,0.97)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 10,
-          padding: '8px 12px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-          fontSize: 12, color: '#F8FAFC', whiteSpace: 'nowrap',
-        }}>
+        <HoverCard point={{ x: hover.x, y: hover.y }}>
           <div style={{ fontWeight: 700, marginBottom: 2 }}>{hover.item.name || hover.item.category}</div>
           <div style={{ color: '#94A3B8' }}>{hover.item.start} – {hover.item.end} · {formatMinutes((toRange(hover.item)?.end || 0) - (toRange(hover.item)?.start || 0))}</div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
@@ -306,7 +297,7 @@ export function PlanVsActual({ plans = [], entries = [], onSelect }) {
               {hover.item.planOutcome === 'followed' ? '✓ Followed plan' : `✗ ${hover.item.planOutcome}`}
             </div>
           )}
-        </div>
+        </HoverCard>
       )}
     </div>
   )

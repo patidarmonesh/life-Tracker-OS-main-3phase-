@@ -79,7 +79,7 @@ function getTimeTheme(hour) {
 }
 
 // ── Animated Clock Component ──────────────────────────────
-function LiveClock({ productiveMins, wasteMins, unloggedMins }) {
+function LiveClock({ productiveMins, wasteMins, pastUnloggedMins, remainingMins }) {
   const [now, setNow] = useState(new Date())
   const animRef = useRef(null)
 
@@ -217,7 +217,8 @@ function LiveClock({ productiveMins, wasteMins, unloggedMins }) {
         {[
           { label: 'Productive', value: `${(productiveMins/60).toFixed(1)}h`, color: '#10B981' },
           { label: 'Waste', value: `${(wasteMins/60).toFixed(1)}h`, color: '#EF4444' },
-          { label: 'Unlogged', value: `${(unloggedMins/60).toFixed(1)}h`, color: 'var(--text-muted)' },
+          { label: 'Past Gap', value: `${(pastUnloggedMins/60).toFixed(1)}h`, color: '#FB7185' },
+          { label: 'Remaining', value: `${(remainingMins/60).toFixed(1)}h`, color: 'var(--text-muted)' },
         ].map(({ label, value, color }) => (
           <div key={label} style={{
             padding: '8px 14px', borderRadius: '12px',
@@ -335,7 +336,8 @@ export default function TimeFlow() {
   const donutSorted = [...donutData].sort((a, b) => b.value - a.value).map(d => ({ ...d, fill: CATEGORY_COLORS[d.name] || categoryColor(d.name) }))
   const donutTotal = donutSorted.reduce((a, d) => a + d.value, 0)
   const nowDate = new Date()
-  const nowMinute = nowDate.getHours() * 60 + nowDate.getMinutes()
+  const tzTime = new Intl.DateTimeFormat('en-US', { timeZone: state.settings?.profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone, hour: 'numeric', minute: 'numeric', hour12: false }).format(nowDate)
+  const nowMinute = parseInt(tzTime.split(':')[0]) * 60 + parseInt(tzTime.split(':')[1])
 
   // Weekly data: 7 days ending on the selected date (browse back in time with the date picker)
   const weeklyData = useMemo(() => Array.from({ length: 7 }, (_, i) => {
@@ -370,10 +372,10 @@ export default function TimeFlow() {
   }
 
   function getSmartEndTime(startTime) {
-    // End time = start time + 1 hour
     const [h, m] = startTime.split(':').map(Number)
-    const endH = Math.min(h + 1, 23)
-    return `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    const mins = h * 60 + m + 60
+    if (mins >= 1440) return '24:00'
+    return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`
   }
 
   function resetForm() {
@@ -1484,7 +1486,8 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
         <LiveClock
           productiveMins={selectedDate === today ? productiveMins : 0}
           wasteMins={selectedDate === today ? wasteMins : 0}
-          unloggedMins={selectedDate === today ? unloggedMins : 0}
+          pastUnloggedMins={selectedDate === today ? timeSummary.pastUnloggedMins : 0}
+          remainingMins={selectedDate === today ? (timeSummary.unloggedMins - timeSummary.pastUnloggedMins) : 0}
         />
       </div>
 
@@ -1526,7 +1529,9 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
           <Card>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
               <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', margin: 0 }}>Your day at a glance</h3>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatMinutes(timeSummary.loggedMins)} logged · {formatMinutes(timeSummary.unloggedMins)} unlogged</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                {formatMinutes(timeSummary.loggedMins)} logged · {selectedDate === today ? `${formatMinutes(timeSummary.pastUnloggedMins)} gap · ${formatMinutes(timeSummary.unloggedMins - timeSummary.pastUnloggedMins)} remaining` : `${formatMinutes(timeSummary.unloggedMins)} unlogged`}
+              </span>
             </div>
             <DayRibbon entries={dayEntries} height={40} nowMinute={selectedDate === today ? nowMinute : null} />
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
@@ -2718,8 +2723,9 @@ function TimelineEntry({ entry, onDelete, onEdit, isLast, index }) {
     }}>
       {/* Time column */}
       <div className="tl-time" style={{ width: '52px', flexShrink: 0, paddingTop: '16px' }}>
-        <div style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-muted)', textAlign: 'right', paddingRight: '8px' }}>
-          {entry.start}
+        <div style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-muted)', textAlign: 'right', paddingRight: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span>{entry.start}</span>
+          <span style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>{entry.end}</span>
         </div>
       </div>
 
