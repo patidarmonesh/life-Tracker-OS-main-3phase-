@@ -181,6 +181,7 @@ export function PlanVsActual({ plans = [], entries = [], onSelect }) {
 
   const lane = (label, list, kind) => {
     if (!list.length && kind === 'deviations') return null
+
     return (
       <div style={{ marginBottom: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -191,33 +192,27 @@ export function PlanVsActual({ plans = [], entries = [], onSelect }) {
               if (!r) return null
               const color = categoryColor(item.category)
               const left = ((Math.max(r.start, from) - from) / span) * 100
-              const width = Math.max(((Math.min(r.end, to) - Math.max(r.start, from)) / span) * 100, 0.8)
+              const width = Math.max(((Math.min(r.end, to) - Math.max(r.start, from)) / span) * 100, 0.4)
               const outcome = item.planOutcome
               const isDev = kind === 'deviations'
+              const isUnplanned = kind === 'actual' && !item.planSlotId
               return (
                 <div
-                  key={item.id || `${item.start}-${item.name}`}
-                  onClick={() => onSelect && onSelect(item)}
+                  key={item.id || `${item.start}-${item.name}-${kind}`}
+                  onClick={() => onSelect && kind === 'plan' && onSelect(item)}
                   onMouseEnter={e => setHover({ visible: true, item, kind, x: e.clientX, y: e.clientY })}
                   onMouseMove={e => setHover(h => ({ ...h, x: e.clientX, y: e.clientY }))}
                   onMouseLeave={() => setHover({ visible: false, item: null, kind: '', x: 0, y: 0 })}
                   style={{
-                    position: 'absolute', top: 4, bottom: 4, left: `${left}%`, width: `${width}%`, borderRadius: 6,
-                    background: kind === 'plan' ? `${color}33` : color,
-                    border: kind === 'plan' ? `1.5px dashed ${color}` : 'none',
-                    color: kind === 'plan' ? 'var(--text-primary)' : '#fff',
-                    fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center',
-                    overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                    outline: (isDev || (kind === 'actual' && outcome && outcome !== 'followed')) ? '2px solid #FB7185' : 'none', outlineOffset: -2,
-                    cursor: onSelect ? 'pointer' : 'default',
+                    position: 'absolute', top: 0, bottom: 0, left: `${left}%`, width: `${width}%`,
+                    background: kind === 'plan' || outcome === 'missed' ? `${color}33` : color,
+                    border: kind === 'plan' || outcome === 'missed' ? `1.5px dashed ${color}` : 'none',
+                    borderRight: kind === 'plan' || outcome === 'missed' ? 'none' : '1px solid rgba(15,23,42,0.6)',
+                    opacity: hover.item === item ? 1 : (hover.item ? 0.4 : 0.95),
+                    transition: 'opacity .15s ease',
+                    cursor: kind === 'plan' ? (onSelect ? 'pointer' : 'default') : 'default',
                   }}
-                >
-                  {width > 12 ? (
-                    <span style={{ padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.start}-{item.end} {item.name || item.category}</span>
-                  ) : width > 6 ? (
-                    <span style={{ padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || item.category}</span>
-                  ) : ''}
-                </div>
+                />
               )
             })}
           </div>
@@ -226,7 +221,30 @@ export function PlanVsActual({ plans = [], entries = [], onSelect }) {
     )
   }
 
-  const deviations = entries.filter(e => e.planOutcome === 'missed' || e.planOutcome === 'changed')
+  const hhmmFmt = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+  const deviations = []
+  entries.forEach(e => {
+    if (e.planOutcome === 'missed') {
+      deviations.push(e)
+    } else if (e.planOutcome === 'changed' && e.planSlotId) {
+      const p = plans.find(plan => plan.id === e.planSlotId)
+      if (p) {
+        const er = toRange(e)
+        const pr = toRange(p)
+        if (er && pr) {
+          if (er.start < pr.start) deviations.push({ ...e, start: hhmmFmt(er.start), end: hhmmFmt(pr.start), name: e.name + ' (early)', id: e.id + '-early' })
+          if (er.end > pr.end) deviations.push({ ...e, start: hhmmFmt(pr.end), end: hhmmFmt(er.end), name: e.name + ' (extra)', id: e.id + '-extra' })
+          if (er.start > pr.start) deviations.push({ ...p, start: hhmmFmt(pr.start), end: hhmmFmt(er.start), name: p.name + ' (missed start)', planOutcome: 'missed', id: p.id + '-missed-start' })
+          if (er.end < pr.end) deviations.push({ ...p, start: hhmmFmt(er.end), end: hhmmFmt(pr.end), name: p.name + ' (missed end)', planOutcome: 'missed', id: p.id + '-missed-end' })
+        }
+      } else {
+        deviations.push(e)
+      }
+    } else if (!e.planSlotId) {
+      // Unplanned activity completely
+      deviations.push(e)
+    }
+  })
 
   return (
     <div style={{ display: 'grid', gap: 2 }}>
