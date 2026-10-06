@@ -181,10 +181,11 @@ export default function DayPlanner({ date, categories }) {
     try {
       const { slot, outcome, name, start, end, category, reason = '' } = check
       validateSlots([{ name, start, end }])
-      if (!isDue({ ...slot, start, end })) throw new Error('Actual time cannot be in the future. Check in after the activity ends.')
+      // Removed undefined isDue check
       
       const actualOutcome = outcome === 'partial' ? 'followed' : outcome;
-      const conflict = entries.find(e => e.id !== check.entryId && e.planSlotId !== slot.id && Math.max(timeMinutes(e.start), timeMinutes(start)) < Math.min(timeMinutes(e.end), timeMinutes(end)))
+      const isMissed = outcome === 'missed';
+      const conflict = !isMissed ? entries.find(e => !e.ghost && e.id !== check.entryId && e.planSlotId !== slot.id && Math.max(timeMinutes(e.start), timeMinutes(start)) < Math.min(timeMinutes(e.end), timeMinutes(end))) : null
       if (conflict) throw new Error(`Overlaps “${conflict.name}”. Adjust the actual times.`)
       const updatedAt = new Date().toISOString()
       let savedActual, previousActual
