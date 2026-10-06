@@ -26,7 +26,12 @@ export default function PlanSyncManager() {
       busy.current = true
       try {
         for (const job of latest.current.timeflow?.calendarQueue || []) {
-          await deletePlanEvent(job.slotId)
+          try {
+            await deletePlanEvent(job.slotId)
+          } catch (e) {
+            console.error('Failed to delete calendar event', e)
+            // If it fails, we still remove it from the queue to prevent blocking the entire sync engine forever
+          }
           setModule('timeflow', current => ({ ...current, calendarQueue: (current.calendarQueue || []).filter(j => j.id !== job.id) }))
         }
         for (const slot of latest.current.timeflow?.plans || []) {

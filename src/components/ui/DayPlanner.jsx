@@ -156,22 +156,10 @@ export default function DayPlanner({ date, categories }) {
   function savePlan() {
     try {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(draftDate) || new Date(`${draftDate}T00:00:00Z`).toISOString().slice(0, 10) !== draftDate) throw new Error('Choose a valid plan date.')
-      const today = getTodayDateKey(timezone)
-      if (draftDate < today) throw new Error('Cannot edit past plans.')
-      
       let slots = draft.length ? validateSlots(draft) : []
-      const nowM = timeMinutes(new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()))
-      
       const updatedAt = new Date().toISOString()
       setModule('timeflow', current => {
         const old = (current.plans || []).filter(p => p.date === draftDate)
-        
-        if (draftDate === today) {
-           const pastOld = old.filter(p => timeMinutes(p.start) < nowM)
-           const futureNew = slots.filter(s => timeMinutes(s.start) >= nowM)
-           slots = [...pastOld, ...futureNew].sort((a, b) => a.start.localeCompare(b.start))
-        }
-
         const kept = new Set(slots.map(s => s.id))
         const removed = old.filter(p => (!kept.has(p.id) || !calendarEnabled) && p.calendarEnabled)
         return { ...current,
@@ -263,7 +251,7 @@ export default function DayPlanner({ date, categories }) {
       </button>
       <div style={{ display: 'flex', gap: '8px' }}>
         {plans.length > 0 && <Button data-edit-action onClick={() => { setActualsOpen(true); setText(''); setPhoto(null); setError('') }} variant="secondary" style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>Log actuals</Button>}
-        <Button data-edit-action onClick={editPlan} variant="secondary" disabled={date < getTodayDateKey(timezone)} style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>{plans.length ? 'Edit plan' : 'Plan my day'}</Button>
+        <Button data-edit-action onClick={editPlan} variant="secondary" style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>{plans.length ? 'Edit plan' : 'Plan my day'}</Button>
       </div>
     </div>
     {isOpen && <div id="day-plan-body" style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)' }}>
@@ -323,7 +311,7 @@ export default function DayPlanner({ date, categories }) {
     </>}
     </div>}
     <Modal isOpen={open} onClose={() => { if (!busy) setOpen(false) }} title={`Plan your day · ${draftDate}`}>
-      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Review AI assumptions and times before saving. Past slots are locked to prevent adherence spoofing.</p>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Review AI assumptions and times before saving. Only saved plans sync to Calendar. Photos/notes are sent to Gemini when you generate.</p>
       <textarea
         aria-label="Tentative day plan"
         style={input}
