@@ -10,9 +10,9 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-test-results/
-playwright-report/
-lint-results.json
+playwright-report
+test-results*
+*.zip
 *.local
 
 # Environment
@@ -30,3 +30,8 @@ lint-results.json
 *.njsproj
 *.sln
 *.sw?
+
+docs/check-output.txt
+docs/lint-report.json
+
+docs/*-output.txt

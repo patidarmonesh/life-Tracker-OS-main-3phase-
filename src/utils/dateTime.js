@@ -2,6 +2,11 @@ import { addMonths, subDays } from 'date-fns'
 
 const FALLBACK_TIMEZONE = 'UTC'
 
+/**
+ * normalizeTimezone function
+ * @param {any} timezone
+ * @returns {any}
+ */
 export function normalizeTimezone(timezone) {
   const candidate = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || FALLBACK_TIMEZONE
   try {
@@ -30,29 +35,59 @@ function getParts(date, timezone) {
   }
 }
 
+/**
+ * toDateKey function
+ * @param {any} date = new Date(), timezone
+ * @returns {any}
+ */
 export function toDateKey(date = new Date(), timezone) {
   const { year, month, day } = getParts(date, timezone)
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
+/**
+ * getTodayDateKey function
+ * @param {any} timezone
+ * @returns {any}
+ */
 export function getTodayDateKey(timezone) {
   return toDateKey(new Date(), timezone)
 }
 
+/**
+ * parseDateKey function
+ * @param {any} dateKey
+ * @returns {any}
+ */
 export function parseDateKey(dateKey) {
   // Date keys are treated as canonical calendar days and parsed at UTC midnight.
   return new Date(`${dateKey}T00:00:00Z`)
 }
 
+/**
+ * formatDateKey function
+ * @param {any} dateKey, _timezone, options
+ * @returns {any}
+ */
 export function formatDateKey(dateKey, _timezone, options) {
   const date = parseDateKey(dateKey)
   return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...options }).format(date)
 }
 
+/**
+ * getRecentDateKeys function
+ * @param {any} length, timezone, referenceDate = new Date()
+ * @returns {any}
+ */
 export function getRecentDateKeys(length, timezone, referenceDate = new Date()) {
   return Array.from({ length }, (_, i) => toDateKey(subDays(referenceDate, length - 1 - i), timezone))
 }
 
+/**
+ * getMonthDays function
+ * @param {any} referenceDate = new Date(), timezone
+ * @returns {any}
+ */
 export function getMonthDays(referenceDate = new Date(), timezone) {
   const { year, month } = getParts(referenceDate, timezone)
   const monthLength = new Date(year, month, 0).getDate()
@@ -68,7 +103,14 @@ export function getMonthDays(referenceDate = new Date(), timezone) {
   })
 }
 
+/**
+ * shiftMonth function
+ * @param {any} referenceDate = new Date(), amount = 0, timezone
+ * @returns {any}
+ */
 export function shiftMonth(referenceDate = new Date(), amount = 0, timezone) {
   const { year, month } = getParts(referenceDate, timezone)
   return addMonths(new Date(year, month - 1, 1), amount)
 }
+
+

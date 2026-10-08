@@ -5,7 +5,7 @@ import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import ConfirmDeleteButton from '../components/ui/ConfirmDeleteButton'
 import { useToast } from '../context/toastContextCore'
-import { playSuccessSound, playSubtleClick, playWarningBeep } from '../hooks/useAudio'
+import { playSuccessSound, playWarningBeep } from '../hooks/useAudio'
 import { hapticSuccess, hapticLight } from '../hooks/useHaptic'
 import { Book, Plus, Eye, BookOpen, Quote, Clock, Award } from 'lucide-react'
 
@@ -38,19 +38,25 @@ export default function ReadingTracker() {
   })
 
   // Calculations
-  const activeBooks = books.filter(b => b.currentPage < b.totalPages)
+  const activeBooks = books.filter(b => !b.totalPages || b.currentPage < b.totalPages)
   const completedBooks = books.filter(b => b.totalPages > 0 && b.currentPage >= b.totalPages)
 
   function handleSaveBook() {
     if (!form.title.trim()) return
+    const totalPages = form.totalPages === '' ? null : Number(form.totalPages)
+    const currentPage = Number(form.currentPage)
+    if ((totalPages !== null && (!Number.isInteger(totalPages) || totalPages <= 0)) || !Number.isInteger(currentPage) || currentPage < 0 || (totalPages !== null && currentPage > totalPages)) {
+      showToast('Enter valid page counts. Leave the total empty if unknown; current page cannot exceed a known total.', 'error')
+      return
+    }
 
     const newBook = {
       id: uuid(),
       title: form.title.trim(),
       author: form.author.trim() || 'Unknown Author',
       category: form.category,
-      totalPages: Number(form.totalPages) || 1,
-      currentPage: Number(form.currentPage) || 0,
+      totalPages,
+      currentPage,
       coverEmoji: form.coverEmoji || '📚',
       createdAt: new Date().toISOString(),
       highlights: [],
@@ -79,12 +85,17 @@ export default function ReadingTracker() {
   function handleAddSession() {
     const { bookId, pagesRead, minutesSpent } = sessionForm
     if (!bookId || pagesRead <= 0 || minutesSpent <= 0) return
+    const book = books.find(b => b.id === bookId)
+    if (!book || !Number.isInteger(Number(pagesRead)) || !Number.isFinite(Number(minutesSpent)) || (book.totalPages > 0 && Number(book.currentPage) + Number(pagesRead) > book.totalPages)) {
+      showToast('Check the pages read. This session would exceed the known total; correct the count before saving.', 'error')
+      return
+    }
 
     const time = new Date().toISOString()
     const updated = books.map(b => {
       if (b.id !== bookId) return b
 
-      const updatedPage = Math.min(b.totalPages, b.currentPage + Number(pagesRead))
+      const updatedPage = Number(b.currentPage) + Number(pagesRead)
       const session = {
         id: uuid(),
         pagesRead: Number(pagesRead),
@@ -171,7 +182,7 @@ export default function ReadingTracker() {
   }
 
   return (
-    <div style={{ maxWidth: '840px', margin: '0 auto', paddingBottom: '48px' }}>
+    <div className="legacy-area" style={{ maxWidth: '840px', margin: '0 auto', paddingBottom: '48px' }}>
       {/* Header */}
       <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -184,7 +195,7 @@ export default function ReadingTracker() {
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Stats Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '10px' }}>
           <Card style={{ padding: '12px', textAlign: 'center' }}>
             <div style={{ fontSize: '20px' }}>📖</div>
             <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--accent-indigo)', marginTop: '4px' }}>{activeBooks.length} Active</div>
@@ -205,14 +216,14 @@ export default function ReadingTracker() {
         </div>
 
         {/* Add Book and Log Session side-by-side */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '14px' }}>
           {/* Add Book */}
           <Card style={{ padding: '16px' }}>
             <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '13px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Plus size={14} color="var(--accent-indigo)" /> Register New Book
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '50px 1fr', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '8px' }}>
                 <div>
                   <label style={labelStyle}>Emoji</label>
                   <input
@@ -231,7 +242,7 @@ export default function ReadingTracker() {
                   />
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '8px' }}>
                 <div>
                   <label style={labelStyle}>Author</label>
                   <input
@@ -255,7 +266,7 @@ export default function ReadingTracker() {
                   </select>
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '8px' }}>
                 <div>
                   <label style={labelStyle}>Total Pages</label>
                   <input
@@ -301,7 +312,7 @@ export default function ReadingTracker() {
                     ))}
                   </select>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '8px' }}>
                   <div>
                     <label style={labelStyle}>Pages Read</label>
                     <input
@@ -352,7 +363,7 @@ export default function ReadingTracker() {
                   value={highlightForm.quote}
                   onChange={e => setHighlightForm(s => ({ ...s, quote: e.target.value }))}
                 />
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr', gap: '4px', alignItems: 'center' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '4px', alignItems: 'center' }}>
                   <input
                     style={{ ...inputStyle, padding: '6px 8px', fontSize: '11px' }}
                     placeholder="Chapter / Page ref..."
@@ -375,8 +386,8 @@ export default function ReadingTracker() {
         {/* Books List Grid */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {books.map(b => {
-            const progress = b.totalPages > 0 ? Math.round((b.currentPage / b.totalPages) * 100) : 0
-            const isCompleted = b.currentPage >= b.totalPages
+            const progress = b.totalPages > 0 && b.currentPage <= b.totalPages ? Math.round((b.currentPage / b.totalPages) * 100) : null
+            const isCompleted = b.totalPages > 0 && b.currentPage === b.totalPages
 
             // Calculate average speed from sessions
             const totalMins = b.sessions?.reduce((acc, s) => acc + (s.minutesSpent || 0), 0) || 0
@@ -427,8 +438,8 @@ export default function ReadingTracker() {
                 {/* Progress bar info */}
                 <div style={{ marginTop: '12px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                    <span>Progress: {b.currentPage} / {b.totalPages} pages</span>
-                    <span>{progress}%</span>
+                    <span>Progress: {b.currentPage} / {b.totalPages || 'unknown'} pages</span>
+                    <span>{progress == null ? 'Not measured / review pages' : String(progress) + '%'}</span>
                   </div>
                   <div style={{ height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '999px', overflow: 'hidden' }}>
                     <div style={{
@@ -442,7 +453,7 @@ export default function ReadingTracker() {
                 </div>
 
                 {/* Avg speed and counts block */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '10px', marginTop: '12px', background: 'rgba(255,255,255,0.01)', padding: '10px', borderRadius: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '10px', marginTop: '12px', background: 'rgba(255,255,255,0.01)', padding: '10px', borderRadius: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Clock size={12} color="var(--accent-indigo)" />
                     <span>Speed: <strong style={{ color: 'var(--text-secondary)' }}>{avgSpeed} pgs/min</strong></span>
@@ -485,3 +496,4 @@ export default function ReadingTracker() {
     </div>
   )
 }
+

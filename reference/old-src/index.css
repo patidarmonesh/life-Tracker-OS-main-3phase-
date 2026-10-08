@@ -1,0 +1,850 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #0A0F1E;
+  --bg-secondary: #111827;
+  --bg-card: #1A2235;
+  --bg-card-hover: #1E2A40;
+  --border: rgba(255, 255, 255, 0.06);
+  --border-focus: rgba(99, 102, 241, 0.5);
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #475569;
+  --accent-indigo: #6366F1;
+  --accent-emerald: #10B981;
+  --accent-amber: #F59E0B;
+  --accent-rose: #F43F5E;
+  --accent-blue: #3B82F6;
+  --accent-purple: #8B5CF6;
+  --accent-cyan: #06B6D4;
+  --finance-color: #10B981;
+  --time-color: #F59E0B;
+  --study-color: #3B82F6;
+  --habit-color: #6366F1;
+  --health-color: #EC4899;
+  --journal-color: #8B5CF6;
+
+  /* Spring easing for premium feel */
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+[data-theme="light"] {
+  --bg-primary: #F0F4FF;
+  --bg-secondary: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F8FAFC;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-focus: rgba(99, 102, 241, 0.4);
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  font-family: 'DM Sans', sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Mobile-First Responsive Foundation ─────────────────── */
+
+html {
+  /* Prevent iOS Safari pull-to-refresh */
+  overscroll-behavior-y: contain;
+  /* Smooth momentum scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+  /* Prevent text size adjustment on orientation change */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  /* Prevent overscroll bounce on Android/iOS */
+  overscroll-behavior: contain;
+}
+
+/* Touch optimization */
+input, button, a, select, textarea {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Safe area support for notched devices */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(99,102,241,0.25), rgba(139,92,246,0.2));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(99,102,241,0.4), rgba(139,92,246,0.35));
+}
+
+/* Hide scrollbar on mobile for cleaner feel */
+@media (max-width: 900px) {
+  ::-webkit-scrollbar { width: 0; height: 0; }
+}
+
+/* ── Animations ────────────────────────────────────────── */
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes toastSlideOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-8px) scale(0.96); }
+}
+
+@keyframes drawerSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes modalBackdropFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes colonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes floatOrb {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(10px, -15px) scale(1.05); }
+  66% { transform: translate(-8px, 8px) scale(0.95); }
+}
+
+@keyframes ringGlow {
+  0%, 100% { filter: drop-shadow(0 0 4px currentColor); }
+  50% { filter: drop-shadow(0 0 12px currentColor); }
+}
+
+@keyframes scoreRingFill {
+  from { stroke-dashoffset: var(--ring-circumference); }
+  to { stroke-dashoffset: var(--ring-target); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+}
+
+@keyframes typingDots {
+  0%, 20% { opacity: 0.3; }
+  50% { opacity: 1; }
+  80%, 100% { opacity: 0.3; }
+}
+
+@keyframes cardEntrance {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes confettiFall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+/* ── Page transition ────────────────────────────────────── */
+
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-enter {
+  animation: pageEnter 0.25s var(--ease-out-expo);
+}
+
+/* ── Utility Classes ───────────────────────────────────── */
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+}
+
+[data-theme="light"] .glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* Focus styles for accessibility */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Smooth transitions for interactive elements */
+button, a {
+  transition: all 0.2s ease;
+}
+
+/* AI Chat typing indicator */
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  display: inline-block;
+  animation: typingDots 1.4s infinite both;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ── Card hover micro-interaction ───────────────────────── */
+.interactive-card {
+  transition: transform 0.2s var(--ease-spring), box-shadow 0.2s ease;
+}
+.interactive-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+}
+
+/* ── Smooth theme transition ────────────────────────────── */
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color 0.4s ease,
+              color 0.3s ease,
+              border-color 0.3s ease,
+              box-shadow 0.3s ease !important;
+}
+
+/* ── Premium tooltip ────────────────────────────────────── */
+.tooltip {
+  position: absolute;
+  z-index: 10000;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(15,23,42,0.95);
+  color: #F1F5F9;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  animation: tooltipIn 0.15s ease;
+}
+@keyframes tooltipIn {
+  from { opacity: 0; transform: scale(0.95) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── Pulse glow for badges ──────────────────────────────── */
+@keyframes pulseGlowBadge {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(99,102,241,0); }
+}
+.pulse-glow {
+  animation: pulseGlowBadge 2s ease-in-out infinite;
+}
+
+/* ── Selection highlight ────────────────────────────────── */
+::selection {
+  background: rgba(99,102,241,0.3);
+  color: #F1F5F9;
+}
+
+/* ── Respect prefers-reduced-motion ─────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .page-enter {
+    animation: none;
+  }
+}
+
+/* ── Spin animation for sync indicator ──────────────────── */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── Mobile responsive utilities ────────────────────────── */
+
+@media (max-width: 480px) {
+  /* Extra small screens — tighter spacing */
+  .page-enter > div,
+  .page-enter > section {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Single column grids on small tablets */
+  .responsive-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (min-width: 1400px) {
+  /* Cap readability on ultra-wide */
+  main > .page-enter {
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+}
+
+/* ── Button ripple effect ───────────────────────────────── */
+
+.ripple-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  transform: translate(-50%, -50%);
+  transition: width 0.4s ease, height 0.4s ease, opacity 0.4s ease;
+  opacity: 0;
+}
+
+.ripple-btn:active::after {
+  width: 200%;
+  height: 200%;
+  opacity: 1;
+  transition: 0s;
+}
+
+/* ── Custom responsive rules for Finance container ── */
+.finance-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px;
+}
+@media (max-width: 768px) {
+  .finance-container {
+    padding: 12px 10px !important;
+  }
+}
+
+/* ── Premium Card Entrance Stagger ─────────────────────── */
+@keyframes cardSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Subtle glow on hover ──────────────────────────────── */
+.glow-hover:hover {
+  box-shadow: 0 0 20px rgba(99,102,241,0.12), 0 8px 32px rgba(0,0,0,0.15) !important;
+}
+
+/* ── Tab styles ────────────────────────────────────────── */
+.tab-active {
+  position: relative;
+}
+.tab-active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, #6366F1, #8B5CF6);
+}
+
+/* ── Journal rich text ─────────────────────────────────── */
+.journal-content h2,
+.journal-content h3 {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.journal-content strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.journal-content blockquote {
+  border-left: 3px solid var(--accent-indigo);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* ── Gradient text utility ─────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #6366F1, #EC4899, #8B5CF6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Premium input focus ───────────────────────────────── */
+input:focus, textarea:focus, select:focus {
+  border-color: rgba(99,102,241,0.4) !important;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.08) !important;
+}
+
+/* ── Smooth page transitions ───────────────────────────── */
+.page-content {
+  animation: cardSlideIn 0.3s var(--ease-out-expo);
+}
+
+/* ── Card shimmer loading ──────────────────────────────── */
+.shimmer-loading {
+  background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-card-hover) 50%, var(--bg-card) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ── Better mobile spacing ─────────────────────────────── */
+@media (max-width: 480px) {
+  h1 { font-size: 1.2rem !important; }
+}
+
+/* ── Animate pulse for live indicators ─────────────────── */
+@keyframes livePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+}
+.live-dot {
+  animation: livePulse 2s ease-in-out infinite;
+}
+
+/* ── Pixel 8a / Modern Mobile Optimization (412px) ────── */
+
+@media (max-width: 430px) {
+  /* Tighter page padding for narrow screens */
+  .page-enter > div,
+  .page-enter > section {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  /* Force 2-column metric grids */
+  .metric-grid-mobile {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  /* Score breakdown: allow horizontal scroll on tiny screens */
+  .score-breakdown-row {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 12px !important;
+  }
+  .score-breakdown-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Modal optimization for mobile */
+  .modal-content-mobile {
+    max-height: 82dvh !important;
+    max-height: 82vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Better touch targets */
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Reduce heading sizes further */
+  h1 { font-size: 1.15rem !important; }
+  h2 { font-size: 1rem !important; }
+}
+
+/* ── Enhanced tablet & small desktop ───────────────────── */
+@media (min-width: 431px) and (max-width: 768px) {
+  .page-enter > div,
+  .page-enter > section {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+}
+
+/* ── Ultra-wide desktop constraint ─────────────────────── */
+@media (min-width: 1440px) {
+  main > .page-enter {
+    max-width: 1320px;
+    margin: 0 auto;
+  }
+}
+
+/* ── Smooth card transitions on all devices ────────────── */
+.metric-card-hover {
+  transition: transform 0.2s var(--ease-spring), box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.metric-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+  border-color: rgba(99,102,241,0.2) !important;
+}
+@media (max-width: 430px) {
+  .metric-card-hover:hover {
+    transform: none;
+  }
+}
+
+/* ── FAB safe zone ─────────────────────────────────────── */
+.fab-safe-zone {
+  padding-bottom: 80px;
+}
+@media (max-width: 900px) {
+  .fab-safe-zone {
+    padding-bottom: 140px;
+  }
+}
+
+/* ── Premium Stagger Animation ─────────────────────────── */
+.stagger-in > * {
+  opacity: 0;
+  animation: cardSlideIn 0.4s var(--ease-out-expo) forwards;
+}
+.stagger-in > *:nth-child(1) { animation-delay: 0.03s; }
+.stagger-in > *:nth-child(2) { animation-delay: 0.06s; }
+.stagger-in > *:nth-child(3) { animation-delay: 0.09s; }
+.stagger-in > *:nth-child(4) { animation-delay: 0.12s; }
+.stagger-in > *:nth-child(5) { animation-delay: 0.15s; }
+.stagger-in > *:nth-child(6) { animation-delay: 0.18s; }
+.stagger-in > *:nth-child(7) { animation-delay: 0.21s; }
+.stagger-in > *:nth-child(8) { animation-delay: 0.24s; }
+.stagger-in > *:nth-child(9) { animation-delay: 0.27s; }
+.stagger-in > *:nth-child(10) { animation-delay: 0.30s; }
+
+/* ── Premium Button Press Effect ──────────────────────── */
+.ripple-btn:active {
+  transform: scale(0.97);
+  transition: transform 0.1s ease;
+}
+
+/* ── Smooth bottom nav active pill ────────────────────── */
+@keyframes navPillSlide {
+  from { transform: scaleX(0); opacity: 0; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+/* ── Premium glass surface ────────────────────────────── */
+.glass-surface {
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Subtle card border glow on active ────────────────── */
+@keyframes borderGlow {
+  0%, 100% { border-color: rgba(148,163,184,0.10); }
+  50% { border-color: rgba(99,102,241,0.25); }
+}
+.border-glow-active {
+  animation: borderGlow 3s ease-in-out infinite;
+}
+
+/* ── Floating label animation ─────────────────────────── */
+@keyframes floatUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.float-up {
+  animation: floatUp 0.3s var(--ease-out-expo) forwards;
+}
+
+/* ── Premium number counter animation ─────────────────── */
+@keyframes numberPop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+.number-pop {
+  animation: numberPop 0.3s var(--ease-spring);
+}
+
+/* ── Skeleton loading shimmer ─────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, 
+    rgba(30,42,64,0.4) 25%, 
+    rgba(30,42,64,0.8) 50%, 
+    rgba(30,42,64,0.4) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+/* ── Micro-interaction: checkbox tick ─────────────────── */
+@keyframes checkTick {
+  0% { transform: scale(0) rotate(-45deg); }
+  60% { transform: scale(1.2) rotate(0deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+.check-tick {
+  animation: checkTick 0.3s var(--ease-spring);
+}
+
+/* ── Mobile: Active state for tappable cards ──────────── */
+@media (max-width: 900px) {
+  .metric-card-hover:active {
+    transform: scale(0.97) !important;
+    transition: transform 0.1s ease !important;
+  }
+  
+  /* Prevent hover states on touch devices */
+  @media (hover: none) {
+    .metric-card-hover:hover {
+      transform: none !important;
+      box-shadow: none !important;
+      border-color: inherit !important;
+    }
+  }
+}
+
+/* ── Premium progress bar animation ──────────────────── */
+@keyframes progressFill {
+  from { width: 0; }
+}
+.progress-animate {
+  animation: progressFill 0.8s var(--ease-out-expo) forwards;
+}
+
+/* ── Soft glow behind hero score ─────────────────────── */
+@keyframes heroGlow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.7; }
+}
+.hero-glow {
+  animation: heroGlow 4s ease-in-out infinite;
+}
+
+/* ── Slide-in from bottom for mobile sheets ──────────── */
+@keyframes slideUpSheet {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.slide-up-sheet {
+  animation: slideUpSheet 0.35s var(--ease-out-expo);
+}
+
+/* ── Premium 2026 Animations ─────────────────────────── */
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.ai-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  margin-left: 4px;
+  vertical-align: -2px;
+  background: #6366F1;
+  border-radius: 2px;
+  animation: cursorBlink 0.8s infinite;
+}
+
+@keyframes reasoningPulse {
+  0%, 100% {
+    border-color: rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.05);
+  }
+  50% {
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 16px rgba(99, 102, 241, 0.15);
+  }
+}
+
+.thinking-block {
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  overflow: hidden;
+  animation: reasoningPulse 2s infinite ease-in-out;
+}
+
+/* ── Premium stat card with gradient accent ──────────── */
+.stat-card-premium {
+  position: relative;
+  overflow: hidden;
+}
+.stat-card-premium::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--stat-accent, #6366F1);
+  opacity: 0.7;
+}
+
+/* ── Glassmorphism card ──────────────────────────────── */
+.glass-card-premium {
+  background: rgba(20, 26, 43, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.1),
+    0 10px 30px -10px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] .glass-card-premium {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.8),
+    0 10px 30px -10px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Smooth count-up number styling ──────────────────── */
+.metric-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: -0.02em;
+}
+
+/* ── AI message entry animation ──────────────────────── */
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ai-message-enter {
+  animation: messageSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Section divider with premium gradient ────────────── */
+.section-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(99,102,241,0.2), transparent);
+  border: none;
+  margin: 20px 0;
+}
+
+/* ── Premium input styling ───────────────────────────── */
+input, textarea, select {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* ── Smooth number transitions ───────────────────────── */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* ── Better mobile modal ─────────────────────────────── */
+@media (max-width: 430px) {
+  .modal-backdrop {
+    padding: 12px 10px !important;
+    align-items: flex-end !important;
+  }
+  .modal-content {
+    border-radius: 20px 20px 12px 12px !important;
+    max-height: 88dvh !important;
+    max-height: 88vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    animation: slideUpSheet 0.3s var(--ease-out-expo) !important;
+  }
+}
+
+/* ── Spin animation ────────────────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

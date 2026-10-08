@@ -1,28 +1,5 @@
-export default function Input({ label, value, onChange, type = 'text', placeholder, prefix }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      {label && <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '500' }}>{label}</label>}
-      <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden' }}>
-        {prefix && <span style={{ padding: '0 12px', color: 'var(--text-muted)', fontSize: '14px' }}>{prefix}</span>}
-        <input
-          type={type}
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          style={{
-            flex: 1,
-            background: 'transparent',
-            border: 'none',
-            outline: 'none',
-            padding: '11px 14px',
-            color: 'var(--text-primary)',
-            fontSize: '14px',
-            fontFamily: 'DM Sans, sans-serif',
-          }}
-          onFocus={e => e.currentTarget.parentElement.style.borderColor = 'var(--border-focus)'}
-          onBlur={e => e.currentTarget.parentElement.style.borderColor = 'var(--border)'}
-        />
-      </div>
-    </div>
-  )
+import { useId } from 'react'
+export default function Input({ label, prefix, error, hint, id: providedId, ...props }) {
+  const generatedId = useId(), id = providedId || generatedId
+  return <div className="field">{label && <label htmlFor={id}>{label}</label>}<div className="input-wrap">{prefix && <span className="input-prefix">{prefix}</span>}<input id={id} aria-invalid={error ? true : undefined} aria-describedby={error || hint ? `${id}-hint` : undefined} {...props}/></div>{(error || hint) && <p id={`${id}-hint`} className={error ? 'field-error' : 'muted'}>{error || hint}</p>}</div>
 }

@@ -15,16 +15,7 @@ function getAudioContext() {
 
 // Read settings to check if sound is enabled
 function isSoundEnabled() {
-  try {
-    const rawMeta = localStorage.getItem('lifeos-module-state-v1:settings')
-    if (rawMeta) {
-      const parsed = JSON.parse(rawMeta)
-      return parsed.preferences?.soundEnabled !== false
-    }
-  } catch (e) {
-    // Ignore
-  }
-  return true
+  return typeof document !== 'undefined' && document.documentElement.dataset.sound === 'enabled'
 }
 
 /**

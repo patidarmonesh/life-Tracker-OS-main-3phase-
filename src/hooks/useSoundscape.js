@@ -82,14 +82,14 @@ export function useSoundscape() {
     
     // Stop brown noise
     if (nodes.brownSource) {
-      try { nodes.brownSource.stop() } catch {}
+      try { nodes.brownSource.stop() } catch { /* Optional device capability unavailable. */ }
       nodes.brownSource = null
     }
     nodes.brownGain = null
 
     // Stop rain noise
     if (nodes.rainSource) {
-      try { nodes.rainSource.stop() } catch {}
+      try { nodes.rainSource.stop() } catch { /* Optional device capability unavailable. */ }
       nodes.rainSource = null
     }
     nodes.rainGain = null
@@ -97,11 +97,11 @@ export function useSoundscape() {
 
     // Stop binaural beats
     if (nodes.beatsOscL) {
-      try { nodes.beatsOscL.stop() } catch {}
+      try { nodes.beatsOscL.stop() } catch { /* Optional device capability unavailable. */ }
       nodes.beatsOscL = null
     }
     if (nodes.beatsOscR) {
-      try { nodes.beatsOscR.stop() } catch {}
+      try { nodes.beatsOscR.stop() } catch { /* Optional device capability unavailable. */ }
       nodes.beatsOscR = null
     }
     nodes.beatsOscL = null

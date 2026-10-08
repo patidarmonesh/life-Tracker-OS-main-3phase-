@@ -130,7 +130,7 @@ export default function DecisionJournal() {
   }
 
   return (
-    <div style={{ maxWidth: '840px', margin: '0 auto', paddingBottom: '48px' }}>
+    <div className="legacy-area" style={{ maxWidth: '840px', margin: '0 auto', paddingBottom: '48px' }}>
       {/* Header */}
       <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -143,7 +143,7 @@ export default function DecisionJournal() {
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Stats Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '10px' }}>
           <Card style={{ padding: '12px', textAlign: 'center' }}>
             <div style={{ fontSize: '20px' }}>📁</div>
             <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--accent-indigo)', marginTop: '4px' }}>{entries.length} Total</div>
@@ -177,7 +177,7 @@ export default function DecisionJournal() {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '12px' }}>
               <div>
                 <label style={labelStyle}>Context / Why are you doing this?</label>
                 <textarea
@@ -198,7 +198,7 @@ export default function DecisionJournal() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', alignItems: 'flex-end' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '10px', alignItems: 'flex-end' }}>
               <div>
                 <label style={labelStyle}>Confidence Level: {form.confidence}%</label>
                 <input
@@ -328,7 +328,7 @@ function DecisionCard({ decision, onEvaluate, onDelete }) {
         <ConfirmDeleteButton onConfirm={() => onDelete(decision.id)} size={13} label="Delete decision" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '10px', background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', fontSize: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '12px', marginTop: '10px', background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', fontSize: '12px' }}>
         <div>
           <div style={{ fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '2px' }}>Context/Why:</div>
           <div style={{ color: 'var(--text-muted)' }}>{decision.context || 'None listed'}</div>
@@ -340,7 +340,7 @@ function DecisionCard({ decision, onEvaluate, onDelete }) {
       </div>
 
       {decision.evaluatedAt ? (
-        <div style={{ marginTop: '12px', borderTop: '1px solid rgba(148,163,184,0.08)', paddingTop: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '12px' }}>
+        <div style={{ marginTop: '12px', borderTop: '1px solid rgba(148,163,184,0.08)', paddingTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '12px', fontSize: '12px' }}>
           <div>
             <div style={{ fontWeight: '700', color: '#10B981', marginBottom: '2px' }}>Actual Outcome:</div>
             <div style={{ color: 'var(--text-primary)' }}>{decision.actualOutcome}</div>

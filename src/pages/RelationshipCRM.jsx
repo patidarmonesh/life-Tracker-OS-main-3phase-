@@ -125,7 +125,7 @@ export default function RelationshipCRM() {
   }
 
   return (
-    <div style={{ maxWidth: '840px', margin: '0 auto', paddingBottom: '48px' }}>
+    <div className="legacy-area" style={{ maxWidth: '840px', margin: '0 auto', paddingBottom: '48px' }}>
       {/* Header */}
       <div style={{ padding: '20px 24px 0', display: 'flex', justifycontent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -138,7 +138,7 @@ export default function RelationshipCRM() {
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Stats Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '10px' }}>
           <Card style={{ padding: '12px', textAlign: 'center' }}>
             <div style={{ fontSize: '20px' }}>👥</div>
             <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--accent-indigo)', marginTop: '4px' }}>{contacts.length} Total</div>
@@ -164,7 +164,7 @@ export default function RelationshipCRM() {
             <Plus size={16} color="var(--accent-indigo)" /> Register New Connection
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '10px' }}>
               <div>
                 <label style={labelStyle}>Contact Name</label>
                 <input
@@ -199,7 +199,7 @@ export default function RelationshipCRM() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '10px', alignItems: 'flex-end' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '10px', alignItems: 'flex-end' }}>
               <div>
                 <label style={labelStyle}>Phone Number (Optional)</label>
                 <input
@@ -238,7 +238,7 @@ export default function RelationshipCRM() {
         </Card>
 
         {/* Contacts Lists Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '14px' }}>
           {contacts.map(c => {
             const last = c.lastContactedAt ? new Date(c.lastContactedAt) : new Date(c.createdAt)
             const daysSince = Math.round((new Date() - last) / (1000 * 60 * 60 * 24))
