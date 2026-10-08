@@ -5,12 +5,12 @@ import { useAppActions, useAppState } from '../../context/appHooks'
 import { useToast } from '../../context/toastContextCore'
 import { draftDayPlan, draftActualLogs } from '../../services/geminiService'
 import { slotFingerprint } from '../../services/calendarService'
-import { durationMinutes, planComparison, timeMinutes, validateSlots, WASTE_CATEGORIES, summarizeDay } from '../../utils/planning'
+import { durationMinutes, planComparison, timeMinutes, validateSlots, WASTE_CATEGORIES } from '../../utils/planning'
 import { normalizeTimezone, getTodayDateKey } from '../../utils/dateTime'
 import Card from './Card'
 import Button from './Button'
 import Modal from './Modal'
-import { PlanVsActual, DayRibbon } from './TimeCharts'
+import { PlanVsActual } from './TimeCharts'
 import { categoryColor, formatMinutes } from '../../utils/timeColors'
 import { reconcile } from '../../utils/timeModel'
 
@@ -172,10 +172,34 @@ export default function DayPlanner({ date, categories }) {
       showToast(!slots.length ? 'Plan removed. Actual logs kept; Calendar cleanup queued.' : calendarEnabled ? 'Plan saved. Calendar sync queued.' : 'Tentative plan saved.', 'success')
     } catch (e) { setError(e.message) }
   }
-  function openCheck(slot) {
-    const actual = entries.find(e => e.planSlotId === slot.id)
-    setError('')
-    setCheck({ slot, entryId: actual?.id || '', outcome: actual?.planOutcome || 'followed', name: actual?.name || slot.name, start: actual?.start || slot.start, end: actual?.end || slot.end, category: actual?.category || slot.category, reason: actual?.deviationReason || '' })
+  function openCheck(slot, isExtra = false) {
+    const slotActuals = entries.filter(e => e.planSlotId === slot.id && !e.ghost).sort((a,b) => timeMinutes(a.start) - timeMinutes(b.start));
+    const actual = isExtra ? null : slotActuals[0];
+    const lastActual = slotActuals[slotActuals.length - 1];
+    setError('');
+    setCheck({ 
+      slot, 
+      entryId: actual?.id || '', 
+      outcome: isExtra ? 'changed' : (actual?.planOutcome || 'followed'), 
+      name: isExtra ? slot.name : (actual?.name || slot.name), 
+      start: actual?.start || (isExtra && lastActual ? lastActual.end : slot.start), 
+      end: actual?.end || slot.end, 
+      category: actual?.category || slot.category, 
+      reason: isExtra ? '' : (actual?.deviationReason || '') 
+    });
+  }
+  function openCheckSpecific(slot, actual) {
+    setError('');
+    setCheck({
+      slot,
+      entryId: actual.id,
+      outcome: actual.planOutcome,
+      name: actual.name,
+      start: actual.start,
+      end: actual.end,
+      category: actual.category,
+      reason: actual.deviationReason || ''
+    });
   }
   function saveCheck() {
     try {
@@ -184,8 +208,7 @@ export default function DayPlanner({ date, categories }) {
       // Removed undefined isDue check
       
       const actualOutcome = outcome === 'partial' ? 'followed' : outcome;
-      const isMissed = outcome === 'missed';
-      const conflict = !isMissed ? entries.find(e => !e.ghost && e.id !== check.entryId && e.planSlotId !== slot.id && Math.max(timeMinutes(e.start), timeMinutes(start)) < Math.min(timeMinutes(e.end), timeMinutes(end))) : null
+      const conflict = entries.find(e => e.id !== check.entryId && e.planSlotId !== slot.id && Math.max(timeMinutes(e.start), timeMinutes(start)) < Math.min(timeMinutes(e.end), timeMinutes(end)))
       if (conflict) throw new Error(`Overlaps “${conflict.name}”. Adjust the actual times.`)
       const updatedAt = new Date().toISOString()
       let savedActual, previousActual
@@ -214,7 +237,7 @@ export default function DayPlanner({ date, categories }) {
         }
         actual.studySessionId = (!isMissed && category === 'Study') ? existing?.studySessionId || `plan-study-${actual.id}` : null
         savedActual = actual; previousActual = existing
-        const newEntries = [...(current.entries || []).filter(e => e.id !== actual.id && e.planSlotId !== slot.id), actual];
+        const newEntries = [...(current.entries || []).filter(e => e.id !== actual.id), actual];
         
         if (!isMissed) {
           const actualStart = timeMinutes(start);
@@ -317,35 +340,70 @@ export default function DayPlanner({ date, categories }) {
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{pendingSync ? `${pendingSync} Calendar event(s) pending sync` : plans.some(p => p.calendarEnabled) ? 'Calendar up to date · reminders at start and your selected lead time' : 'Calendar sync off'} · {timezone}</p>
       <div style={{ display: 'grid', gap: 8 }}>
         {plans.map(slot => {
-          const actual = entries.find(e => e.planSlotId === slot.id)
-          const { due, inProgress } = getSlotStatus(slot)
-          const color = categoryColor(slot.category)
-          const status = actual ? (actual.planOutcome === 'followed' ? ['Done', '#34D399'] : actual.planOutcome === 'missed' ? ['Missed', '#F87171'] : ['Changed', '#FB7185']) : due ? ['Check in', '#FBBF24'] : inProgress ? ['In Progress', '#60A5FA'] : ['Upcoming', '#94A3B8']
-          return <div key={slot.id} style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
-            <div style={{ width: 42, flexShrink: 0, textAlign: 'right', paddingTop: 14, fontFamily: 'JetBrains Mono, monospace', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{slot.start}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{slot.end}</div>
-            </div>
-            <div style={{ flex: 1, padding: 12, border: '1px solid var(--border)', borderLeft: `4px solid ${color}`, borderRadius: 10, background: `${color}0A` }}>
-              <div style={{ ...row, justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ flex: '1 1 160px', minWidth: 0 }}>
-                  <strong style={{ display: 'block', fontSize: 14, wordBreak: 'break-word' }}>{slot.name}</strong>
-                  <div style={{ ...row, gap: 6, fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{slot.category} · {durationMinutes(slot.start, slot.end)}m {chip(status[0], status[1])}</div>
+            const slotActuals = entries.filter(e => e.planSlotId === slot.id && !e.ghost).sort((a,b) => timeMinutes(a.start) - timeMinutes(b.start));
+            const hasActuals = slotActuals.length > 0;
+            const isMissedCompletely = hasActuals && slotActuals.every(a => a.planOutcome === 'missed');
+            const { due, inProgress } = getSlotStatus(slot);
+            const color = categoryColor(slot.category);
+            
+            let status = ['Upcoming', '#94A3B8'];
+            if (hasActuals) {
+               if (isMissedCompletely) status = ['Missed', '#F87171'];
+               else if (slotActuals.some(a => a.planOutcome === 'changed')) status = ['Changed', '#FB7185'];
+               else if (slotActuals.some(a => a.planOutcome === 'followed')) status = ['Done', '#34D399'];
+               else status = ['In Progress', '#60A5FA'];
+            } else if (due) {
+               status = ['Check in', '#FBBF24'];
+            } else if (inProgress) {
+               status = ['In Progress', '#60A5FA'];
+            }
+
+            return <div key={slot.id} style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
+              <div style={{ width: 42, flexShrink: 0, textAlign: 'right', paddingTop: 14, fontFamily: 'JetBrains Mono, monospace', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{slot.start}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{slot.end}</div>
+              </div>
+              <div style={{ flex: 1, padding: 12, border: '1px solid var(--border)', borderLeft: `4px solid ${color}`, borderRadius: 10, background: `${color}0A` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+                    <strong style={{ display: 'block', fontSize: 14, wordBreak: 'break-word' }}>{slot.name}</strong>
+                    <div style={{ display: 'flex', gap: 6, fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{slot.category} &middot; {durationMinutes(slot.start, slot.end)}m {chip(status[0], status[1])}</div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                    <Button data-edit-action variant="secondary" onClick={() => openCheck(slot)} disabled={!hasActuals && !due && !inProgress} style={{ padding: '8px 12px', fontSize: 12.5 }}>
+                      {hasActuals ? (slotActuals.length > 1 ? 'Edit check-ins' : 'Edit check-in') : (due || inProgress) ? 'Check in' : 'Upcoming'}
+                    </Button>
+                    {hasActuals && !isMissedCompletely && (
+                      <Button variant="secondary" onClick={() => openCheck(slot, true)} style={{ padding: '4px 8px', fontSize: 11, color: 'var(--accent-indigo)', borderColor: 'rgba(99,102,241,0.2)' }}>+ Add log</Button>
+                    )}
+                  </div>
                 </div>
-                <Button data-edit-action variant="secondary" onClick={() => openCheck(slot)} disabled={!actual && !due && !inProgress} style={{ padding: '8px 12px', fontSize: 12.5 }}>{actual ? 'Edit check-in' : (due || inProgress) ? 'Check in' : 'Upcoming'}</Button>
-              </div>
-              <div style={{ marginTop: 8, padding: 8, background: 'var(--bg-primary)', borderRadius: 6, fontSize: 12, color: actual ? 'var(--text-secondary)' : 'var(--text-muted)', border: '1px solid var(--border)' }}>
-                {actual ? (
-                  actual.planOutcome === 'missed' ? 
-                    <span><strong style={{ color: 'var(--text-primary)' }}>Actual:</strong> Missed completely</span> : 
-                    <span><strong style={{ color: 'var(--text-primary)' }}>Actual:</strong> {actual.start}–{actual.end} · {actual.name} <span style={{ color: actual.planOutcome === 'followed' ? '#34D399' : '#FB7185' }}>({actual.planOutcome})</span></span>
-                ) : 'Actual: awaiting your confirmation'}
-                {actual?.deviationReason && <div style={{ marginTop: 4, color: 'var(--text-secondary)' }}><strong style={{ color: 'var(--text-primary)' }}>Why:</strong> {actual.deviationReason}</div>}
+                <div style={{ marginTop: 8, padding: 8, background: 'var(--bg-primary)', borderRadius: 6, fontSize: 12, color: hasActuals ? 'var(--text-secondary)' : 'var(--text-muted)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {!hasActuals ? 'Actual: awaiting your confirmation' : 
+                     slotActuals.map((actual, idx) => (
+                        <div key={actual.id} style={{ display: 'flex', flexDirection: 'column', paddingBottom: idx < slotActuals.length - 1 ? 8 : 0, borderBottom: idx < slotActuals.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                               <div style={{ flex: 1, minWidth: 0 }}>
+                                 {actual.planOutcome === 'missed' ? 
+                                    <span><strong style={{ color: 'var(--text-primary)' }}>Actual:</strong> Missed completely</span> : 
+                                    <span><strong style={{ color: 'var(--text-primary)' }}>Actual:</strong> {actual.start}�{actual.end} &middot; {actual.name} <span style={{ color: actual.planOutcome === 'followed' ? '#34D399' : '#FB7185' }}>({actual.planOutcome})</span></span>
+                                 }
+                               </div>
+                               {slotActuals.length > 1 && (
+                                   <button type="button" onClick={() => openCheckSpecific(slot, actual)} aria-label="Edit this segment" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', textDecoration: 'underline' }}>
+                                     edit
+                                   </button>
+                               )}
+                           </div>
+                           {actual.deviationReason && <div style={{ marginTop: 4, color: 'var(--text-secondary)' }}><strong style={{ color: 'var(--text-primary)' }}>Why:</strong> {actual.deviationReason}</div>}
+                        </div>
+                     ))
+                  }
+                </div>
               </div>
             </div>
-          </div>
-        })}
-      </div>
+          })}
+        </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Adherence = minutes of the same activity inside its planned slot ÷ reviewed planned minutes. Pending slots are excluded. {unplanned.length} unlinked actual {unplanned.length === 1 ? 'entry' : 'entries'} in the timeline below.</p>
     </>}
     </div>}
