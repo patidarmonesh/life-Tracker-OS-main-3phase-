@@ -30,9 +30,9 @@ test('adherence is duration weighted, pending excluded, shifts count only overla
   const slots = [{ id: 'a', name: 'Study', start: '09:00', end: '11:00' }, { id: 'b', name: 'Gym', start: '11:00', end: '12:00' }, { id: 'c', name: 'Lunch', start: '12:00', end: '13:00' }]
   const result = planComparison(slots, [{ planSlotId: 'a', start: '09:30', end: '11:00', planOutcome: 'followed' }, { planSlotId: 'b', start: '11:00', end: '12:00', planOutcome: 'missed' }])
   assert.equal(result.followed, 90)
-  assert.equal(result.changed, 90)
-  assert.equal(result.pending, 60)
-  assert.equal(result.adherence, 50)
+  assert.equal(result.changed, 60)
+  assert.equal(result.pending, 90)
+  assert.equal(result.adherence, 60)
   assert.equal(planComparison(slots, []).adherence, null)
 })
 test('legacy overnight logs contribute to both correct calendar days', () => {

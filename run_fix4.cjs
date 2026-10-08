@@ -2,16 +2,17 @@ const fs = require('fs');
 const path = 'src/components/ui/DayPlanner.jsx';
 let content = fs.readFileSync(path, 'utf8');
 
-const regex = /function savePlan\(\) \{[\s\S]*?showToast\([^;]*;\s*\} catch \(e\) \{ setError\(e\.message\) \}\s*\}/;
+const startIdx = content.indexOf('function savePlan() {');
+const endString = '  function openCheck';
+const endIdx = content.indexOf(endString, startIdx);
 
-const match = content.match(regex);
-if (match) {
+if (startIdx !== -1 && endIdx !== -1) {
+    const original = content.substring(startIdx, endIdx);
     const repl = `function savePlan() {
     try {
       if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(draftDate) || new Date(\`\${draftDate}T00:00:00Z\`).toISOString().slice(0, 10) !== draftDate) throw new Error('Choose a valid plan date.')
       let slots = draft.length ? validateSlots(draft) : []
       const updatedAt = new Date().toISOString()
-      
       setModule('timeflow', current => {
         const old = (current.plans || []).filter(p => p.date === draftDate)
         const baselines = current.planBaselines || []
@@ -58,10 +59,11 @@ if (match) {
       setExpanded(slots.length ? true : null)
       showToast(!slots.length ? 'Plan removed. Actual logs kept; Calendar cleanup queued.' : calendarEnabled ? 'Plan saved. Calendar sync queued.' : 'Tentative plan saved.', 'success')
     } catch (e) { setError(e.message) }
-  }`;
-    content = content.replace(regex, repl);
+  }
+`;
+    content = content.replace(original, repl);
     fs.writeFileSync(path, content);
-    console.log('Fix 4 applied properly');
+    console.log('Fix 4 applied');
 } else {
-    console.log('regex match failed');
+    console.log('failed to find bounds for Fix 4');
 }

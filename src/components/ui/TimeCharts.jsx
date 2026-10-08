@@ -1,16 +1,17 @@
 import { useMemo, useState } from 'react'
-import { timeMinutes } from '../../utils/planning'
+import { timeMinutes, planComparison, isWasteEntry, resolvedIntervals } from '../../utils/planning'
 import { categoryColor, formatMinutes } from '../../utils/timeColors'
 
 function toRange(item) {
   const start = timeMinutes(item.start)
   let end = timeMinutes(item.end)
   if (!Number.isFinite(start) || !Number.isFinite(end)) return null
-  if (end <= start) end = 1440 // overnight logs: show the part that belongs to this day
+  if (end === start) return null
+  if (end < start) end = 1440 // overnight logs: show the part that belongs to this day
   return { start, end }
 }
 
-const hhmm = (mins) => `${String(Math.floor(mins / 60) % 24).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`
+const hhmm = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`
 
 /** Dark tooltip for every Recharts chart in Time Flow. */
 export function ChartTooltip({ active, payload, label, unit = 'h', labelFormatter }) {
@@ -27,7 +28,7 @@ export function ChartTooltip({ active, payload, label, unit = 'h', labelFormatte
           <span style={{ width: 8, height: 8, borderRadius: 3, background: p.color || p.fill || p.payload?.fill, flexShrink: 0 }} />
           <span style={{ flex: 1 }}>{p.name}</span>
           <strong style={{ color: 'var(--text-primary)', fontFamily: 'JetBrains Mono, monospace' }}>
-            {unit === 'm' ? formatMinutes(p.value) : `${p.value}${unit}`}
+            {unit === 'm' ? formatMinutes(p.value) : `${Number(p.value.toFixed(2))}${unit}`}
           </strong>
         </div>
       ))}
@@ -45,7 +46,7 @@ function BlockTooltip({ entry, range, x, y, visible }) {
     <HoverCard point={{ x, y: y || 0 }}>
       <div style={{ fontWeight: 700, marginBottom: 4 }}>{entry.name || entry.category}</div>
       <div style={{ color: '#94A3B8' }}>
-        {entry.start} – {entry.end} · {formatMinutes(dur)}
+        {hhmm(range.start)} – {hhmm(range.end)} · {formatMinutes(dur)}
       </div>
       {entry.category && <div style={{ color: '#818CF8', fontSize: 11, marginTop: 2 }}>{entry.category}</div>}
     </HoverCard>
@@ -59,10 +60,7 @@ function BlockTooltip({ entry, range, x, y, visible }) {
 export function DayRibbon({ entries = [], height = 48, showAxis = true, compact = false, nowMinute = null, onSelect }) {
   const [selected, setSelected] = useState(null)
   const [hover, setHover] = useState({ visible: false, entry: null, range: null, x: 0, y: 0 })
-  const blocks = useMemo(() => entries
-    .map(e => ({ entry: e, range: toRange(e) }))
-    .filter(b => b.range)
-    .sort((a, b) => a.range.start - b.range.start), [entries])
+  const blocks = useMemo(() => resolvedIntervals(entries, nowMinute ?? 1440), [entries, nowMinute])
 
   const pick = (block) => {
     const next = selected?.entry?.id === block.entry.id ? null : block
@@ -89,7 +87,7 @@ export function DayRibbon({ entries = [], height = 48, showAxis = true, compact 
           const Block = compact ? 'div' : 'button'
           return (
             <Block
-              key={entry.id || `${entry.start}-${entry.name}`}
+              key={`${entry.id || entry.name}-${range.start}`}
               {...(compact ? {} : { type: 'button', onClick: () => pick({ entry, range }) })}
               onMouseEnter={e => setHover({ visible: true, entry, range, x: e.clientX, y: e.clientY })}
               onMouseMove={e => setHover(h => ({ ...h, x: e.clientX, y: e.clientY }))}
@@ -97,7 +95,7 @@ export function DayRibbon({ entries = [], height = 48, showAxis = true, compact 
               style={{
                 position: 'absolute', top: 0, bottom: 0, left: `${left}%`, width: `${width}%`,
                 minWidth: 0, minHeight: 0, padding: 0, margin: 0,
-                background: entry.isWaste ? `repeating-linear-gradient(135deg, ${color} 0 6px, ${color}B0 6px 10px)` : color,
+                background: isWasteEntry(entry) ? `repeating-linear-gradient(135deg, ${color} 0 6px, ${color}B0 6px 10px)` : color,
                 opacity: selected && !isSel ? 0.45 : 0.92,
                 border: 'none', borderRight: '1px solid rgba(15,23,42,0.6)',
                 boxShadow: isSel ? `inset 0 0 0 2px #fff` : 'none',
@@ -150,7 +148,7 @@ export function DayRibbon({ entries = [], height = 48, showAxis = true, compact 
  * Two aligned lanes (Plan on top, Actual below) over the active part of the day,
  * so it is obvious at a glance where the day followed or drifted from the plan.
  */
-export function PlanVsActual({ plans = [], entries = [] }) {
+export function PlanVsActual({ plans = [], entries = [], nowMin = 1440 }) {
   const [selected, setSelected] = useState(null)
   const [hover, setHover] = useState({ visible: false, item: null, kind: '', x: 0, y: 0 })
   const items = [...plans, ...entries].map(toRange).filter(Boolean)
@@ -177,8 +175,6 @@ export function PlanVsActual({ plans = [], entries = [] }) {
               const left = ((Math.max(r.start, from) - from) / span) * 100
               const width = Math.max(((Math.min(r.end, to) - Math.max(r.start, from)) / span) * 100, 0.4)
               const outcome = item.planOutcome
-              const isDev = kind === 'deviations'
-              const isUnplanned = kind === 'actual' && !item.planSlotId
               const isSel = selected && (
                 selected.id === item.id || 
                 selected.planSlotId === item.id || 
@@ -212,48 +208,23 @@ export function PlanVsActual({ plans = [], entries = [] }) {
   }
 
   const hhmmFmt = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+  const comparison = planComparison(plans, entries, nowMin)
   const deviations = []
-  
-  // 1. Plan deviations (missed parts)
-  plans.forEach(p => {
-    const pr = toRange(p)
-    if (!pr) return
-    const actuals = entries.filter(e => e.planSlotId === p.id && !e.ghost && e.planOutcome !== 'missed').map(toRange).filter(Boolean)
-    if (!actuals.length) {
-      deviations.push({ ...p, name: p.name + ' (missed completely)', planOutcome: 'missed', id: p.id + '-missed' })
-      return
-    }
-    // Simplistic diff for one matching actual
-    const a = actuals[0]
-    if (a.start > pr.start) deviations.push({ ...p, start: hhmmFmt(pr.start), end: hhmmFmt(Math.min(a.start, pr.end)), name: p.name + ' (missed start)', planOutcome: 'missed', id: p.id + '-missed-start' })
-    if (a.end < pr.end) deviations.push({ ...p, start: hhmmFmt(Math.max(a.end, pr.start)), end: hhmmFmt(pr.end), name: p.name + ' (missed end)', planOutcome: 'missed', id: p.id + '-missed-end' })
-  })
-
-  // 2. Extra/unplanned parts
-  entries.forEach(e => {
-    if (e.ghost || e.planOutcome === 'missed') return
-    const er = toRange(e)
-    if (!er) return
-    if (!e.planSlotId) {
-      deviations.push(e)
-    } else {
-      const p = plans.find(plan => plan.id === e.planSlotId)
-      if (p) {
-        const pr = toRange(p)
-        if (pr) {
-          if (er.start < pr.start) deviations.push({ ...e, start: hhmmFmt(er.start), end: hhmmFmt(Math.min(er.end, pr.start)), name: e.name + ' (early)', id: e.id + '-early' })
-          if (er.end > pr.end) deviations.push({ ...e, start: hhmmFmt(Math.max(er.start, pr.end)), end: hhmmFmt(er.end), name: e.name + ' (extra)', id: e.id + '-extra' })
-        }
-      } else {
-        deviations.push(e)
+  let run = null
+  comparison.minuteStates.forEach((minute, i) => {
+    if (minute?.status === 'changed') {
+      if (run && run.planSlotId === minute.plan.id && run.end === hhmmFmt(i)) run.end = hhmmFmt(i + 1)
+      else {
+        run = { ...minute.plan, id: `${minute.plan.id}-changed-${i}`, planSlotId: minute.plan.id, start: hhmmFmt(i), end: hhmmFmt(i + 1), name: `${minute.plan.name} (changed / missed)`, planOutcome: 'changed' }
+        deviations.push(run)
       }
-    }
+    } else run = null
   })
 
   return (
     <div style={{ display: 'grid', gap: 2 }}>
       {lane('Plan', plans, 'plan')}
-      {lane('Actual', entries, 'actual')}
+      {lane('Actual', resolvedIntervals(entries, nowMin).map(({ entry, range }) => ({ ...entry, id: `${entry.id}-${range.start}`, start: hhmmFmt(range.start), end: hhmmFmt(range.end) })), 'actual')}
       {lane('Deviated', deviations, 'deviations')}
       {/* Shared axis */}
       <div style={{ display: 'flex', gap: 12 }}>

@@ -1,4 +1,4 @@
-export const WASTE_CATEGORIES = ['Social Media', 'Timepass', 'Entertainment']
+export const WASTE_CATEGORIES = ['Social Media', 'Timepass', 'Waste Time', 'Entertainment']
 
 export function timeMinutes(value) {
   if (value === '24:00') return 1440
@@ -23,52 +23,60 @@ export function validateSlots(slots) {
   return sorted
 }
 
-import { reconcile } from './timeModel'
+import { resolveMinutes, kindOf } from './timeModel.js'
+export { resolveMinutes }
 
-// Allocate each minute once.
-export function summarizeTime(entries = [], nowMin = 1440, plans = []) {
-  const result = reconcile({ plans, entries, nowMin })
-  
-  const categories = {}; const plannedCategories = {}
-  let loggedMins = 0; let plannedMins = 0
+// Category answers what happened; this independent flag answers how it was judged.
+export const isWasteEntry = (entry) => entry.isWaste === true || kindOf(entry.category).kind === 'waste'
+export const isStudyEntry = (entry) => /^(study|padhai)$/i.test(entry.category || '') && !isWasteEntry(entry)
+export const dayCutoff = (date, today, minute) => date < today ? 1440 : date > today ? 0 : Math.max(0, Math.min(1440, minute))
 
-  Object.entries(result.byGroup).forEach(([g, v]) => {
-    categories[g] = v.actual
-    loggedMins += v.actual
-    plannedCategories[g] = v.planned
-    plannedMins += v.planned
-  })
-
-  const isP = (c, name, isWaste) => c === 'Study' || /study|padhai|class/i.test(c) || /study|padhai|class/i.test(name || '')
-  const isS = (c) => c === 'Sleep'
-  // Waste is bucketed later in TimeFlow, here we just track actual waste categories
-  const isW = (c, name, isWaste) => isWaste || c === 'Timepass' || c === 'Timepass'
-
-  let wasteMins = 0; let sleepMins = 0; let productiveMins = 0;
-  entries.forEach(e => {
-    if (!e || timeMinutes(e.start) >= nowMin || e.ghost || e.planOutcome === 'missed') return
-    const d = durationMinutes(e.start, e.end)
-    if (isW(e.category, e.name, e.isWaste)) wasteMins += d
-    else if (isS(e.category)) sleepMins += d
-    else if (isP(e.category, e.name, e.isWaste)) productiveMins += d
-  })
-
-  let plannedWasteMins = 0; let plannedSleepMins = 0; let plannedProductiveMins = 0;
-  result.slots.forEach(p => {
-    const d = p.lived
-    if (d <= 0) return
-    if (isW(p.category, p.name, p.flags.includes('PLANNED_WASTE') || p.isWaste)) plannedWasteMins += d
-    else if (isS(p.category)) plannedSleepMins += d
-    else if (isP(p.category, p.name, p.flags.includes('PLANNED_WASTE') || p.isWaste)) plannedProductiveMins += d
-  })
-
-  const pastUnloggedMins = result.gaps.reduce((a, g) => a + g.min, 0)
-
-  return { 
-    productiveMins, wasteMins, sleepMins, loggedMins, unloggedMins: 1440 - loggedMins, pastUnloggedMins,
-    plannedProductiveMins, plannedWasteMins, plannedSleepMins, plannedMins,
-    overlapMins: result.conflictMins, categories, plannedCategories
+export function resolvedIntervals(entries, cutoff = 1440) {
+  const mins = resolveMinutes(entries).mins
+  const intervals = []
+  let last = null
+  for (let i = 0; i < Math.min(1440, cutoff); i++) {
+    const entry = mins[i]
+    if (!entry) { last = null; continue }
+    if (last?.entry === entry) last.range.end = i + 1
+    else { last = { entry, range: { start: i, end: i + 1 } }; intervals.push(last) }
   }
+  return intervals
+}
+
+// Every category and bucket uses the same resolved, elapsed minutes.
+export function summarizeTime(entries = [], nowMin = 1440, plans = []) {
+  const cutoff = Math.max(0, Math.min(1440, Math.floor(nowMin)))
+  const { mins, conflict } = resolveMinutes(entries)
+  const planMinutes = resolveMinutes(plans).mins
+  const categories = {}, plannedCategories = {}
+  let unflaggedSleepMins = 0
+  let loggedMins = 0, productiveMins = 0, wasteMins = 0, sleepMins = 0, otherMins = 0
+  let plannedMins = 0, plannedProductiveMins = 0, plannedWasteMins = 0, plannedSleepMins = 0
+  for (let i = 0; i < cutoff; i++) {
+    const e = mins[i], p = planMinutes[i]
+    if (e) {
+      loggedMins++
+      const category = e.category || 'Other'
+      categories[category] = (categories[category] || 0) + 1
+      if (e.category === 'Sleep') { sleepMins++; if (!isWasteEntry(e)) unflaggedSleepMins++ }
+      if (isWasteEntry(e)) wasteMins++
+      else if (isStudyEntry(e)) productiveMins++
+      else otherMins++
+    }
+    if (p) {
+      plannedMins++
+      const category = p.category || 'Other'
+      plannedCategories[category] = (plannedCategories[category] || 0) + 1
+      if (p.category === 'Sleep') plannedSleepMins++
+      if (isWasteEntry(p)) plannedWasteMins++
+      else if (isStudyEntry(p)) plannedProductiveMins++
+    }
+  }
+  return { productiveMins, wasteMins, sleepMins, unflaggedSleepMins, otherMins, loggedMins,
+    unloggedMins: 1440 - loggedMins, pastUnloggedMins: cutoff - loggedMins, remainingMins: 1440 - cutoff,
+    plannedProductiveMins, plannedWasteMins, plannedSleepMins, plannedMins,
+    overlapMins: conflict.slice(0, cutoff).filter(Boolean).length, categories, plannedCategories }
 }
 
 // Legacy quick-add could store overnight logs in one row. Attribute each portion
@@ -92,29 +100,88 @@ export function summarizeDay(entries = [], date, nowMin = 1440, plans = []) {
   return summarizeTime(normalizeDay(entries, date), nowMin, normalizeDay(plans, date))
 }
 
+// Pending means unknown, even when overdue. Only actuals or explicit missed
+// check-ins review a minute; a plan alone can never prove it happened.
 export function planComparison(slots = [], entries = [], nowMin = 1440) {
-  const r = reconcile({ plans: slots, entries, nowMin })
-  
-  const rows = r.slots.map(s => ({
-    name: s.name,
-    planned: s.minutes,
-    actual: s.lived > 0 ? (s.on + s.subs.reduce((a, b) => a + b.min, 0)) : 0,
-    followed: s.on
-  }))
+  const cutoff = Math.max(0, Math.min(1440, Math.floor(nowMin)))
+  const actual = resolveMinutes(entries).mins
+  const plannedMinutes = resolveMinutes(slots).mins
+  const missed = entries.filter(e => e.planOutcome === 'missed')
+  const rows = slots.map(s => ({ id: s.id, name: s.name, planned: 0, actual: 0, followed: 0, changed: 0, pending: 0 }))
+  const minuteStates = new Array(1440).fill(null)
+  let planned = 0, followed = 0, changed = 0, pending = 0
+  for (let i = 0; i < 1440; i++) {
+    const p = plannedMinutes[i]
+    if (!p) continue
+    planned++
+    const row = rows[slots.indexOf(p)]
+    row.planned++
+    const a = i < cutoff ? actual[i] : null
+    const explicitlyMissed = i < cutoff && missed.some(e => e.planSlotId === p.id && i >= timeMinutes(e.start) && i < timeMinutes(e.end))
+    const same = a && (p.activityId && a.activityId ? p.activityId === a.activityId : p.category && a.category ? p.category === a.category : a.planSlotId === p.id && a.planOutcome === 'followed')
+    const status = a ? (same ? 'followed' : 'changed') : explicitlyMissed ? 'changed' : 'pending'
+    minuteStates[i] = { status, plan: p, actual: a }
+    if (a) row.actual++
+    row[status]++
+    if (status === 'followed') followed++
+    else if (status === 'changed') changed++
+    else pending++
+  }
+  const reviewed = followed + changed
+  const displaced = slots.map((s, idx) => {
+      const row = rows[idx];
+      if (row.changed > 0 && timeMinutes(s.start) < cutoff) {
+          // If the slot is in the past and has changed minutes, it's partially or fully displaced
+          return {
+             id: 'disp-' + s.id,
+             date: s.date,
+             sourceSlotId: s.id,
+             activityId: s.activityId || s.id,
+             name: s.name,
+             affectedMinutes: row.changed,
+             status: 'suggested'
+          };
+      }
+      return null;
+    }).filter(Boolean);
 
-  const planned = r.slots.reduce((a, s) => a + s.minutes, 0)
-  const followed = r.slots.reduce((a, s) => a + s.on, 0)
-  const pending = r.slots.reduce((a, s) => a + s.fut, 0)
-  const changed = planned - followed - pending
-  const reviewed = planned - pending
-  
-  return { 
-    planned, 
-    followed, 
-    changed, 
-    pending, 
-    reviewed, 
-    adherence: r.adherence, 
-    rows 
+    return { planned, followed, changed, pending, reviewed, adherence: reviewed ? Math.round(100 * followed / reviewed) : null, rows, minuteStates, displaced }
+}
+
+export function validateMissedReviews(rows, plans, cutoff = 1440) {
+  const plansById = new Map(plans.map(p => [p.id, p]))
+
+  for (const row of rows) {
+    if (row.planOutcome !== 'missed') continue
+
+    const start = timeMinutes(row.start)
+    const end = timeMinutes(row.end)
+
+    if (
+      !Number.isFinite(start) ||
+      !Number.isFinite(end) ||
+      end <= start
+    ) {
+      throw new Error('Missed activity needs valid start/end times.')
+    }
+
+    const plan = plansById.get(row.planSlotId)
+
+    if (!plan) {
+      throw new Error('Link the missed activity to a plan for this day.')
+    }
+
+    const plannedStart = timeMinutes(plan.start)
+    const plannedEnd = timeMinutes(plan.end)
+
+    if (start < plannedStart || end > plannedEnd) {
+      throw new Error(
+        `Missed time must be inside ${plan.start}–${plan.end}.`
+      )
+    }
+
+    if (end > cutoff) {
+      throw new Error('Future planned time cannot be marked missed yet.')
+    }
   }
 }

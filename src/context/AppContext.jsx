@@ -139,7 +139,7 @@ const MODULE_FILE_MAP = {
 
 const RECORD_COLLECTIONS_BY_MODULE = {
   finance: ['expenses', 'bills', 'savingsGoals'],
-  timeflow: ['entries', 'plans', 'calendarQueue'],
+  timeflow: ['entries', 'plans', 'calendarQueue', 'planBaselines', 'planRevisions', 'displacedDecisions'],
   study: ['sessions', 'flashcards'],
   habits: ['checkpoints', 'dailyLogs'],
   health: ['manualLogs', 'bodyLogs', 'nutrition', 'hevyWorkouts', 'energyLogs', 'waterLogs'],

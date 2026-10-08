@@ -5,18 +5,17 @@ import { useAppActions, useAppState } from '../../context/appHooks'
 import { useToast } from '../../context/toastContextCore'
 import { draftDayPlan, draftActualLogs } from '../../services/geminiService'
 import { slotFingerprint } from '../../services/calendarService'
-import { durationMinutes, planComparison, timeMinutes, validateSlots, WASTE_CATEGORIES, summarizeDay } from '../../utils/planning'
+import { durationMinutes, planComparison, timeMinutes, validateSlots, isWasteEntry, dayCutoff, normalizeDay, summarizeDay, validateMissedReviews } from '../../utils/planning'
 import { normalizeTimezone, getTodayDateKey } from '../../utils/dateTime'
 import Card from './Card'
 import Button from './Button'
 import Modal from './Modal'
-import { PlanVsActual } from './TimeCharts'
+import { PlanVsActual, DayRibbon } from './TimeCharts'
 import { categoryColor, formatMinutes } from '../../utils/timeColors'
-import { reconcile } from '../../utils/timeModel'
 
 const input = { width: '100%', padding: '9px 10px', borderRadius: 9, background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }
 const row = { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }
-const blank = () => ({ id: uuid(), name: '', start: '09:00', end: '10:00', category: 'Study' })
+const blank = () => ({ id: uuid(), activityId: uuid(), name: '', start: '09:00', end: '10:00', category: 'Study' })
 function getSlotStatus(slot) {
   const today = getTodayDateKey(slot.timezone)
   const time = new Intl.DateTimeFormat('en-GB', { timeZone: slot.timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date())
@@ -41,14 +40,20 @@ export default function DayPlanner({ date, categories }) {
   const { showToast } = useToast()
   const timezone = normalizeTimezone(state.settings?.profile?.timezone)
   const plans = (state.timeflow?.plans || []).filter(p => p.date === date).sort((a, b) => a.start.localeCompare(b.start))
-  const entries = (state.timeflow?.entries || []).filter(e => e.date === date)
-  const nowMin = timeMinutes(new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()))
-  const comparison = planComparison(plans, entries, nowMin)
+  const entries = normalizeDay(state.timeflow?.entries || [], date)
+  const nowMin = dayCutoff(date, getTodayDateKey(timezone), timeMinutes(new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date())))
+  const baselines = state.timeflow?.planBaselines || []
+  const baseline = baselines.find(b => b.date === date)
   const [open, setOpen] = useState(false)
   const [actualsOpen, setActualsOpen] = useState(false)
   const [expanded, setExpanded] = useState(null)
   const [draftDate, setDraftDate] = useState(date)
   const [draft, setDraft] = useState([])
+  const [actualDraft, setActualDraft] = useState(null)
+  const comparisonMode = state.timeflow?.comparisonMode || 'current'
+  const setComparisonMode = (mode) => setModule('timeflow', current => ({ ...current, comparisonMode: mode }))
+  const referencePlans = comparisonMode === 'original' && baseline ? baseline.slots : plans
+  const comparison = planComparison(referencePlans, entries, nowMin)
   const [text, setText] = useState('')
   const [photo, setPhoto] = useState(null)
   const [notes, setNotes] = useState([])
@@ -76,7 +81,7 @@ export default function DayPlanner({ date, categories }) {
     setBusy(true); setError('')
     try {
       const result = await draftDayPlan({ text, image: photo, date: draftDate, categories })
-      const slots = result.slots.map(s => ({ id: uuid(), name: String(s.name || ''), start: String(s.start || ''), end: String(s.end || ''), category: categories.includes(s.category) ? s.category : categories[0] || 'Other' }))
+      const slots = result.slots.map(s => ({ id: uuid(), name: String(s.name || ''), start: String(s.start || ''), end: String(s.end || ''), category: categories.includes(s.category) ? s.category : 'Other', isWaste: isWasteEntry(s) }))
       setDraft(slots)
       setNotes([...Array.isArray(result.assumptions) ? result.assumptions : [], ...Array.isArray(result.questions) ? result.questions : []].map(String))
       // Keep malformed proposals editable; never save or sync unvalidated AI output.
@@ -84,72 +89,130 @@ export default function DayPlanner({ date, categories }) {
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
 
+  function validateMissedForImport(rows) {
+    const importPlans = (state.timeflow?.plans || []).filter(p => p.date === draftDate)
+    const currentMinute = timeMinutes(
+      new Intl.DateTimeFormat('en-GB', {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(new Date())
+    )
+    const cutoff = dayCutoff(draftDate, getTodayDateKey(timezone), currentMinute)
+    validateMissedReviews(rows, importPlans, cutoff)
+  }
+
   async function generateActuals() {
     setBusy(true); setError('')
     try {
       const result = await draftActualLogs({ text, image: photo, date: draftDate, categories, tentativePlans: plans })
       
-      const newEntries = []
-      const sessions = []
-      const updatedAt = new Date().toISOString()
-      
-      for (const act of result.actuals) {
-        if (!act.start || !act.end) continue;
-        const actualId = uuid()
-        const isStudy = act.category === 'Study'
-        const studySessionId = isStudy ? `plan-study-${actualId}` : null
+      const nonMissedGen = result.actuals.filter(a => a.planOutcome !== 'missed')
+        if (nonMissedGen.length > 0) {
+           validateSlots(nonMissedGen)
+           if (nonMissedGen.some(a => timeMinutes(a.end) > dayCutoff(draftDate, getTodayDateKey(timezone), nowMin))) throw new Error('Actual diary entries cannot extend into future time.')
+        } else if (result.actuals.length === 0) {
+           throw new Error('Add at least one activity to log.')
+        }
+        validateMissedForImport(result.actuals)
         
-        newEntries.push({
-          id: actualId,
-          date: draftDate,
-          start: act.start,
-          end: act.end,
+        const mapped = result.actuals.map(act => ({
+          ...act,
+          id: uuid(),
           name: act.planOutcome === 'missed' ? 'Missed' : (act.name?.trim() || act.category),
           category: act.planOutcome === 'missed' ? 'Other' : act.category,
-          durationMinutes: durationMinutes(act.start, act.end),
-          planSlotId: act.planSlotId,
-          planOutcome: act.planOutcome || 'followed',
-          deviationReason: act.deviationReason?.trim() || '',
-          isWaste: WASTE_CATEGORIES.includes(act.planOutcome === 'missed' ? 'Other' : act.category),
-          productivityScore: 3,
-          mood: 3,
-          source: 'auto-diary',
-          ghost: act.planOutcome === 'missed',
-          createdAt: updatedAt,
-          updatedAt,
-          studySessionId
-        })
-        
-        if (isStudy) {
-          sessions.push({
-            id: studySessionId,
-            date: draftDate,
-            subject: 'Other',
-            topic: act.name?.trim() || act.category,
-            durationMinutes: durationMinutes(act.start, act.end),
-            focusType: 'Deep Focus',
-            rating: 3,
-            notes: act.deviationReason?.trim() || '',
-            source: 'auto-diary',
-            createdAt: updatedAt,
-            updatedAt
-          })
-        }
-      }
-
-      if (!newEntries.length) throw new Error('No valid actual timings found in image.')
-
-      setModule('timeflow', current => ({
-        ...current,
-        entries: [...(current.entries || []).filter(e => !(e.date === draftDate && e.source === 'auto-diary')), ...newEntries],
-        subjects: current.subjects || [],
-        studySessions: [...(current.studySessions || []), ...sessions]
+          isWaste: act.planOutcome !== 'missed' && isWasteEntry({ ...act, isWaste: act.isWaste ?? (plans.find(p => p.id === act.planSlotId && p.category === act.category)?.isWaste || false) })
       }))
       
-      setActualsOpen(false)
-      showToast(`Logged ${newEntries.length} actuals from diary!`, 'success')
-      
+      setActualDraft(mapped)
+      setError('')
     } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  function commitActualDraft() {
+     setBusy(true)
+     try {
+        const newEntries = []
+        const sessions = []
+        const updatedAt = new Date().toISOString()
+        
+        if (!actualDraft || actualDraft.length === 0) throw new Error('No entries to save.')
+        validateMissedForImport(actualDraft)
+        const nonMissed = actualDraft.filter(a => a.planOutcome !== 'missed')
+          if (nonMissed.length > 0) {
+            validateSlots(nonMissed)
+            // Reject future end times
+            if (nonMissed.some(a => timeMinutes(a.end) > dayCutoff(draftDate, getTodayDateKey(timezone), timeMinutes(new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()))))) throw new Error('Actual diary entries cannot extend into future time.')
+            // Reject overlaps with existing manual actuals
+            const retained = entries.filter(e => e.source !== 'auto-diary' && !e.ghost && e.planOutcome !== 'missed')
+            const combined = [...retained, ...nonMissed]
+            validateSlots(combined)
+          }
+          for (const act of actualDraft) {
+          if (!act.start || !act.end) continue;
+          
+          const isStudy = act.category === 'Study' && act.planOutcome !== 'missed' && !act.isWaste
+          const studySessionId = isStudy ? `plan-study-${act.id}` : null
+          
+          newEntries.push({
+            id: act.id,
+            date: draftDate,
+            start: act.start,
+            end: act.end,
+            name: act.name,
+            category: act.category,
+            durationMinutes: durationMinutes(act.start, act.end),
+            planSlotId: act.planSlotId,
+            activityId: (() => { const matchedPlan = plans.find(p => p.id === act.planSlotId); return (matchedPlan && matchedPlan.category === act.category && matchedPlan.name.trim() === act.name.trim() && matchedPlan.activityId) ? matchedPlan.activityId : uuid(); })(),
+            planOutcome: act.planOutcome || 'followed',
+            deviationReason: act.deviationReason?.trim() || '',
+            isWaste: act.isWaste,
+            productivityScore: 3,
+            mood: 3,
+            source: 'auto-diary',
+            ghost: act.planOutcome === 'missed',
+            createdAt: updatedAt,
+            updatedAt,
+            studySessionId
+          })
+          
+          if (isStudy) {
+            sessions.push({
+              id: studySessionId,
+              date: draftDate,
+              subject: 'Other',
+              topic: act.name,
+              durationMinutes: durationMinutes(act.start, act.end),
+              focusType: 'Deep Focus',
+              rating: 3,
+              notes: act.deviationReason?.trim() || '',
+              source: 'auto-diary',
+              createdAt: updatedAt,
+              updatedAt
+            })
+          }
+        }
+        
+        setModule('timeflow', current => ({
+          ...current,
+          entries: [...(current.entries || []).filter(e => e.date !== draftDate || e.source !== 'auto-diary'), ...newEntries]
+        }))
+        
+        setModule('study', current => {
+           const oldAutoSessions = new Set((current.sessions || []).filter(s => s.date === draftDate && s.source === 'auto-diary').map(s => s.id))
+           return {
+             ...current,
+             sessions: [...(current.sessions || []).filter(s => !oldAutoSessions.has(s.id)), ...sessions]
+           }
+        })
+        
+        setActualsOpen(false)
+        setActualDraft(null)
+        setText('')
+        setPhoto(null)
+        showToast('Actuals saved!', 'success')
+     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
 
   function updateSlot(id, key, value) { setDraft(items => items.map(s => s.id === id ? { ...s, [key]: value } : s)) }
@@ -160,11 +223,70 @@ export default function DayPlanner({ date, categories }) {
       const updatedAt = new Date().toISOString()
       setModule('timeflow', current => {
         const old = (current.plans || []).filter(p => p.date === draftDate)
+        const baselines = current.planBaselines || []
+        const revisions = current.planRevisions || []
+        
+        let newBaselines = [...baselines]
+        let existingBaseline = baselines.find(b => b.date === draftDate)
+        
+        const finalSlots = slots.map(s => ({ ...s, activityId: s.activityId || uuid(), name: s.name.trim(), date: draftDate, timezone, calendarEnabled, calendarEventKey: calendarEnabled && old.find(p => p.id === s.id)?.calendarEnabled === false ? uuid() : s.calendarEventKey || s.id, reminderMinutes: reminder, updatedAt, createdAt: s.createdAt || updatedAt }))
+
+        if (!existingBaseline && (finalSlots.length > 0 || old.length > 0)) {
+          const baselineSlots = old.length > 0 ? structuredClone(old) : structuredClone(finalSlots)
+          existingBaseline = {
+            id: uuid(),
+            date: draftDate,
+            timezone,
+            capturedAt: updatedAt,
+            origin: old.length > 0 ? 'existing-plan-snapshot' : 'first-save',
+            slots: baselineSlots
+          }
+          newBaselines.push(existingBaseline)
+        }
+
+        const previousRevisionId = [...revisions].filter(r => r.date === draftDate).pop()?.id || null
+        const newRevision = {
+           id: uuid(),
+           date: draftDate,
+           parentRevisionId: previousRevisionId,
+           createdAt: updatedAt,
+           reason: "Plan edit",
+           slots: structuredClone(finalSlots)
+        }
+
         const kept = new Set(slots.map(s => s.id))
         const removed = old.filter(p => (!kept.has(p.id) || !calendarEnabled) && p.calendarEnabled)
+        const pendingId = current.pendingRescheduleSlotId;
+        const newDecisions = [...(current.displacedDecisions || [])];
+        if (pendingId) {
+          const before = old.find(p => p.id === pendingId)
+          const after = finalSlots.find(p => p.id === pendingId)
+
+          if (!before || !after) {
+            throw new Error('Keep the activity while rescheduling. Use Skip to remove it.')
+          }
+
+          const timingChanged = before.start !== after.start || before.end !== after.end
+
+          if (!timingChanged) {
+            throw new Error('Change this activity’s start or end time before saving.')
+          }
+
+          newDecisions.push({
+            id: uuid(),
+            sourceSlotId: pendingId,
+            status: 'rescheduled',
+            date: updatedAt,
+          })
+        }
         return { ...current,
-          plans: [...(current.plans || []).filter(p => p.date !== draftDate), ...slots.map(s => ({ ...s, name: s.name.trim(), date: draftDate, timezone, calendarEnabled, calendarEventKey: calendarEnabled && old.find(p => p.id === s.id)?.calendarEnabled === false ? uuid() : s.calendarEventKey || s.id, reminderMinutes: reminder, updatedAt, createdAt: s.createdAt || updatedAt }))],
-          calendarQueue: [...(current.calendarQueue || []), ...removed.map(p => ({ id: uuid(), slotId: p.calendarEventKey || p.id, updatedAt }))],
+            pendingRescheduleSlotId: null,
+            displacedDecisions: newDecisions,
+            planBaselines: newBaselines,
+            planRevisions: [...revisions, newRevision],
+            plans: [...(current.plans || []).filter(p => p.date !== draftDate), ...finalSlots],
+            calendarQueue: [...(current.calendarQueue || []), ...removed.map(p => ({ id: uuid(), slotId: p.calendarEventKey || p.id, updatedAt 
+          }))],
         }
       })
       setOpen(false)
@@ -172,9 +294,49 @@ export default function DayPlanner({ date, categories }) {
       showToast(!slots.length ? 'Plan removed. Actual logs kept; Calendar cleanup queued.' : calendarEnabled ? 'Plan saved. Calendar sync queued.' : 'Tentative plan saved.', 'success')
     } catch (e) { setError(e.message) }
   }
+
+  function restoreOriginalPlan() {
+    if(!confirm('Overwrite your current plan with the original baseline?')) return;
+    try {
+      const updatedAt = new Date().toISOString()
+      setModule('timeflow', current => {
+        const old = (current.plans || []).filter(p => p.date === date)
+        const revisions = current.planRevisions || []
+        
+        // Keep baseline IDs so check-ins stay linked!
+        const restoredSlots = baseline.slots.map(s => {
+           const rs = { ...s, updatedAt };
+           delete rs.calendarFingerprint;
+           return rs;
+        })
+        
+        const newRevision = {
+           id: uuid(),
+           date: date,
+           parentRevisionId: [...revisions].filter(r => r.date === date).pop()?.id || null,
+           createdAt: updatedAt,
+           reason: "Restored to baseline",
+           slots: structuredClone(restoredSlots)
+        }
+
+        const removed = old.filter(p => {
+           if (!p.calendarEnabled) return false;
+           const r = restoredSlots.find(s => s.id === p.id);
+           return !r || !r.calendarEnabled || r.calendarEventKey !== p.calendarEventKey;
+        })
+        return { ...current,
+          comparisonMode: 'current',
+          planRevisions: [...revisions, newRevision],
+          plans: [...(current.plans || []).filter(p => p.date !== date), ...restoredSlots],
+          calendarQueue: [...(current.calendarQueue || []), ...removed.map(p => ({ id: uuid(), slotId: p.calendarEventKey || p.id, updatedAt }))],
+        }
+      })
+      showToast('Restored to original plan.', 'success')
+    } catch (e) { setError(e.message) }
+  }
   function openCheck(slot, isExtra = false) {
     const slotActuals = entries.filter(e => e.planSlotId === slot.id && !e.ghost).sort((a,b) => timeMinutes(a.start) - timeMinutes(b.start));
-    const actual = isExtra ? null : slotActuals[0];
+    const actual = isExtra ? null : (slotActuals[0] || entries.find(e => e.planSlotId === slot.id && e.planOutcome === 'missed'));
     const lastActual = slotActuals[slotActuals.length - 1];
     setError('');
     setCheck({ 
@@ -185,6 +347,7 @@ export default function DayPlanner({ date, categories }) {
       start: actual?.start || (isExtra && lastActual ? lastActual.end : slot.start), 
       end: actual?.end || slot.end, 
       category: actual?.category || slot.category, 
+      isWaste: actual ? isWasteEntry(actual) : isWasteEntry(slot),
       reason: isExtra ? '' : (actual?.deviationReason || '') 
     });
   }
@@ -198,6 +361,7 @@ export default function DayPlanner({ date, categories }) {
       start: actual.start,
       end: actual.end,
       category: actual.category,
+      isWaste: isWasteEntry(actual),
       reason: actual.deviationReason || ''
     });
   }
@@ -205,15 +369,16 @@ export default function DayPlanner({ date, categories }) {
     try {
       const { slot, outcome, name, start, end, category, reason = '' } = check
       validateSlots([{ name, start, end }])
-      // Removed undefined isDue check
+      if (outcome !== 'missed' && !category) throw new Error('Choose the actual category.')
+      if (outcome !== 'missed' && (slot.date > getTodayDateKey(timezone) || (slot.date === getTodayDateKey(timezone) && timeMinutes(end) > nowMin))) throw new Error('Log only time that has already happened. Use Partial and set the actual end time.')
       
-      const actualOutcome = outcome === 'partial' ? 'followed' : outcome;
-      const conflict = entries.find(e => e.id !== check.entryId && e.planSlotId !== slot.id && Math.max(timeMinutes(e.start), timeMinutes(start)) < Math.min(timeMinutes(e.end), timeMinutes(end)))
+      const actualOutcome = outcome === 'partial' ? 'changed' : outcome;
+      const conflict = outcome !== 'missed' && entries.find(e => !e.ghost && e.planOutcome !== 'missed' && e.id !== check.entryId && Math.max(timeMinutes(e.start), timeMinutes(start)) < Math.min(timeMinutes(e.end), timeMinutes(end)))
       if (conflict) throw new Error(`Overlaps “${conflict.name}”. Adjust the actual times.`)
       const updatedAt = new Date().toISOString()
       let savedActual, previousActual
       setModule('timeflow', current => {
-        const existing = (current.entries || []).find(e => e.id === check.entryId || e.planSlotId === slot.id)
+        const existing = (current.entries || []).find(e => check.entryId && e.id === check.entryId)
         const isMissed = outcome === 'missed'
         const actual = { 
           ...existing, 
@@ -225,9 +390,10 @@ export default function DayPlanner({ date, categories }) {
           category: isMissed ? 'Other' : category, 
           durationMinutes: durationMinutes(start, end), 
           planSlotId: slot.id, 
-          planOutcome: actualOutcome, 
+          planOutcome: actualOutcome,
+            activityId: (category === slot.category && name.trim() === slot.name.trim() && slot.activityId) ? slot.activityId : uuid(), 
           deviationReason: reason.trim(), 
-          isWaste: WASTE_CATEGORIES.includes(isMissed ? 'Other' : category), 
+          isWaste: !isMissed && isWasteEntry({ category, isWaste: check.isWaste }), 
           productivityScore: existing?.productivityScore || 3, 
           mood: existing?.mood || 3, 
           source: 'plan-check-in',
@@ -235,46 +401,10 @@ export default function DayPlanner({ date, categories }) {
           createdAt: existing?.createdAt || updatedAt, 
           updatedAt 
         }
-        actual.studySessionId = (!isMissed && category === 'Study') ? existing?.studySessionId || `plan-study-${actual.id}` : null
+        actual.studySessionId = (!isMissed && category === 'Study' && !actual.isWaste) ? existing?.studySessionId || `plan-study-${actual.id}` : null
         savedActual = actual; previousActual = existing
         const newEntries = [...(current.entries || []).filter(e => e.id !== actual.id), actual];
         
-        if (!isMissed) {
-          const actualStart = timeMinutes(start);
-          const actualEnd = timeMinutes(end);
-          const dayPlans = (current.plans || []).filter(p => p.date === slot.date && p.id !== slot.id);
-          for (const p of dayPlans) {
-            const pStart = timeMinutes(p.start);
-            const pEnd = timeMinutes(p.end);
-            const pDur = pEnd - pStart;
-            const oStart = Math.max(actualStart, pStart);
-            const oEnd = Math.min(actualEnd, pEnd);
-            const overlap = oEnd - oStart;
-            if (overlap > 0 && overlap >= pDur * 0.5) {
-              const alreadyCheckedIn = newEntries.some(e => e.planSlotId === p.id);
-              if (!alreadyCheckedIn) {
-                newEntries.push({
-                  id: uuid(),
-                  date: slot.date,
-                  start: p.start,
-                  end: p.end,
-                  name: 'Missed',
-                  category: 'Other',
-                  durationMinutes: pDur,
-                  planSlotId: p.id,
-                  planOutcome: 'missed',
-                  deviationReason: `Auto-replaced by ${name.trim()}`,
-                  isWaste: true,
-                  productivityScore: 0,
-                  source: 'plan-check-in-cascade',
-                  ghost: true,
-                  createdAt: updatedAt,
-                  updatedAt
-                });
-              }
-            }
-          }
-        }
         return { ...current, entries: newEntries }
       })
       if (savedActual.studySessionId || previousActual?.studySessionId) setModule('study', current => {
@@ -286,7 +416,7 @@ export default function DayPlanner({ date, categories }) {
     } catch (e) { setError(e.message) }
   }
   const pendingSync = plans.filter(p => p.calendarEnabled && p.calendarFingerprint !== slotFingerprint(p)).length
-  const unplanned = entries.filter(e => !plans.some(p => p.id === e.planSlotId))
+  const unplanned = entries.filter(e => !e.ghost && e.planOutcome !== 'missed' && !plans.some(p => p.id === e.planSlotId))
   const isOpen = expanded ?? plans.length > 0
   const chip = (text, color) => <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: `${color}1F`, color, border: `1px solid ${color}40`, whiteSpace: 'nowrap' }}>{text}</span>
   return <Card style={{ padding: 0, overflow: 'hidden' }}>
@@ -312,17 +442,32 @@ export default function DayPlanner({ date, categories }) {
         <ChevronDown size={18} style={{ flexShrink: 0, color: 'var(--text-muted)', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s ease' }} />
       </button>
       <div style={{ display: 'flex', gap: '8px' }}>
-        {plans.length > 0 && <Button data-edit-action onClick={() => { setActualsOpen(true); setText(''); setPhoto(null); setError('') }} variant="secondary" style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>Log actuals</Button>}
+        {plans.length > 0 && <Button data-edit-action onClick={() => { setDraftDate(date); setActualDraft(null); setActualsOpen(true); setText(''); setPhoto(null); setError('') }} variant="secondary" style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>Log actuals</Button>}
         <Button data-edit-action onClick={editPlan} variant="secondary" style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>{plans.length ? 'Edit plan' : 'Plan my day'}</Button>
       </div>
     </div>
     {isOpen && <div id="day-plan-body" style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)' }}>
     <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0' }}>Diary photo or typed notes → editable plan → Calendar reminders → actual check-ins.</p>
     {plans.length > 0 && <>
+      {baseline && (
+         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+           <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+             Compare against: 
+             <select style={{...input, width: 'auto', padding: '4px 8px'}} value={comparisonMode} onChange={e => setComparisonMode(e.target.value)}>
+               <option value="current">Current plan</option>
+               <option value="original">Original plan</option>
+             </select>
+           </label>
+           {comparisonMode === 'original' && (
+             <Button variant="secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => {
+                restoreOriginalPlan()}}>Restore Original</Button>
+           )}
+         </div>
+      )}
       <div style={{ padding: 12, borderRadius: 12, background: 'rgba(148,163,184,0.04)', border: '1px solid var(--border)', marginBottom: 12 }}>
         <PlanVsActual 
-          plans={plans} 
-          entries={entries.filter(e => plans.some(p => p.id === e.planSlotId))} 
+          plans={referencePlans} 
+          entries={entries} nowMin={nowMin} 
         />
       </div>
       <div style={{ ...row, fontSize: 12, marginBottom: 8, color: 'var(--text-secondary)' }}>
@@ -342,14 +487,17 @@ export default function DayPlanner({ date, categories }) {
         {plans.map(slot => {
             const slotActuals = entries.filter(e => e.planSlotId === slot.id && !e.ghost).sort((a,b) => timeMinutes(a.start) - timeMinutes(b.start));
             const hasActuals = slotActuals.length > 0;
-            const isMissedCompletely = hasActuals && slotActuals.every(a => a.planOutcome === 'missed');
+            const metrics = comparison.rows.find(r => r.id === slot.id);
+            const isMissedCompletely = entries.some(e => e.planSlotId === slot.id && e.planOutcome === 'missed') && !hasActuals;
             const { due, inProgress } = getSlotStatus(slot);
             const color = categoryColor(slot.category);
             
             let status = ['Upcoming', '#94A3B8'];
-            if (hasActuals) {
+            if (isMissedCompletely) status = ['Missed', '#F87171'];
+            else if (hasActuals) {
                if (isMissedCompletely) status = ['Missed', '#F87171'];
-               else if (slotActuals.some(a => a.planOutcome === 'changed')) status = ['Changed', '#FB7185'];
+               else if (metrics?.pending > 0) status = ['Partial · check in', '#FBBF24'];
+               else if (metrics?.changed > 0 || slotActuals.some(a => a.planOutcome === 'changed')) status = ['Changed', '#FB7185'];
                else if (slotActuals.some(a => a.planOutcome === 'followed')) status = ['Done', '#34D399'];
                else status = ['In Progress', '#60A5FA'];
             } else if (due) {
@@ -367,7 +515,7 @@ export default function DayPlanner({ date, categories }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ flex: '1 1 160px', minWidth: 0 }}>
                     <strong style={{ display: 'block', fontSize: 14, wordBreak: 'break-word' }}>{slot.name}</strong>
-                    <div style={{ display: 'flex', gap: 6, fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{slot.category} &middot; {durationMinutes(slot.start, slot.end)}m {chip(status[0], status[1])}</div>
+                    <div style={{ display: 'flex', gap: 6, fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{slot.category}{isWasteEntry(slot) ? ' · Waste flagged' : ''} &middot; {durationMinutes(slot.start, slot.end)}m {chip(status[0], status[1])}</div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
                     <Button data-edit-action variant="secondary" onClick={() => openCheck(slot)} disabled={!hasActuals && !due && !inProgress} style={{ padding: '8px 12px', fontSize: 12.5 }}>
@@ -379,14 +527,14 @@ export default function DayPlanner({ date, categories }) {
                   </div>
                 </div>
                 <div style={{ marginTop: 8, padding: 8, background: 'var(--bg-primary)', borderRadius: 6, fontSize: 12, color: hasActuals ? 'var(--text-secondary)' : 'var(--text-muted)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {!hasActuals ? 'Actual: awaiting your confirmation' : 
+                  {!hasActuals ? (isMissedCompletely ? 'Marked missed · no actual activity logged' : 'Actual: awaiting your confirmation') : 
                      slotActuals.map((actual, idx) => (
                         <div key={actual.id} style={{ display: 'flex', flexDirection: 'column', paddingBottom: idx < slotActuals.length - 1 ? 8 : 0, borderBottom: idx < slotActuals.length - 1 ? '1px solid var(--border)' : 'none' }}>
                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                                <div style={{ flex: 1, minWidth: 0 }}>
                                  {actual.planOutcome === 'missed' ? 
                                     <span><strong style={{ color: 'var(--text-primary)' }}>Actual:</strong> Missed completely</span> : 
-                                    <span><strong style={{ color: 'var(--text-primary)' }}>Actual:</strong> {actual.start}A{actual.end} &middot; {actual.name} <span style={{ color: actual.planOutcome === 'followed' ? '#34D399' : '#FB7185' }}>({actual.planOutcome})</span></span>
+                                    <span><strong style={{ color: 'var(--text-primary)' }}>Actual:</strong> {actual.start}–{actual.end} &middot; {actual.name} <span style={{ color: actual.planOutcome === 'followed' ? '#34D399' : '#FB7185' }}>({actual.planOutcome})</span></span>
                                  }
                                </div>
                                {slotActuals.length > 1 && (
@@ -404,10 +552,10 @@ export default function DayPlanner({ date, categories }) {
             </div>
           })}
         </div>
-      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Adherence = minutes of the same activity inside its planned slot ÷ reviewed planned minutes. Pending slots are excluded. {unplanned.length} unlinked actual {unplanned.length === 1 ? 'entry' : 'entries'} in the timeline below.</p>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Adherence compares the current saved plan. Editing the plan changes this comparison. Adherence = minutes of the same activity inside its planned slot ÷ reviewed planned minutes. Pending slots are excluded. {unplanned.length} unlinked actual {unplanned.length === 1 ? 'entry' : 'entries'} in the timeline below.</p>
     </>}
     </div>}
-    <Modal isOpen={open} onClose={() => { if (!busy) setOpen(false) }} title={`Plan your day · ${draftDate}`}>
+    <Modal isOpen={open} onClose={() => { if (!busy) { setOpen(false); if (state.timeflow?.pendingRescheduleSlotId) { setModule('timeflow', current => ({ ...current, pendingRescheduleSlotId: null })); } } }} title={`Plan your day · ${draftDate}`}>
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Review AI assumptions and times before saving. Only saved plans sync to Calendar. Photos/notes are sent to Gemini when you generate.</p>
       <textarea
         aria-label="Tentative day plan"
@@ -449,13 +597,13 @@ export default function DayPlanner({ date, categories }) {
             }
           }
           showToast('No image in clipboard.', 'error')
-        } catch (e) { showToast('Clipboard read failed. Try Ctrl+V inside the text box.', 'error') }
+        } catch { showToast('Clipboard read failed. Try Ctrl+V inside the text box.', 'error') }
       }} disabled={busy}>Paste image</Button><Button onClick={generate} disabled={busy || (!text.trim() && !photo)}>{busy ? 'Reading plan…' : 'Generate timeline'}</Button></div>
       {photo && <div style={row}><img src={photo.preview} alt="Selected diary page" style={{ maxHeight: 130, maxWidth: '100%', borderRadius: 8 }} /><button onClick={() => setPhoto(null)}>Remove photo</button></div>}
       {notes.length > 0 && <ul style={{ fontSize: 12 }}>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
       {(() => {
         if (!draft.length) return null;
-        const ds = summarizeDay([], draftDate, 1440, draft);
+        const ds = summarizeDay([], draftDate, 1440, draft.map(s => ({ ...s, date: draftDate })));
         return (
           <div style={{ margin: '16px 0', padding: 12, background: 'var(--bg-secondary)', borderRadius: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
@@ -471,6 +619,7 @@ export default function DayPlanner({ date, categories }) {
       <p style={{ fontSize: 12 }}>You can also build the schedule manually. Use 24:00 for midnight at the end of this day.</p>
       <div style={{ display: 'grid', gap: 12 }}>
         {draft.map((slot, i) => <div key={slot.id} style={{ padding: 10, border: '1px solid var(--border)', borderRadius: 10 }}>
+          <label style={{ display: 'block', fontSize: 12, marginBottom: 6 }}><input type="checkbox" aria-label={`Waste ${i + 1}`} checked={isWasteEntry(slot)} onChange={e => updateSlot(slot.id, 'isWaste', e.target.checked)} /> Count as waste (keep category)</label>
           <input aria-label={`Activity ${i + 1}`} style={input} value={slot.name} onChange={e => updateSlot(slot.id, 'name', e.target.value)} placeholder="Activity name" />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
             <label style={{ fontSize: 12 }}>Start<input aria-label={`Start ${i + 1}`} type="time" style={input} value={slot.start} onChange={e => updateSlot(slot.id, 'start', e.target.value)} /></label>
@@ -489,11 +638,11 @@ export default function DayPlanner({ date, categories }) {
                 <span style={{ color: '#EF4444' }}>Waste &middot; {formatMinutes(ds.wasteMins)}</span>
               </div>
               <div style={{ display: 'flex', height: 16, borderRadius: 8, overflow: 'hidden', background: 'rgba(255,255,255,0.05)' }}>
-                {ds.productiveMins > 0 && <div style={{ width: `${(ds.productiveMins / (ds.productiveMins + ds.wasteMins || 1)) * 100}%`, background: '#10B981' }} />}
-                {ds.wasteMins > 0 && <div style={{ width: `${(ds.wasteMins / (ds.productiveMins + ds.wasteMins || 1)) * 100}%`, background: '#EF4444' }} />}
+                {ds.productiveMins > 0 && <div style={{ width: `${(ds.productiveMins / (ds.loggedMins || 1)) * 100}%`, background: '#10B981' }} />}
+                {ds.wasteMins > 0 && <div style={{ width: `${(ds.wasteMins / (ds.loggedMins || 1)) * 100}%`, background: '#EF4444' }} />}
               </div>
               <div style={{ fontSize: 12, color: ds.loggedMins !== 1440 ? '#FBBF24' : 'var(--text-muted)', marginTop: 8 }}>
-                Total planned: {formatMinutes(ds.loggedMins)} {ds.loggedMins !== 1440 ? '(Warning: must equal 24h)' : ''}
+                Other / unflagged: {formatMinutes(ds.otherMins)} · Total planned: {formatMinutes(ds.loggedMins)} {ds.loggedMins !== 1440 ? '(unplanned time stays unknown)' : ''}
               </div>
             </div>
           )
@@ -545,14 +694,38 @@ export default function DayPlanner({ date, categories }) {
               }
             }
             showToast('No image in clipboard.', 'error')
-          } catch (e) { showToast('Clipboard read failed. Try Ctrl+V inside the text box.', 'error') }
+          } catch { showToast('Clipboard read failed. Try Ctrl+V inside the text box.', 'error') }
         }} disabled={busy}>Paste image</Button>
         <Button onClick={generateActuals} disabled={busy || (!text.trim() && !photo)}>{busy ? 'Reading actuals…' : 'Log Actuals'}</Button>
       </div>
       {photo && <div style={row}><img src={photo.preview} alt="Selected diary page" style={{ maxHeight: 130, maxWidth: '100%', borderRadius: 8 }} /><button onClick={() => setPhoto(null)}>Remove photo</button></div>}
-      {error && <p role="alert" style={{ color: '#F87171' }}>{error}</p>}
-    </Modal>
-    <Modal isOpen={!!check} onClose={() => setCheck(null)} title="Plan check-in">
+      {actualDraft && (
+           <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+             <h4 style={{ fontSize: 13, marginBottom: 12 }}>Preview Imports (Edit if needed)</h4>
+             <div style={{ display: 'grid', gap: 12 }}>
+               {actualDraft.map(act => (
+                 <div key={act.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: 8, background: 'var(--bg-secondary)', borderRadius: 8 }}>
+                    <input style={{...input, padding: '4px 8px'}} value={act.name} onChange={e => setActualDraft(d => d.map(x => x.id === act.id ? {...x, name: e.target.value} : x))} />
+                    <select style={{...input, padding: '4px 8px'}} value={act.category} onChange={e => setActualDraft(d => d.map(x => x.id === act.id ? {...x, category: e.target.value} : x))}>
+                       {[...new Set([...categories, act.category])].map(c => <option key={c}>{c}</option>)}
+                    </select>
+                    <input type="time" style={{...input, padding: '4px 8px'}} value={act.start} onChange={e => setActualDraft(d => d.map(x => x.id === act.id ? {...x, start: e.target.value} : x))} />
+                    <input type="time" style={{...input, padding: '4px 8px'}} value={act.end} onChange={e => setActualDraft(d => d.map(x => x.id === act.id ? {...x, end: e.target.value} : x))} />
+                    <label style={{ gridColumn: '1 / -1', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                       <input type="checkbox" checked={act.isWaste} onChange={e => setActualDraft(d => d.map(x => x.id === act.id ? {...x, isWaste: e.target.checked} : x))} /> Mark as Waste
+                    </label>
+                 </div>
+               ))}
+             </div>
+             <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+               <Button onClick={commitActualDraft} disabled={busy}>Confirm & Save Actuals</Button>
+               <Button variant="secondary" onClick={() => setActualDraft(null)} disabled={busy}>Cancel</Button>
+             </div>
+           </div>
+        )}
+        {error && <p role="alert" style={{ color: '#F87171' }}>{error}</p>}
+      </Modal>
+      <Modal isOpen={!!check} onClose={() => setCheck(null)} title="Plan check-in">
       {check && <div style={{ display: 'grid', gap: 12 }}>
         <div style={{ padding: 12, background: 'rgba(99,102,241,0.1)', borderRadius: 8, border: '1px solid var(--accent-indigo)' }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Planned Activity</div>
@@ -569,6 +742,7 @@ export default function DayPlanner({ date, categories }) {
               outcome: val,
               name: val === 'followed' || val === 'partial' ? c.slot.name : (val === 'missed' ? 'Missed' : ''),
               category: val === 'followed' || val === 'partial' ? c.slot.category : (val === 'missed' ? 'Other' : ''),
+              isWaste: val === 'followed' || val === 'partial' ? isWasteEntry(c.slot) : false,
               start: c.slot.start,
               end: c.slot.end
             }))
@@ -590,7 +764,7 @@ export default function DayPlanner({ date, categories }) {
                   <input style={{ ...input, marginTop: 4 }} value={check.name} onChange={e => setCheck(c => ({ ...c, name: e.target.value }))} placeholder="e.g. studied maths" />
                 </label>
                 <label style={{ fontSize: 13 }}>Category
-                  <select style={{ ...input, marginTop: 4 }} value={check.category} onChange={e => setCheck(c => ({ ...c, category: e.target.value }))}>
+                  <select aria-label="Category" style={{ ...input, marginTop: 4 }} value={check.category} onChange={e => setCheck(c => ({ ...c, category: e.target.value, isWaste: isWasteEntry({ category: e.target.value }) }))}>
                     {[...new Set([...categories, 'Other', check.category])].map(c => <option key={c}>{c}</option>)}
                   </select>
                 </label>
@@ -599,11 +773,13 @@ export default function DayPlanner({ date, categories }) {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <label style={{ fontSize: 13 }}>Start time<input type="time" style={{ ...input, marginTop: 4 }} value={check.start} onChange={e => setCheck(c => ({ ...c, start: e.target.value }))} /></label>
-              <label style={{ fontSize: 13 }}>End time<input type="time" style={{ ...input, marginTop: 4 }} value={check.end} onChange={e => setCheck(c => ({ ...c, end: e.target.value }))} /></label>
+              <label style={{ fontSize: 13 }}>End time (HH:mm)<input placeholder="24:00" style={{ ...input, marginTop: 4 }} value={check.end} onChange={e => setCheck(c => ({ ...c, end: e.target.value }))} /></label>
             </div>
           </div>
         )}
 
+        {check.outcome !== 'missed' && <label><input type="checkbox" checked={isWasteEntry(check)} onChange={e => setCheck(c => ({ ...c, isWaste: e.target.checked }))} /> Count as waste (keep category)</label>}
+        <label>Reflection<textarea style={input} value={check.reason} onChange={e => setCheck(c => ({ ...c, reason: e.target.value }))} /></label>
         {error && <p role="alert" style={{ color: '#F87171' }}>{error}</p>}
         <Button onClick={saveCheck}>Save check-in</Button>
       </div>}

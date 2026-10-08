@@ -1,0 +1,2984 @@
+<USER_REQUEST>
+I have this website 
+I want to fix something into this 
+
+fix this like when I should click it then it should expand na !!!
+and also fix the timelines and all in the mobile app also ok 
+
+and more intutive graphs of everything 
+
+and also the sharing thing should look exactly like my app but not editable 
+so fix that also ok 
+
+and give me final fixes in that folder itself 
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-04T23:23:29+05:30.
+
+The user has uploaded 1 image(s):
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791136297910.png
+You can embed this image in an artifact if you need the USER to review it.
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Claude Opus 5.5 (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+
+====================
+
+<USER_REQUEST>
+continue 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-04T23:31:51+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+ continue 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-04T23:37:54+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+ continue 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-04T23:42:51+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+continue 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-04T23:48:06+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+[AuthContext] Boot: User is explicitly logged out
+
+getting this error and stuck at login page what to do now ?
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T00:06:35+05:30.
+
+The user has uploaded 1 image(s):
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791138978725.png
+You can embed this image in an artifact if you need the USER to review it.
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Claude Opus 5.5 (High) to Gemini 3.1 Pro (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+
+====================
+
+<USER_REQUEST>
+ nope its not working i have done that 
+what exactly you neeed from me tell me that I will give you and then fix the code na yrr 
+the thing is that when I click on the button nothing is happening 
+     r && console.log(`[AuthContext] Boot: User is explicitly logged out`);
+
+fix this and give me final code yrr
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T00:16:43+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+Improve reminder before start here 
+also make the finance page looks more good and managable 
+like clean and all ui ux 
+and in the sharing thing 
+when someone open the link it should land  on today na yrr !
+so fix this and give me final code 
+and look for any other disperencies into the code if any 
+after fixing this do the below one
+
+
+Like I want you to go and check everything in loop 
+go to each and every page and render its image check everything look good every buttonis working if not fix that and recheck that 
+and do this in a look for each and every page and each and every button 
+also check for mobile device as well that everything looks good 
+
+
+
+
+
+# Autonomous Website QA, Testing & Fix Loop
+
+You are an autonomous senior frontend engineer, QA engineer, UI/UX tester, and browser automation agent.
+
+Your job is to **fully test, diagnose, fix, and re-test this website until there are no known functional, visual, responsive, or interaction issues remaining.**
+
+Do NOT stop after finding issues.  
+Do NOT simply report problems.  
+**Fix the problems yourself, then re-test them.**
+
+## CORE RULE
+
+Work in a continuous loop:
+
+**DISCOVER → TEST → IDENTIFY ISSUE → FIX → REBUILD/RELOAD → RE-TEST → VERIFY → CONTINUE**
+
+Repeat this process until the entire website has been thoroughly checked.
+
+---
+
+# 1. DISCOVER THE ENTIRE WEBSITE
+
+First, inspect the project and determine:
+
+- All routes/pages
+- All accessible pages
+- All navigation links
+- Header/navigation
+- Footer links
+- Buttons
+- Dropdowns
+- Modals
+- Forms
+- Inputs
+- Search functionality
+- Tabs
+- Accordions
+- Carousels/sliders
+- Cards with links
+- CTAs
+- Authentication-related UI
+- Settings pages
+- Error/empty states
+- Loading states
+- Pagination
+- Filters
+- Sort controls
+- Tooltips
+- Menus
+- Mobile navigation
+- Any dynamically generated UI
+- Any components shared between pages
+
+Also inspect the source code to identify routes/components that may not be reachable through normal navigation.
+
+Create an internal checklist of every page and every interactive element.
+
+---
+
+# 2. TEST EVERY PAGE
+
+Visit **every page individually**.
+
+For each page:
+
+1. Open the page.
+2. Wait for it to fully load.
+3. Capture/render a screenshot of the page.
+4. Inspect the entire visible UI.
+5. Scroll from top to bottom.
+6. Check for:
+   - Broken layouts
+   - Overlapping elements
+   - Incorrect spacing
+   - Incorrect typography
+   - Cut-off content
+   - Overflow
+   - Horizontal scrolling
+   - Missing images
+   - Broken icons
+   - Broken links
+   - Incorrect colors
+   - Poor contrast
+   - Inconsistent components
+   - Unexpected blank spaces
+   - Loading problems
+   - Console errors
+   - Network errors
+   - JavaScript errors
+   - React/framework errors
+   - Hydration errors
+   - Missing data
+   - Incorrect states
+   - Broken animations
+   - Content extending outside containers
+
+Do not assume that a page is correct just because it loads.
+
+---
+
+# 3. TEST EVERY BUTTON AND INTERACTIVE ELEMENT
+
+For **every button and interactive element**, actually interact with it.
+
+Do not merely inspect the HTML.
+
+For each element:
+
+- Click it.
+- Verify the expected behavior.
+- Verify navigation if applicable.
+- Verify URL changes when applicable.
+- Verify modal opening/closing.
+- Verify dropdown behavior.
+- Verify state changes.
+- Verify loading behavior.
+- Verify success/error behavior.
+- Verify disabled states.
+- Verify hover/focus states where applicable.
+- Verify keyboard accessibility where applicable.
+- Verify that clicking repeatedly does not cause broken behavior.
+- Verify that back/close/cancel actions work.
+
+For links:
+
+- Click the link.
+- Verify it goes to the correct destination.
+- Check for 404s.
+- Check for incorrect routes.
+- Check for links that do nothing.
+
+For forms:
+
+- Test valid input.
+- Test invalid input.
+- Test empty input.
+- Test boundary cases.
+- Submit the form.
+- Verify validation messages.
+- Verify loading state.
+- Verify success state.
+- Verify failure state.
+- Verify that data is actually processed/persisted where applicable.
+
+If an interaction requires external credentials, payment, email, or another unavailable external dependency, do not fabricate success. Test everything that can be tested locally and clearly record the external dependency.
+
+---
+
+# 4. TEST MOBILE RESPONSIVENESS
+
+Test the entire website on mobile-sized viewports.
+
+At minimum test:
+
+- 320px width
+- 375px width
+- 390px width
+- 414px width
+
+Also test desktop/tablet sizes such as:
+
+- 768px
+- 1024px
+- 1280px
+- 1440px
+
+For every page at every relevant breakpoint, check:
+
+- Layout
+- Typography
+- Navigation
+- Mobile menu
+- Buttons
+- Forms
+- Cards
+- Images
+- Tables
+- Modals
+- Dropdowns
+- Sticky/fixed elements
+- Footer
+- Spacing
+- Overflow
+- Horizontal scrolling
+- Touch targets
+- Text wrapping
+- Content clipping
+- Responsive images
+- Responsive grids
+
+Pay special attention to issues that only appear after resizing.
+
+---
+
+# 5. VISUAL QA
+
+For every page, render/capture the page and visually inspect it.
+
+Look for:
+
+### Layout
+- Misalignment
+- Incorrect widths/heights
+- Broken grids
+- Uneven spacing
+- Elements touching each other
+- Elements overlapping
+- Content outside containers
+
+### Typography
+- Wrong font
+- Wrong font size
+- Wrong line height
+- Incorrect weight
+- Text clipping
+- Unexpected wrapping
+
+### Visual consistency
+- Buttons should look consistent.
+- Inputs should look consistent.
+- Cards should follow the same design system.
+- Spacing should be consistent.
+- Border radius should be consistent.
+- Colors should be consistent.
+- Icons should be consistent.
+
+### Images
+- Missing images
+- Broken image URLs
+- Incorrect aspect ratios
+- Distorted images
+- Images overflowing containers
+- Poor mobile behavior
+
+---
+
+# 6. BROWSER / CONSOLE QA
+
+Inspect:
+
+- Browser console
+- JavaScript errors
+- React errors
+- Framework warnings
+- Failed network requests
+- 404 resources
+- 500 responses
+- CORS errors
+- Missing assets
+- Failed API requests
+- Hydration errors
+- Runtime exceptions
+
+Treat unexpected errors as bugs unless there is a documented reason for them.
+
+---
+
+# 7. ACCESSIBILITY QA
+
+Check:
+
+- Keyboard navigation
+- Focus states
+- Tab order
+- Buttons accessible by keyboard
+- Form labels
+- Input labels
+- Alt text
+- Heading hierarchy
+- ARIA attributes where appropriate
+- Color contrast
+- Disabled states
+- Modal keyboard behavior
+- Escape-to-close behavior
+- Screen-reader-friendly semantics where practical
+- Touch target sizes on mobile
+
+Fix accessibility issues you discover.
+
+---
+
+# 8. FIX ISSUES YOURSELF
+
+When you discover an issue:
+
+1. Identify the root cause.
+2. Modify the source code.
+3. Save the changes.
+4. Rebuild/restart the application if necessary.
+5. Reload the affected page.
+6. Reproduce the original problem.
+7. Verify that it is fixed.
+8. Check that your fix did not break another page/component.
+
+Do NOT just add hacks that hide symptoms.
+
+Prefer fixing the underlying cause.
+
+---
+
+# 9. REGRESSION TESTING
+
+After making a fix to a shared component, **re-test every page that uses that component.**
+
+Examples:
+
+- If you change the header → test every page.
+- If you change a button component → test every page containing that button.
+- If you change responsive CSS → test desktop and mobile again.
+- If you change routing → test all navigation paths.
+- If you change forms → re-test all affected forms.
+
+Never assume a fix is isolated.
+
+---
+
+# 10. TEST NAVIGATION AS A USER WOULD
+
+Start from the homepage and navigate through the website naturally.
+
+Test:
+
+Home → Page A → Page B → Page C → Back → Forward → Home
+
+Also test:
+
+- Header navigation
+- Footer navigation
+- Breadcrumbs
+- CTA navigation
+- Internal links
+- External links
+- Browser back button
+- Browser forward button
+- Direct URL access
+- Refreshing pages
+- Deep links
+
+Make sure users don't get trapped in broken states.
+
+---
+
+# 11. CHECK EDGE CASES
+
+Look for:
+
+- Empty states
+- Long text
+- Very short text
+- Missing data
+- Slow loading
+- Failed requests
+- Duplicate clicks
+- Rapid clicks
+- Very narrow screens
+- Very wide screens
+- Large images
+- Long forms
+- Invalid URLs
+- Refreshing during a state
+- Opening/closing modals repeatedly
+- Opening multiple dropdowns
+- Back navigation after form submission
+
+Fix issues where appropriate.
+
+---
+
+# 12. MAINTAIN A BUG CHECKLIST
+
+Internally maintain something like:
+
+| Page | Element | Issue | Severity | Fixed | Re-tested |
+|------|---------|-------|----------|-------|-----------|
+
+Severity:
+
+- P0 = Critical / site unusable
+- P1 = Major functionality broken
+- P2 = Significant UI/UX issue
+- P3 = Minor visual/accessibility issue
+
+Do not mark an issue as fixed until you have actually re-tested it.
+
+---
+
+# 13. IMPORTANT: DO NOT STOP EARLY
+
+Do NOT stop because:
+
+- The homepage looks good.
+- The first few pages work.
+- There are no obvious errors.
+- The build succeeds.
+- The console is clean.
+- One viewport looks correct.
+
+Continue until:
+
+**EVERY DISCOVERED PAGE → EVERY INTERACTIVE ELEMENT → EVERY IMPORTANT STATE → DESKTOP + MOBILE → HAS BEEN TESTED.**
+
+---
+
+# 14. FINAL VERIFICATION LOOP
+
+Before declaring completion, perform another complete pass.
+
+For every page:
+
+1. Load it.
+2. Screenshot/render it.
+3. Scroll through it.
+4. Test its interactive elements.
+5. Check console/network errors.
+6. Test responsive behavior.
+7. Verify navigation.
+8. Verify forms.
+9. Verify visual layout.
+10. Verify accessibility.
+11. Confirm previously fixed bugs remain fixed.
+
+If you find even one issue during the final pass:
+
+**FIX IT → RELOAD → RE-TEST → CONTINUE THE LOOP.**
+
+---
+
+# 15. DEFINITION OF DONE
+
+You may only declare the website complete when:
+
+- All discoverable pages have been tested.
+- All important buttons have been tested.
+- All links have been tested.
+- All forms have been tested.
+- All major interactive components have been tested.
+- Desktop layouts work.
+- Mobile layouts work.
+- No unexpected horizontal overflow exists.
+- No obvious visual defects remain.
+- No unexpected console/runtime errors remain.
+- No broken internal navigation remains.
+- No broken assets remain.
+- Accessibility issues discovered during testing have been fixed.
+- Fixes have been regression-tested.
+- A final full-site verification pass has been completed.
+
+If something cannot be tested because it depends on an unavailable external service or credential, explicitly identify that limitation instead of pretending it passed.
+
+---
+
+# MOST IMPORTANT INSTRUCTION
+
+**You are not an auditor who only reports bugs. You are an autonomous engineer responsible for fixing them.**
+
+For every bug:
+
+**FIND → UNDERSTAND → FIX → RELOAD → REPRODUCE → VERIFY → REGRESSION TEST**
+
+Keep looping until the website is genuinely in a clean, production-ready state.
+
+Do not ask me to manually check things that you can inspect or test yourself.
+
+Do not stop after producing a bug report.
+
+**Your objective is a working website, not a list of problems.**
+
+
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T00:30:12+05:30.
+
+The user has uploaded 1 image(s):
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791140054383.png
+You can embed this image in an artifact if you need the USER to review it.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+check it again 
+
+Act as an autonomous senior QA engineer + frontend developer.
+
+Thoroughly test my entire website **page by page and button by button**. Discover every route, link, button, form, modal, dropdown, navigation item, and interactive element.
+
+For every page:
+- Open and visually inspect the full page.
+- Render/capture screenshots and check the UI.
+- Test every button, link, form, and interaction.
+- Check console, runtime, network, and 404 errors.
+- Test responsive layouts on desktop, tablet, and mobile.
+- Check for overflow, broken layouts, spacing, typography, missing assets, accessibility, and UX issues.
+
+**When you find any issue, fix it yourself in the code. Then reload and re-test it.**
+
+After every fix, perform regression testing on affected pages/components.
+
+Keep looping:
+
+**Discover → Test → Find Bug → Fix → Reload → Re-test → Regression Test**
+
+Do not just report bugs. **Actually fix them.**
+
+Do not stop until every discoverable page and interactive element has been tested and everything that can be fixed is fixed and verified.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T00:40:58+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+* GenerateContentRequest.model: unexpected model name format
+getting this how to fix this ?
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T01:09:15+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+like can you do it fetch automatically 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T01:10:46+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+like i don't know what themodel nakme is and all 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T01:11:59+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+search on net the new gemini api key uses gemini 3.5 and all 
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T01:16:25+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+saerch what new models are there 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T01:17:14+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+also everywhere in the app also put paste from clipboard option 
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T01:18:56+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+yr isko badha krde thoda taki acche se visible ho ye acche se 
+sharing wale me bhi krna ok 
+
+and also 
+wo copy paste wala bhi implement krde isme ki me photo paste karu to wo ho jaye 
+and also 
+agar me actualy timing upload karu diary se to wo apne aap samajh le ki actual and tentative me kitna deviation h 
+ok 
+chal ab ye krke final code dede mujhe tu 
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T02:13:59+05:30.
+
+The user has uploaded 1 image(s):
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791146425877.png
+You can embed this image in an artifact if you need the USER to review it.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+sun ye bhut accha h isko tu aur accha karde like hover karu to details show ho and like ye overlapping and all kyi h ??
+isko sahi kr 
+and yyr jese koi activity likhi h to uske starting me just bahar uska time show ho starting and ending wala like proper krna isko acche se 
+and also 
+and ye overcomplicated h yr dekh ke dar lgta h short rakh na isko 
+plan wala kiya so yes, no , partial.....
+and then fir what you actually do usme rakh... same as planned, or something else 
+and then something else aga h to box khol ki kitni bj se kab tk kya kiya and konsi category h 
+tthats it 
+
+baki sab bhut sahi h 
+sir isko aur accha krde tu ok 
+same last wale ko bhi bada krde and isme timings show ho jaye 
+and also sun 
+ye krke final code dede
+
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T21:29:16+05:30.
+
+The user has uploaded 3 image(s):
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791215898161.png
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791215907215.png
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791215916238.png
+You can embed these images in an artifact if you need the USER to review them.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+sun ye bhut accha h isko tu aur accha karde like hover karu to details show ho and like ye overlapping and all kyi h ??
+isko sahi kr 
+and yyr jese koi activity likhi h to uske starting me just bahar uska time show ho starting and ending wala like proper krna isko acche se 
+and also 
+and ye overcomplicated h yr dekh ke dar lgta h short rakh na isko 
+plan wala kiya so yes, no , partial.....
+and then fir what you actually do usme rakh... same as planned, or something else 
+and then something else aga h to box khol ki kitni bj se kab tk kya kiya and konsi category h 
+tthats it 
+
+baki sab bhut sahi h 
+sir isko aur accha krde tu ok 
+same last wale ko bhi bada krde and isme timings show ho jaye 
+and also sun 
+ye krke final code dede
+
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T21:35:03+05:30.
+
+The user has uploaded 3 image(s):
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791216297673.jpg
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791216298771.jpg
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791216299752.png
+You can embed these images in an artifact if you need the USER to review them.
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Gemini 3.1 Pro (High) to Claude Opus 4.6 (Thinking). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+
+====================
+
+<USER_REQUEST>
+✦
+Daily plan · tentative vs actual
+16 slots · 24h
+6% on plan
+6h 30m to check in
+Diary photo or typed notes → editable plan → Calendar reminders → actual check-ins.
+
+Plan
+Sleep
+Class
+Jal (Unclear activity)
+ML Padhai
+ML Padhai
+00:00
+01:00
+02:00
+08:00
+08:00
+09:00
+10:00
+10:50
+13:00
+13:00
+13:30
+14:00
+16:00
+16:00
+16:30
+18:00
+18:00
+21:00
+21:00
+21:30
+22:00
+24:00
+Actual
+Rishi se baat
+Soya
+Rishi se baat
+00:00
+01:00
+00:00
+02:00
+03:00
+10:00
+10:00
+11:00
+12:30
+13:30
+14:30
+16:00
+16:20
+16:50
+19:00
+20:00
+22:00
+00:0003:0006:0009:0012:0015:0018:0021:0000:00
+Planned
+Actually done
+Changed / missed
+1440m planned
+· 60m followed on time
+· 990m changed
+· 390m awaiting check-in
+6% adherence (reviewed time)
+Followed
+Changed
+Pending
+Calendar up to date · reminders at start and your selected lead time · Asia/Kolkata
+
+00:00–01:00 · Rishi se baat
+Talk with Dost · 60m
+Done
+Actual: 00:00–01:00 · Rishi se baat (followed)
+01:00–02:00 · ML Padhai
+Study · 60m
+Changed
+Actual: 01:00–02:00 · Rishi se baat (missed)
+Why: usne mujhe call kar diya so fir baat karni padi
+02:00–08:00 · Sleep
+Sleep · 360m
+Changed
+Actual: 03:00–10:00 · Soya (changed)
+Why: Overslept past planned wake up time.
+08:00–09:00 · Ready + Breakfast
+Morning Routine · 60m
+Changed
+Actual: 10:00–11:00 · Nahaya (changed)
+Why: Delayed morning routine.
+09:00–10:00 · Class (ESO = 213)
+Class · 60m
+Check in
+Actual: awaiting your confirmation
+10:00–10:50 · ML Padhai
+Study · 50m
+Changed
+Actual: 12:30–13:30 · Padhai (changed)
+Why: Shifted study time.
+10:50–13:00 · Class
+Class · 130m
+Changed
+Actual: 11:00–12:00 · Class (changed)
+Why: Attended class later than scheduled.
+13:00–13:30 · Lunch
+Meals · 30m
+Changed
+Actual: 13:30–14:30 · Lunch (changed)
+Why: Delayed lunch.
+13:30–14:00 · ML Padhai
+Study · 30m
+Check in
+Actual: awaiting your confirmation
+14:00–16:00 · Jal (Unclear activity)
+Waste Time · 120m
+Changed
+Actual: 14:30–16:00 · Lab (changed)
+Why: Time spent in lab.
+16:00–16:30 · ML Padhai
+Study · 30m
+Changed
+Actual: 16:20–16:50 · Padhai (changed)
+Why: Shifted study time.
+16:30–18:00 · Class
+Class · 90m
+Changed
+Actual: 16:50–18:00 · Class (changed)
+Why: Shifted class time.
+18:00–21:00 · ML Padhai
+Study · 180m
+Check in
+Actual: awaiting your confirmation
+21:00–21:30 · Dinner
+Meals · 30m
+Changed
+Actual: 19:00–20:00 · Lunch (changed)
+Why: Late meal.
+21:30–22:00 · Rishi
+Talk with Dost · 30m
+Changed
+Actual: 20:00–22:00 · Rishi se baat (changed)
+Why: Extended talk time.
+22:00–24:00 · ML Padhai
+Study · 120m
+Upcoming
+Actual: awaiting your confirmation
+Adherence = minutes of the same activity inside its planned slot ÷ reviewed planned minutes. Pending slots are excluded. 4 unlinked actual entries in the timeline below.
+
+120 overlapping minutes in existing logs are counted once; latest edited log takes priority.
+
+Day View
+Week View
+Productive
+10.2h
+Waste Time
+2.8h
+Sleep
+7.0h
+Logged
+17 entries
+Your day at a glance
+22h logged · 2h unlogged
+
+Rishi se baat
+
+Soya
+
+Rishi se baat
+00:00
+00:00
+02:00
+01:00
+02:00
+03:00
+10:00
+10:00
+11:00
+12:00
+12:30
+13:30
+14:30
+16:00
+16:00
+16:20
+16:50
+18:00
+19:00
+20:00
+22:00
+00:0006:0012:0018:0024h
+Tap a block for details · striped = waste time · empty = not logged
+Rishi se baat
+Talk with Dost · 20:00–22:00 · 2h
+Tap a block for details · striped = waste time · empty = not logged
+Actual timeline — Today
+Tap an activity to expand
+00:00
+
+Rishi se baat
+Talk with Dost
+00:00–01:00
+1h
+00:00
+
+Rishi se baat
+Talk with Dost
+00:00–02:00
+2h
+01:00
+
+Rishi se baat
+Waste Time
+01:00–02:00
+⚠️ waste
+1h
+02:00
+
+Phone chalaya
+Waste Time
+02:00–03:00
+⚠️ waste
+1h
+03:00
+
+Soya
+Sleep
+03:00–10:00
+7h
+10:00
+
+Nahaya
+Self-Care
+10:00–11:00
+1h
+11:00
+
+Class
+Class
+11:00–12:00
+1h
+12:00
+
+Coffee
+Waste Time
+12:00–12:30
+⚠️ waste
+30m
+12:30
+
+Padhai
+Study
+12:30–13:30
+1h
+13:30
+
+Lunch
+Meals
+13:30–14:30
+1h
+14:30
+
+Lab
+Waste in Lab 🤬
+14:30–16:00
+1h 30m
+16:00
+
+Waste
+Waste Time
+16:00–16:20
+⚠️ waste
+20m
+16:20
+
+Padhai
+Study
+16:20–16:50
+30m
+16:50
+
+Class
+Class
+16:50–18:00
+1h 10m
+18:00
+
+Waste, coffee
+Waste Time
+18:00–19:00
+⚠️ waste
+1h
+19:00
+
+Lunch
+Meals
+19:00–20:00
+1h
+20:00
+
+Rishi se baat
+Talk with Dost
+20:00–22:00
+2h
+Where the time went
+22.0h
+logged
+Sleep
+7h
+32%
+Talk with Dost
+4h
+18%
+Waste Time
+2h 50m
+13%
+Class
+2h 10m
+10%
+Meals
+2h
+9%
+Study
+1h 30m
+7%
+Waste in Lab 🤬
+1h 30m
+7%
+Self-Care
+1h
+5%
+
+
+ab dekh sun meri bat tu 
+actualy and tentative me obviously faraq hoga pin point match nhi hogi yr wo 
+to yr jitna ho rha h usko match kar tu 
+and then baki nhi ho rha h usko flaf kr rha 
+jese me kal 3 se 10 soya ok 
+so tu dekh waha ki 2 se 8 sleep tha to 3 se 8 to me soya to wo to plan ke according tha but me extra soo gaya 8-10 to tu bol ki wo time tera ye krne ka tha tune classmiss krdi and tu soo gaya aage se dhyan rakhna is type ki chize bol baki to match kr rha h na broo
+
+and also ye daily plan tentative and actual ko thoda accha kar ye bhut bekar dikh rha h yrr 
+isko like tu dynamic bana de na 
+badiya se dikhe esa 
+agar click kru ispe to detail khule uski and all 
+and ye timeline hata de niche se ye chote chote me likha h wo 
+like tu bas block bana and uspe hover karu to info aye and click kru to bhi aye 
+
+and ek aur bar bana wo bflag kare ye foloow nhi hua and all 
+3 baar isme 
+and ye niche wale pe hover kr rha hu you day at a glance to wo kitta side me open ho rha h usko bhi fix krde
+and tu khud image dekh kr saari chize check kr 
+and yue dynamic wala chiz net pe dekh and adapt krde 
+and final repo me changes krde and code dede
+
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T22:18:20+05:30.
+
+The user has uploaded 3 image(s):
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791218478140.png
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791218737719.png
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791218850439.png
+You can embed these images in an artifact if you need the USER to review them.
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from  to Gemini 3.1 Pro (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+
+====================
+
+<USER_REQUEST>
+just check again and check that what I said is implemented or not and look at the images and assure it 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T22:21:34+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+you havent rendered images yr render them and check them 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T22:23:15+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+✦
+Daily plan · tentative vs actual
+16 slots · 24h
+6% on plan
+6h 30m to check in
+Diary photo or typed notes → editable plan → Calendar reminders → actual check-ins.
+
+Plan
+Sleep
+Class
+Jal (Unclear activity)
+ML Padhai
+ML Padhai
+00:00
+01:00
+02:00
+08:00
+08:00
+09:00
+10:00
+10:50
+13:00
+13:00
+13:30
+14:00
+16:00
+16:00
+16:30
+18:00
+18:00
+21:00
+21:00
+21:30
+22:00
+24:00
+Actual
+Rishi se baat
+Soya
+Rishi se baat
+00:00
+01:00
+00:00
+02:00
+03:00
+10:00
+10:00
+11:00
+12:30
+13:30
+14:30
+16:00
+16:20
+16:50
+19:00
+20:00
+22:00
+00:0003:0006:0009:0012:0015:0018:0021:0000:00
+Planned
+Actually done
+Changed / missed
+1440m planned
+· 60m followed on time
+· 990m changed
+· 390m awaiting check-in
+6% adherence (reviewed time)
+Followed
+Changed
+Pending
+Calendar up to date · reminders at start and your selected lead time · Asia/Kolkata
+
+00:00–01:00 · Rishi se baat
+Talk with Dost · 60m
+Done
+Actual: 00:00–01:00 · Rishi se baat (followed)
+01:00–02:00 · ML Padhai
+Study · 60m
+Changed
+Actual: 01:00–02:00 · Rishi se baat (missed)
+Why: usne mujhe call kar diya so fir baat karni padi
+02:00–08:00 · Sleep
+Sleep · 360m
+Changed
+Actual: 03:00–10:00 · Soya (changed)
+Why: Overslept past planned wake up time.
+08:00–09:00 · Ready + Breakfast
+Morning Routine · 60m
+Changed
+Actual: 10:00–11:00 · Nahaya (changed)
+Why: Delayed morning routine.
+09:00–10:00 · Class (ESO = 213)
+Class · 60m
+Check in
+Actual: awaiting your confirmation
+10:00–10:50 · ML Padhai
+Study · 50m
+Changed
+Actual: 12:30–13:30 · Padhai (changed)
+Why: Shifted study time.
+10:50–13:00 · Class
+Class · 130m
+Changed
+Actual: 11:00–12:00 · Class (changed)
+Why: Attended class later than scheduled.
+13:00–13:30 · Lunch
+Meals · 30m
+Changed
+Actual: 13:30–14:30 · Lunch (changed)
+Why: Delayed lunch.
+13:30–14:00 · ML Padhai
+Study · 30m
+Check in
+Actual: awaiting your confirmation
+14:00–16:00 · Jal (Unclear activity)
+Waste Time · 120m
+Changed
+Actual: 14:30–16:00 · Lab (changed)
+Why: Time spent in lab.
+16:00–16:30 · ML Padhai
+Study · 30m
+Changed
+Actual: 16:20–16:50 · Padhai (changed)
+Why: Shifted study time.
+16:30–18:00 · Class
+Class · 90m
+Changed
+Actual: 16:50–18:00 · Class (changed)
+Why: Shifted class time.
+18:00–21:00 · ML Padhai
+Study · 180m
+Check in
+Actual: awaiting your confirmation
+21:00–21:30 · Dinner
+Meals · 30m
+Changed
+Actual: 19:00–20:00 · Lunch (changed)
+Why: Late meal.
+21:30–22:00 · Rishi
+Talk with Dost · 30m
+Changed
+Actual: 20:00–22:00 · Rishi se baat (changed)
+Why: Extended talk time.
+22:00–24:00 · ML Padhai
+Study · 120m
+Upcoming
+Actual: awaiting your confirmation
+Adherence = minutes of the same activity inside its planned slot ÷ reviewed planned minutes. Pending slots are excluded. 4 unlinked actual entries in the timeline below.
+
+120 overlapping minutes in existing logs are counted once; latest edited log takes priority.
+
+Day View
+Week View
+Productive
+10.2h
+Waste Time
+2.8h
+Sleep
+7.0h
+Logged
+17 entries
+Your day at a glance
+22h logged · 2h unlogged
+
+Rishi se baat
+
+Soya
+
+Rishi se baat
+00:00
+00:00
+02:00
+01:00
+02:00
+03:00
+10:00
+10:00
+11:00
+12:00
+12:30
+13:30
+14:30
+16:00
+16:00
+16:20
+16:50
+18:00
+19:00
+20:00
+22:00
+00:0006:0012:0018:0024h
+Tap a block for details · striped = waste time · empty = not logged
+Rishi se baat
+Talk with Dost · 20:00–22:00 · 2h
+Tap a block for details · striped = waste time · empty = not logged
+Actual timeline — Today
+Tap an activity to expand
+00:00
+
+Rishi se baat
+Talk with Dost
+00:00–01:00
+1h
+00:00
+
+Rishi se baat
+Talk with Dost
+00:00–02:00
+2h
+01:00
+
+Rishi se baat
+Waste Time
+01:00–02:00
+⚠️ waste
+1h
+02:00
+
+Phone chalaya
+Waste Time
+02:00–03:00
+⚠️ waste
+1h
+03:00
+
+Soya
+Sleep
+03:00–10:00
+7h
+10:00
+
+Nahaya
+Self-Care
+10:00–11:00
+1h
+11:00
+
+Class
+Class
+11:00–12:00
+1h
+12:00
+
+Coffee
+Waste Time
+12:00–12:30
+⚠️ waste
+30m
+12:30
+
+Padhai
+Study
+12:30–13:30
+1h
+13:30
+
+Lunch
+Meals
+13:30–14:30
+1h
+14:30
+
+Lab
+Waste in Lab 🤬
+14:30–16:00
+1h 30m
+16:00
+
+Waste
+Waste Time
+16:00–16:20
+⚠️ waste
+20m
+16:20
+
+Padhai
+Study
+16:20–16:50
+30m
+16:50
+
+Class
+Class
+16:50–18:00
+1h 10m
+18:00
+
+Waste, coffee
+Waste Time
+18:00–19:00
+⚠️ waste
+1h
+19:00
+
+Lunch
+Meals
+19:00–20:00
+1h
+20:00
+
+Rishi se baat
+Talk with Dost
+20:00–22:00
+2h
+Where the time went
+22.0h
+logged
+Sleep
+7h
+32%
+Talk with Dost
+4h
+18%
+Waste Time
+2h 50m
+13%
+Class
+2h 10m
+10%
+Meals
+2h
+9%
+Study
+1h 30m
+7%
+Waste in Lab 🤬
+1h 30m
+7%
+Self-Care
+1h
+5%
+
+
+ab dekh sun meri bat tu 
+actualy and tentative me obviously faraq hoga pin point match nhi hogi yr wo 
+to yr jitna ho rha h usko match kar tu 
+and then baki nhi ho rha h usko flaf kr rha 
+jese me kal 3 se 10 soya ok 
+so tu dekh waha ki 2 se 8 sleep tha to 3 se 8 to me soya to wo to plan ke according tha but me extra soo gaya 8-10 to tu bol ki wo time tera ye krne ka tha tune classmiss krdi and tu soo gaya aage se dhyan rakhna is type ki chize bol baki to match kr rha h na broo
+
+and also ye daily plan tentative and actual ko thoda accha kar ye bhut bekar dikh rha h yrr 
+isko like tu dynamic bana de na 
+badiya se dikhe esa 
+agar click kru ispe to detail khule uski and all 
+and ye timeline hata de niche se ye chote chote me likha h wo 
+like tu bas block bana and uspe hover karu to info aye and click kru to bhi aye 
+
+and ek aur bar bana wo bflag kare ye foloow nhi hua and all 
+3 baar isme 
+and ye niche wale pe hover kr rha hu you day at a glance to wo kitta side me open ho rha h usko bhi fix krde
+and tu khud image dekh kr saari chize check kr 
+and yue dynamic wala chiz net pe dekh and adapt krde 
+and final repo me changes krde and code dede
+
+specially the timing thing this one "ab dekh sun meri bat tu 
+actualy and tentative me obviously faraq hoga pin point match nhi hogi yr wo 
+to yr jitna ho rha h usko match kar tu 
+and then baki nhi ho rha h usko flaf kr rha 
+jese me kal 3 se 10 soya ok 
+so tu dekh waha ki 2 se 8 sleep tha to 3 se 8 to me soya to wo to plan ke according tha but me extra soo gaya 8-10 to tu bol ki wo time tera ye krne ka tha tune classmiss krdi and tu soo gaya aage se dhyan rakhna is type ki chize bol baki to match kr rha h na broo""
+
+
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T22:44:11+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+aur kuch ispe me hover karu to bhut acche se wo highligh ho and all 
+and also ye beech me khali gap kyi h like actual me to poori timeline h fir ye disperencies kyu h ?
+and deviated me sirf wahi part highlish kro na jo alag h planned se deviated and actual same h isme to yrr 
+and in block ke andar kuch mat likh yr tu bas colour coding de inko tu 
+and also un  block pe click kru to wo khulna chiye ki us time me kya kiya naki ye ki usoo change karo and all "that is plan check in"
+
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T22:47:44+05:30.
+
+The user has uploaded 2 image(s):
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791220544200.png
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791220657081.png
+You can embed these images in an artifact if you need the USER to review them.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+as in this when I am clicking into this its showing nice things 
+same I want in the above one so do it in all three 
+and then it again showing only 6% adhered 
+I explained you the logic na so do it here also na 
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T22:57:05+05:30.
+
+The user has uploaded 2 image(s):
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791221158492.png
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791221200291.png
+You can embed these images in an artifact if you need the USER to review them.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+any other thing you want to test in it 
+Like I want you to think every aspect and all 
+so that the web is rough and tough 
+so check it 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T23:23:09+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+# Time Flow — Deep Audit + Exact Improvement Plan
+
+**Scope:** sirf Time Flow page — `src/pages/TimeFlow.jsx`, `components/ui/DayPlanner.jsx`, `components/ui/TimeCharts.jsx`, `utils/planning.js`, `utils/timeColors.js`, `services/geminiService.js › draftActualLogs`.
+
+**Kaise banaya:** tere zip ka code padha → tere 2 screenshots + text dump ke saath cross-check kiya → tere *aaj ke din ke data* par naya math Node me run karke verify kiya → net par best practices dekhe (sources last me). Jahan "verified" likha hai wahan number real run se aaya hai, andaaza nahi. "Abhi" = ~23:19 IST (zip ka timestamp + screenshot ka now-line).
+
+---
+
+## 0. TL;DR — 8 sabse badi problems (damage ke order me)
+
+| # | Problem | Proof (tere data se) | Fix (section) |
+|---|---|---|---|
+| 1 | **Neeche wala ribbon ka hover galat jagah dikhta hai** | `Card` me `backdrop-filter` hai → `position: fixed` tooltip browser viewport ke bajaye *card* ke relative ho jaata hai. Offset = card ki apni screen position | §6 (portal) |
+| 2 | **"59% on plan" misleading hai** | Honest adherence = **41%**. Study (lived) 429 min plan, kiya sirf **90 min = 21%**. Focus (Study+Class) completion = **31%** | §4 |
+| 3 | **"Productive 10.2h" galat hai** | Isme 4h *Talk with Dost*, 1h Self-care, 1.5h **"Waste in Lab 🤬"** shamil hain. Real Study+Class = **3h 40m** | §3-B3 |
+| 4 | **Ribbon aur stats ek dusre se alag bolte hain** | 01:00–02:00: ribbon = *Waste Time*, "Where time went" = *Talk with Dost* (latest-edited-wins sirf stats me lagta hai) | §3-B2 |
+| 5 | **"390m awaiting check-in" ka 270m khud pata chal sakta hai** | Class 9–10 (tu *Soya* log kar chuka), Study 13:30–14:00 (*Lunch*), Study 18–21 (waste+khana+Rishi). Baaki 120m (22:00–24:00) *abhi chal raha hai* par label **"Upcoming"** hai | §3-B6 |
+| 6 | **"Missed" check-in fake activity save karta hai** | Missed → name `Missed`, category `Other` → stats me **productive** gina jaata hai. AI-diary me missed *Study* slot → **fake study session** (study analytics + gamification/score me ginta hai) | §3-B4 |
+| 7 | **Flags Gemini decide karta hai, math nahi** | `planOutcome` AI/user ka declared label hai; time-overlap se derive nahi hota. 1 slot ↔ 1 actual (`entries.find`) | §4 |
+| 8 | **Plan baad me edit ho sakta hai, snapshot nahi** | `savePlan` poore din ka plan replace kar deta hai → adherence "gaming" possible | §3-B12 |
+
+**Ek line me:** page abhi *"time log + AI ka opinion"* hai. Isse *"plan-vs-actual ka deterministic engine + uske upar interactive graph + insights"* banana hai. Engine ek hi hona chahiye (single source of truth); ribbon, stats, donut, week, plan-card sab usi se padhen.
+
+---
+
+## 1. Page abhi kaise bana hai (short map)
+
+| UI piece | File | Data kahan se | Kya compute karta hai |
+|---|---|---|---|
+| Live clock + 3 mini stats | `TimeFlow.jsx › LiveClock` | `summarizeDay` | productive / waste / unlogged |
+| Daily plan card (plan vs actual) | `DayPlanner.jsx` | `planComparison(plans, entries)` | followed / changed / pending / adherence % |
+| Plan / Actual / Deviated lanes | `TimeCharts.jsx › PlanVsActual` | plans + **sirf linked entries** | deviations lane (early/extra/missed-start/missed-end) |
+| Stat cards (Productive/Waste/Sleep/Logged) | `TimeFlow.jsx` | `summarizeDay` (minute-resolved) | category → bucket |
+| "Your day at a glance" ribbon | `TimeCharts.jsx › DayRibbon` | **raw `dayEntries`** (resolve nahi hota) | bas draw karta hai |
+| Actual timeline | `TimelineEntry` | raw `dayEntries` | expand/edit/delete |
+| Where the time went (donut) | recharts `PieChart` | `summarizeDay.categories` | % of *logged* time |
+| Week view | recharts `BarChart` + `DayRibbon` ×7 | `summarizeDay` per day | avg = sum/7 |
+| Check-in / Log actuals | `DayPlanner.jsx`, `geminiService.draftActualLogs` | user + Gemini | entries save |
+
+Yaani **3 alag "truth" paths** hain: (a) minute-resolved (`summarizeTime`), (b) raw entries (ribbon/timeline), (c) planSlotId-link (plan card). Isiliye numbers aur drawing mismatch hoti hai.
+
+---
+
+## 2. Tere aaj ke din ka audit (proof)
+
+### 2.1 UI kya bol raha hai vs reality
+
+| Cheez | UI | Reality (verified) |
+|---|---|---|
+| On plan | 59% | **41%** (530 on-plan min ÷ 1279 lived min; planned-waste slot hata ke) |
+| Followed / Changed / Pending | 620 / 430 / 390 | 620 me **90 min Lab-waste** gina gaya jo plan ke *"Jal (Unclear)"* slot se match ho gaya — kyunki code activity nahi, sirf *time overlap + link* dekhta hai |
+| Study | dikhta nahi | **90 / 429 min = 21%** done (lived plan) |
+| Study+Class completion | dikhta nahi | **31%** |
+| Productive | 10.2h | **3h 40m** (Study 1h30 + Class 2h10). Baaki: Talk 4h, Self-care 1h, "Waste in Lab" 1.5h |
+| Talk with Dost | 4h | Plan **90m** thi → **267%** (overdone) |
+| Waste (sab milake) | 2.8h | **4h 20m** ("Waste in Lab" alag category hone se 1.5h chhoot gaya) |
+| Pending | 390m "to check in" | 270m auto-detect, 120m *in-progress* (22:00–24:00), usme se 79m ka log nahi |
+| Unlogged | 2h | 79m *past gap* (22:00–23:19) + 41m *future* — dono alag dikhne chahiye |
+| Productivity pulse (naya) | — | **47/100** (RescueTime-style, discretionary time par) |
+
+### 2.2 Slot-by-slot naya verdict (reference engine ka real output)
+
+`on` = plan-window ke andar same-activity minutes · `Δstart/Δend` = actual run vs plan · `fid` = fidelity (IoU)
+
+| Slot | Plan | Verdict (flags) | Kya hua | Cause |
+|---|---|---|---|---|
+| P1 | 00:00–01:00 Rishi | 🛌 **OVERRAN +60** | Call 02:00 tak chali | — |
+| P2 | 01:00–02:00 ML Padhai | 🚫 **Replaced** by Rishi call (60m) | "usne call kar diya" | P1 ka overrun |
+| P3 | 02:00–08:00 Sleep | ⏰ **+60 late**, 🛌 **+120 overran** (fid 63%) | 03:00–10:00 soya; 02:00–03:00 phone | — |
+| P4 | 08:00–09:00 Ready+Breakfast | 🔁 **Shifted +120** + 🚫 Soya (60m) | Nahaya 10:00 par | P3 ka cascade |
+| P5 | 09:00–10:00 Class ESO | 🚫 **Replaced** by Soya (60m) — *Class miss, neend ki wajah se* | koi check-in nahi chahiye | P3 ka cascade |
+| P6 | 10:00–10:50 ML Padhai | 🔁 **Shifted +2h30** (12:30–13:30 padha) + 🚫 Nahaya | study *hui*, par doosre time | P4 ka cascade |
+| P7 | 10:50–13:00 Class | ⏰ +10 late, ✂️ −60 cut short, 🚫 coffee 30 + padhai 30 + nahaya 10 | 11–12 attend | — |
+| P8 | 13:00–13:30 Lunch | 🔁 Shifted +30 | 13:30–14:30 | — |
+| P9 | 13:30–14:00 ML Padhai | 🚫 Replaced by Lunch (30m) | **auto-detect, check-in nahi chahiye** | P8 |
+| P10 | 14:00–16:00 *Jal (Unclear)* | 🕳 **Planned waste/unclear** — adherence se bahar | Lab 14:30–16:20 | rename prompt |
+| P11 | 16:00–16:30 ML Padhai | ⏰ +20 late, 🚫 waste 20m | 16:20–16:50 padha | P10 ka overrun |
+| P12 | 16:30–18:00 Class | ⏰ +20 late (fid 78%) | 16:50–18:00 | — |
+| P13 | 18:00–21:00 ML Padhai | 🚫 **180m poori replace**: waste/coffee 60 + khana 60 + Rishi 60 | **auto-detect** | P14, P15 *pulled forward* |
+| P14 | 21:00–21:30 Dinner | ⏩ **Pulled forward −120** (19:00 par, label "Lunch" ❓) | 🏷 label check | — |
+| P15 | 21:30–22:00 Rishi | ⏩ **Pulled forward −90** | 20:00–22:00 | — |
+| P16 | 22:00–24:00 ML Padhai | ▶️ **Abhi chal raha** · 79m ka koi log nahi | "Log now / Start timer" CTA | — |
+
+### 2.3 "Planned Study ka time kahan gaya?" (swap matrix — verified)
+
+Study ke 429 lived-plan minutes → **Talk 120 · Meals-label 90 · Waste 80 · No-log 79 · Self-care 50 · Study (on-plan) 10.**
+(+ 80 min Study doosre windows me hui — wo *shifted* hai, missed nahi.)
+
+### 2.4 Drift (lag) curve — din plan se kitna peeche/aage tha
+
+`02:00 +60 → 08:00 +120 → 10:00 +150 → 10:50 +10 → 13:00 +30 → 14:00 +30 → 16:00 +20 → 16:30 +20 → 21:00 −120 → 21:30 −90`
+Matlab: oversleep ne din ko ~2h peeche kiya, 10:50 tak recover, phir 16:30 tak +20 ka chhota lag, aur shaam ko khana/baat *aage kheench ke* study ko kha liya. Ye ek chart me dikhna chahiye (§5.7).
+
+---
+
+## 3. Bugs & logic flaws (file + exact fix)
+
+### B1 — Hover tooltip galat jagah (tera complaint #1)
+- **Cause:** `TimeCharts.jsx` ke dono tooltips `position: 'fixed'; left: clientX; top: clientY` use karte hain, aur ribbon `Card` ke andar hai jisme `backdropFilter: blur(16px)` (Card.jsx). CSS spec me `backdrop-filter`/`filter`/`transform` wala element `fixed` children ka containing block ban jaata hai (WebKit ne bhi isko expected behaviour bola). Isliye tooltip card ke relative placed hota hai → screen par card ki position jitna displace.
+- **Verify (1 min):** DevTools me ribbon ke parent Card par `backdrop-filter: none` kar de → tooltip cursor ke paas aa jayega.
+- **Fix:** §6 — tooltip ko `document.body` me **portal** karo (ya Floating UI). Card se blur hataana bhi theek hai par fragile hai; portal permanent fix hai.
+
+### B2 — Ribbon raw entries draw karta hai, stats resolved
+- `DayRibbon` ko `dayEntries` (raw) milta hai; `summarizeTime` "latest edited wins" se har minute ek hi activity ko deta hai. Overlap (tere 00:00–01:00, 00:00–02:00, 01:00–02:00) me ribbon upar wale block ka color dikhata hai, stats kuch aur gin-te hain. Overlapping blocks hover me bhi sahi nahi pakadte.
+- `toRange()` overnight entry (`end <= start`) ko `1440` tak kaat deta hai, par agle din ka hissa (`summarizeDay` me handled) ribbon me nahi aata.
+- **Fix:** ribbon, timeline, donut, week — sab `resolveMinutes()` ke *segments* se draw hon; conflict wale minutes par ⚠ stripe + "resolve" button (§4, §5).
+
+### B3 — "Productive" ka definition = "jo waste/sleep/meals nahi"
+- `summarizeTime`: `isWaste || category ∈ [Social Media, Waste Time, Entertainment]` → waste; `Sleep`; `Meals` → skip; **baaki sab productive**. To *Talk with Dost, Self-Care, Morning Routine, Other, "Missed"* — sab productive. User ki custom category `"Waste in Lab 🤬"` waste nahi gini jaati.
+- `WASTE_CATEGORIES` do jagah duplicate hai (`TimeFlow.jsx` aur `planning.js`).
+- **Fix:** har category ko `kind` + `level` do (§4.2): focus / productive / neutral(social) / maintenance / rest / waste. Naam me `waste` ho to auto-suggest waste. Pulse formula use karo (§4.4).
+
+### B4 — "Missed" aur AI-missed fake time bana dete hain
+- `DayPlanner.saveCheck`: outcome `missed` → name `Missed`, category `Other`, start/end = slot → entry save → stats me productive + ribbon me block.
+- `generateActuals`: Gemini ko prompt me bola hai missed slot ko *original planned times* ke saath return karo → code unhe real `entries` me save karta hai, aur `category === 'Study'` par **studySession bhi bana deta hai** (outcome check nahi).
+- **Fix:** missed = *plan ka status* (slot-level), activity entry nahi. Migration: `entries.filter(e => e.planOutcome==='missed' && e.source in ['plan-check-in','auto-diary'])` ko `ghost:true` mark karo, `summarizeTime` aur study-sync me skip karo. Missed ka reason slot par `plans[i].review = {outcome, reason}` me rakho.
+
+### B5 — Adherence ka text aur code alag hain
+- UI line: *"minutes of the same activity inside its planned slot"* — code activity check nahi karta (sirf `planSlotId` link + time overlap). Isliye Lab-waste ↔ planned "Jal" match ho gaya.
+- `outcome === 'partial'` ko `'followed'` me convert kar diya jaata hai (info loss). Time edit karne par `planOutcome` stale rehta hai (`saveEntry` payload me outcome recompute nahi hota).
+- Check-in dropdown me user "followed" chun kar bhi alag time save kar sakta hai.
+- **Fix:** outcome **derive** karo (reconcile), user ka choice sirf *hint/reason* hai (§4).
+
+### B6 — "Upcoming" / "Pending" / in-progress ek hi bucket
+- `status`: `actual ? … : due ? 'Check in' : 'Upcoming'`, `isDue = end <= now`. Chal rahe slot (22:00–24:00 at 23:19) → "Upcoming". `pending = Σ slots without actual` → future + overdue + auto-detectable sab mix.
+- **Fix:** 5 states — `UPCOMING`, `IN_PROGRESS`, `AUTO_RESOLVED`, `NEEDS_YOU` (sach me conflict/unknown), `DONE`. Header chip: "2 slots tumhari input chahte hain" (270m nahi).
+
+### B7 — Time/now & unlogged galat
+- `nowMinute = new Date().getHours()…` → browser timezone; baaki app `profile.timezone` use karta hai. Safar karne par ribbon ka now-line galat.
+- `unloggedMins` me future bhi hai ("2h unlogged" jabki 41m abhi aaya hi nahi).
+- Week "Avg/day" `÷ 7` chahe 3 din ka hi data ho. "Best/Most waste day" empty days ko bhi compare karta hai.
+- Donut % = *logged* ka %, 24h ka nahi (Sleep "32%" jabki 7/24 = 29%).
+- **Fix:** `nowMinute(tz)`, `gaps` (past) vs `remaining` (future), week avg sirf logged days par, donut me toggle "of logged / of 24h".
+
+### B8 — Plan-vs-Actual graph me logic holes (`TimeCharts.jsx › PlanVsActual`)
+- `DayPlanner` sirf `entries.filter(linked)` pass karta hai → unlinked entries (Phone chalaya, Coffee, Waste, Waste-coffee) **Actual lane me gayab**, aur `deviations` ka `else if (!e.planSlotId)` branch dead code ban jaata hai.
+- `isSel = selected.id === item.id || selected.name === item.name` → ek "ML Padhai" click karo to **saare ML Padhai** (tere plan me 6 slots) highlight.
+- Deviation segments `id + '-early'` ids bante hain; click par `selected` set hota hai par details panel me plan/actual link nahi.
+- Block width min `0.4%` (~3–5px) → chhote entries hover/tap hi nahi hote.
+- Lane label sirf color; color-blind ke liye pattern/icon nahi.
+- **Fix:** §5.
+
+### B9 — Chhote UI/logic bugs
+- Duplicate hint line: `DayRibbon` (showAxis) + `TimeFlow.jsx` dono "Tap a block for details…" likhte hain (screenshot me 2 baar).
+- `getSmartEndTime`: `Math.min(h + 1, 23)` → start 23:00/23:30 par end ≤ start → save fail. Aur `<input type="time">` se `24:00` type hi nahi hota.
+- `LiveClock` `requestAnimationFrame + setTimeout` loop ek second tick ke liye — `setInterval` kaafi.
+- "Logged: 17 entries" raw count hai (overlap/duplicate bhi gin-ta hai).
+- `durationMinutes` entry me stored aur `start/end` se derive dono — drift ho sakta hai; hamesha derive karo.
+
+### B10 — Ek slot = ek actual (`entries.find(e => e.planSlotId === slot.id)`)
+- Real life me ek slot ke andar 2–3 chhote actual hote hain (20m padhai → call → 20m padhai). Sirf pehla dikhta hai; `saveCheck` baaki `planSlotId` wale entries ko `filter` se **delete** kar deta hai.
+- **Fix:** link optional + many-to-many; math minute-grid se (§4).
+
+### B11 — Overnight (raat ki neend) ka real case
+- Plan validate me overnight reject (`24:00` par split karna padta hai); actual me ek 23:00→07:00 neend do din me bantti hai par dusre din ka hissa kisi plan se link nahi hota → raat ki neend "unplanned" dikhti hai.
+- **Fix:** `parentId` se continuation segments + sleep ko "night" entity maano (§4.7-C14).
+
+### B12 — Plan snapshot nahi
+- `savePlan` din ka plan overwrite karta hai. Shaam ko plan edit karke adherence 100% banaya ja sakta hai (aur Sunsama users bhi isi cheez ki demand karte hain: planning ke waqt ka snapshot vs end-of-day actual).
+- **Fix:** `plan.snapshot` (jab pehli baar din ka plan save ho ya subah `lockAt`) + `revisions[]`; adherence **snapshot** par; edited slot par 🔒 chip.
+
+### B13 — Gemini actuals prompt
+- Prompt AI se `planOutcome`, matching, aur "strict scolding" teeno karwata hai → non-deterministic aur tokens barbaad. Hallucinated `planSlotId` ya galat outcome seedha store hota hai (sirf `start/end` khaali nahi hai — itna hi check hota hai).
+- **Fix:** AI = sirf *extractor* (segments + confidence + questions); matching/flags = code; scolding = code ke flags se template (§8).
+
+### B14 — Unclear plan names
+- "Jal (Unclear activity)" ko plan me waise hi category `Waste Time` ke saath save kar diya. AI ne unclear bola — app ko user se confirm karwana chahiye (plan save se pehle ❓ chip).
+
+---
+
+## 4. Naya model — math + logic (spec)
+
+### 4.1 Principles
+1. **Ek hi source of truth:** `reconcile({plans, entries, nowMin})` → baaki sab UI isi se.
+2. **Minute grid (1440):** har minute ka ek actual + ek plan. Overlap = conflict (hide nahi, flag).
+3. **Derived, declared nahi:** outcome/flags time-overlap se; user ka input = *reason*.
+4. **Unknown ≠ failure:** log nahi = "pata nahi" (tera hi `askModuleAssistant` prompt yehi kehta hai). Adherence sirf *lived & logged* par.
+5. **Naam nahi, kind/group:** category ko `group` (same activity?) aur `kind` (score kaise?) do.
+6. **Plan snapshot lock** + revisions.
+
+### 4.2 Data model additions (backward-compatible)
+
+```jsonc
+// settings.preferences.timeCategories  → objects (purane string list ko migrate)
+{ "name": "Waste in Lab 🤬", "group": "waste", "kind": "waste", "level": 0, "color": "#EF4444" }
+// kinds: focus(4) · productive(3) · neutral(2) · personal(1) · waste(0) · rest/maintenance(null = pulse se bahar)
+
+// plans[i]
+{ "priority": "must|should|nice", "confidence": 0.62, "snapshotAt": "...", "review": { "reason": "overslept" } }
+
+// entries[i]
+{ "source": "live-timer|check-in|diary-ai|manual", "confidence": 0.8, "parentId": null, "ghost": false, "reasonTag": "overslept" }
+```
+
+### 4.3 Pipeline
+
+```
+normalizeDay(entries,date)      // overnight split (summarizeDay ka logic nikaalo)
+  → resolveMinutes()            // latest-edited-wins + conflict[] bitmap
+  → pass1: run ↔ slot (overlap, phir user ka planSlotId link)
+  → pass2: bacha hua slot ko nearest *unclaimed* same-activity run (≤ 8h) = "Shifted"
+  → pass3: slot accounting (on / substituted[] / unlogged / future) + flags + causes
+  → totals: adherence · completion · conformance · pulse · gaps · swap matrix · drift
+```
+Full tested code → **Appendix A**.
+
+### 4.4 Formulas
+
+| Metric | Formula | Tere din par |
+|---|---|---|
+| **Adherence** (kab kiya) | `Σ onPlan ÷ Σ livedPlanned` (planned-waste/buffer slots hata ke) — WFM standard: *minutes in adherence ÷ scheduled minutes* | 41% |
+| **Conformance** per group (kitna kiya) | `actual_g ÷ planned_g` (>100% allowed) | Study 21% · Class 46% · Sleep 117% · Talk 267% · Waste 217% · Meals 200% |
+| **Completion** (focus) | `Σ min(actual_g, planned_g) ÷ Σ planned_g`, g ∈ focus | 31% |
+| **Fidelity** per slot | `on ÷ (L + (runLen − on))` = window ∩ run / window ∪ run (IoU) — late **aur** overrun dono penalise | Sleep 63% |
+| **Punctuality** | % slots jinka start `±grace` me; avg lateness = mean(+Δstart) | — |
+| **Drift(t)** | `Δstart` har slot ke planned start par → line chart | §2.4 |
+| **Pulse** (0–100) | `Σ(level·min) ÷ (4·Σmin)` sirf *discretionary* minutes par (sleep/meals/self-care bahar). RescueTime ka formula: `(vd·0 + d·1 + n·2 + p·3 + vp·4) ÷ (total·4) · 100` | 47 |
+| **Weighted adherence** | slot weight `must=3, should=2, nice=1` | optional |
+| **Plan realism** | `planned_focus ÷ median(actual_focus, last 14 days)`; >1.3 → "plan zyada hai" | aaj: plan 470 vs actual 90 ⇒ **5.2×** |
+| **Estimation accuracy** | `median(actual ÷ planned)` per category, 14 din | trend line |
+
+> **Adherence vs Conformance (industry se):** adherence = *sahi waqt par sahi kaam*, conformance = *kitna kaam hua (waqt ki parwah kiye bina)*. Dono alag dikhao — tera "Study 10:00 ki jagah 12:30 par hui" case conformance me ✅, adherence me ❌ hai. Yehi "real wala scene" hai.
+
+### 4.5 Thresholds (Settings me configurable)
+
+| Param | Default | Matlab |
+|---|---|---|
+| `grace` | 5 min | ±5 min tak "on time" (WFM tools me bhi 5-min tolerance common hai) |
+| `substitutedIf` | ≥ 50% lived | itna hissa doosre kaam ne liya |
+| `unloggedIf` | ≥ 50% lived | itna hissa log nahi |
+| `maxShift` | 8 h | same activity itni door bhi hui to "Shifted" |
+| `minLogCoverage` | 50% of awake lived | isse kam log ⇒ adherence = `null` ("Not enough logs"), 0% nahi |
+| `lateEntryHours` | 12 | itni der baad logged ⇒ 🕓 confidence kam |
+
+### 4.6 Flag taxonomy (UI chips)
+
+| Flag | Chip (Hinglish) | Rule |
+|---|---|---|
+| `ON_TIME` | ✅ On time | `on ≥ 90%` aur `abs(Δstart) ≤ grace` |
+| `LATE_START` | ⏰ +60m late | `on>0 && Δstart>grace` |
+| `EARLY_START` | ⏩ 90m pehle | `on>0 && Δstart<−grace` |
+| `OVERRAN` | 🛌 +120m zyada | `on>0 && Δend>grace` |
+| `CUT_SHORT` | ✂️ −60m | `Δend<−grace` aur run `now` se pehle khatam |
+| `SHIFTED` | 🔁 12:30 par hui (+2h30) · Δ negative ho to ⏩ *pehle kar liya* | `on=0` + unclaimed same-activity run |
+| `SUBSTITUTED` | 🚫 Rishi call ne le liya (60m) | doosre kaam ke minutes ≥ 50% |
+| `UNLOGGED` | ❓ Log nahi (pata nahi) | no-log ≥ 50% |
+| `PLANNED_WASTE` | 🕳 Buffer / naam batao | kind=waste ya name me "unclear" |
+| `IN_PROGRESS` | ▶️ Abhi chal raha | `start ≤ now < end` |
+| `UPCOMING` | ⏳ Aane wala | `now < start` |
+| `CONFLICT` | ⚠️ 2 logs overlap | conflict bitmap > 0 |
+| `PULLED_FORWARD` (cause) | ⏩ baad ka kaam pehle kar liya | intruder run ka owner *baad wala* slot |
+| `DELAY_CASCADE` (cause) | ⛓ P3 ke overrun se | intruder run ka owner *pehle wala* slot |
+
+Severity order (primary chip): `UNLOGGED/NEEDS_YOU` > `SUBSTITUTED` > `SHIFTED` > `LATE_START` > `CUT_SHORT` > `OVERRAN` > `EARLY_START` > `ON_TIME`.
+
+### 4.7 Har real case — kaise detect, kaise dikhe, score par asar
+
+| # | Real scene | Detection (minute grid) | Chip / UI | Score effect |
+|---|---|---|---|---|
+| C1 | Ekdum time par | `on ≥ 90%`, `abs(Δ) ≤ 5` | ✅ | adherence ✔ |
+| C2 | Late shuru (Sleep +60) | `Δstart > grace` | ⏰ +60m late | sirf on-plan minutes; punctuality ↓ |
+| C3 | Jaldi shuru | `Δstart < −grace` | ⏩ | neutral; agar kisi aur slot ko kha gaya to uspe `PULLED_FORWARD` |
+| C4 | Zyada chal gaya (+120 neend) | `Δend > grace` | 🛌 +120m | conformance >100%; victims par `DELAY_CASCADE` |
+| C5 | Beech me chhod diya | `Δend < −grace` | ✂️ | on-plan hi |
+| C6 | **Same kaam, doosre time (Study 10:00 → 12:30)** | `on=0` + unclaimed run | 🔁 Shifted | **completion ✔, adherence ✘** (missed nahi!) |
+| C7 | **Kaam ki jagah kuch aur (Study → Rishi call)** | doosre kaam ke minutes ≥ 50% | 🚫 *Replaced by Rishi (60m)* | adherence 0, swap matrix me entry |
+| C8 | Skip + log nahi | no-log ≥ 50% | ❓ pata nahi | adherence se bahar; "coverage" ↓; "Log it" CTA |
+| C9 | Split (20m padhai, call, 20m padhai) | slot ke andar ek se zyada matching run | ✂️ 2 parts | on-plan minutes ka sum |
+| C10 | Ek actual do slot cover kare | overlap-claim many→one | 🔗 covers 2 slots | dono me on-plan |
+| C11 | Plan me jagah hi nahi (phone 02:00–03:00 sleep window me) | minute ka group ≠ slot ka group | "Unplanned: Phone 60m" + Sleep slot pe 🚫 | substitution + unplanned total |
+| C12 | Plan me khaali gap me kaam | `plan[i]=null && actual[i]` | 🟣 Unplanned | conformance me nahi, "extra" me |
+| C13 | Planned waste / *Unclear* | kind=waste ya "unclear" | 🕳 Buffer ❓ naam batao | adherence se bahar (waste ko reward mat do) |
+| C14 | Raat ki neend 23:00→07:00 | midnight par split + `parentId` | ↪ continues | sleep duration = dono ka sum |
+| C15 | Abhi chal raha | `s ≤ now < e` | ▶️ + "X/Y min, log nahi ⇒ Start timer" | lived sirf `now` tak |
+| C16 | Aane wala | `now < s` | ⏳ | exclude |
+| C17 | Overlapping logs | conflict bitmap | ⚠️ **resolver:** "01:00–02:00: Talk (00:00–02:00) vs Waste (01:00–02:00) — kaunsa sahi?" | resolve hone tak latest-edited, chip dikhe |
+| C18 | Plan baad me badla | `updatedAt > snapshotAt` | 🔒 Plan 14:10 par badla | adherence snapshot par |
+| C19 | Label shak wala | name vs slot vs ghadi ("Lunch" 19:00 jabki plan Dinner); name me "waste" par kind≠waste | 🏷 Label check? | suggestion, auto-change nahi |
+| C20 | Agle din log kiya | `createdAt − end > 12h` | 🕓 late entry | confidence ↓ |
+| C21 | AI se aaya | `source=diary-ai` | 🤖 verify | confidence ↓ |
+| C22 | Din ka log hi kam | logged < 50% awake-lived | "Not enough logs" | adherence `null` (0% nahi) |
+| C23 | Pattern (7 din) | same group×hour-band ≥ 4/7 skip | 🔁 "Shaam ki study 5/7 din skip" | insights |
+| C24 | Timezone/travel | `plan.timezone ≠ profile` | 🌍 | plan ke tz me now/day-boundary |
+| C25 | Wapas track par | lag +120 → fir ≤ grace | 🎯 "16:50 par recover" | positive streak |
+| C26 | Zyada kiya | `actual_g > planned_g` | 🔥 +30m extra | conformance >100% |
+
+### 4.8 Cause / cascade (kyun hua?)
+- Har substitute run ka **owner** = wo plan slot jisne us run ko claim kiya.
+- Owner *pehle* ka slot ⇒ `DELAY_CASCADE` ("⛓ P3 ke overrun ne P4, P5 ko khaya"). Owner *baad* ka slot ⇒ `PULLED_FORWARD` ("Dinner & Rishi call pehle ho gaye, study kha gaye").
+- UI me sirf **pehla-level cause** dikhao; "root" (chain ka sirf starting slot) ek line me ("Din 02:00 ki neend se ~2h peeche chala"). Poore chain ko "cost" mat bolo — double-counting hoti hai (P3→…→P12 chain 340 min bolega jo asal me ek hi delay ka shadow hai).
+
+### 4.9 Missing / ambiguous data ke rules
+- Past din, logs nahi ⇒ `adherence = null`, UI: "Is din ka log nahi — [Diary photo] [Quick log]".
+- Entry me `end ≤ start` (legacy overnight) ⇒ normalize; kabhi silently 1440 tak mat kaato.
+- AI confidence < 0.6 ya `Unclear` ⇒ save se pehle ❓ confirm.
+
+---
+
+## 5. Graph redesign (interactive + detailed)
+
+### 5.1 Ek component, ek data
+`<PlanActualTimeline model={reconcile(...)}/>`. "Your day at a glance" ribbon bhi isi ka *compact single-lane mode* — dono kabhi disagree nahi karenge.
+
+```
+<TimeFlowProvider date>            // reconcile() ek baar; hover/pin/filter state yahan
+  <DayStory/>                       // deterministic insight cards (§5.7)
+  <PlanActualTimeline/>             // 3 lanes + axis + now + crosshair + brush
+  <SlotList/>                       // plan cards with chips (DayPlanner ka list)
+  <ActualTimeline/>                 // + ghost rows (planned-but-not-done) + gap rows
+  <CategoryPlanVsActual/> <DriftChart/> <SwapMatrix/>
+```
+
+### 5.2 Lanes
+| Lane | Kya | Visual |
+|---|---|---|
+| **Plan** | snapshot ka plan | dashed outline, light fill; `UPCOMING` dim; priority=must → thicker border |
+| **Actual** | *resolved* segments (sab entries, linked + unlinked) | solid fill; waste = stripes; conflict = ⚠ cross-hatch; **planned window bracket** (patla outline) taaki late/overrun block bahar nikalta dikhe |
+| **Delta** | flags ka drawing | `LATE`: left edge amber bracket + "+60"; `OVERRAN`: right edge orange; `SUBSTITUTED`: red diagonal + intruder icon; `SHIFTED`: blue curved arrow plan-window → actual-run; `PULLED_FORWARD`: cyan arrow; `UNLOGGED`: gray dotted "?"; `UNPLANNED`: purple |
+
+Sab flags me **icon/pattern** ho (sirf color par depend mat karo — color-blind + dark bg).
+Overlays: **now line** (poori height, tz-correct), **future region** hatch/dim, **sleep band** soft.
+
+### 5.3 Hover card — kya dikhna chahiye (abhi sirf naam+time+category)
+
+```
+┌───────────────────────────────────────────┐
+│ ● Soya                         Sleep      │
+│ 03:00 → 10:00  ·  7h                       │
+│ Plan: 02:00–08:00 Sleep  (fidelity 63%)    │
+│  ⏰ +60m late   🛌 +120m overran            │
+│  Ne khaya: Ready+Breakfast 60m, Class 60m  │
+│ Reason: Overslept past planned wake up     │
+│ 🤖 diary-ai · verify ✎                     │
+└───────────────────────────────────────────┘
+```
+| Object | Hover card me |
+|---|---|
+| Actual block | naam, category+kind, time, duration, linked plan + Δstart/Δend/fidelity, flags, *kise khaya / kis ne khaya*, reason, source/confidence, mood/productivity |
+| Plan block | planned time, status chip, andar kya hua (stacked mini-bar: on-plan / substituted-by / unlogged), "done elsewhere at 12:30" |
+| Gap | "No log 22:00–23:19 (1h19m) — [Log it] [Start timer]" |
+| Conflict | dono entries + [Keep A] [Keep B] [Split] |
+| Axis scrub | us minute par: `Plan: ML Padhai · Actual: Rishi se baat · 🚫 replaced` |
+
+### 5.4 Interaction list (priority order)
+1. **Axis scrubbing / crosshair:** pointer jahan, wahan vertical line + `HH:mm` label (5-min snap) + upar wale card me us minute ka Plan vs Actual. Isse chhote (5–10 min) blocks ka hover problem khatam (abhi 0.4% width ≈ 3px).
+2. **Hit-area:** har block ke upar min **12 px** transparent hit layer.
+3. **Linked highlighting (brushing & linking):** ribbon block hover ↔ timeline card ↔ plan card ↔ legend/donut slice sab ek saath highlight, baaki 35% opacity. Id se match karo, **naam se nahi** (B8).
+4. **Legend = filter:** category chip click ⇒ sirf wo dikhe; "Only deviations", "Only waste", "Only unlogged" toggles.
+5. **Click = pin** (interactive side panel / mobile bottom-sheet): Edit, Split here, Reason chips, Mark waste, Resolve conflict, Log gap.
+6. **Drag-to-log:** khaali gap par drag ⇒ naya entry (5-min snap, conflict check, category quick-pick). Edges drag ⇒ start/end adjust.
+7. **Zoom/brush:** neeche 24h overview strip + brush; upar zoom (details-on-demand: zoom hone par block me naam/duration/flags text aata hai).
+8. **Keyboard:** blocks `tabIndex=0`, ←/→ agla block, Enter pin, Esc dismiss, `aria-label="Soya, Sleep, 03:00 se 10:00, 60 min late"`.
+9. **Mobile:** hover nahi hota ⇒ tap = pin + bottom-sheet; long-press scrub.
+
+### 5.5 Hover/tooltip rules (WCAG 1.4.13)
+Cursor-follow tooltip = halka summary (non-interactive). Jo content me buttons hain wo **pinned** card hona chahiye jo *dismissible (Esc), hoverable, persistent* ho.
+
+### 5.6 Timeline list (neeche wala) ke upgrades
+- Collapsed card me hi chips (plan link, ⏰/🛌/🚫, reason) — abhi sirf expand karne par "Plan: followed".
+- **Ghost rows:** "09:00–10:00 Class (planned) — nahi hui · tu Soya (03:00–10:00) tha" aur **gap rows:** "22:00–23:19 — log nahi [Log it]".
+- Conflicts ⚠ ke saath; sort start + `updatedAt`.
+
+### 5.7 Naye charts jo asal information dete hain
+| Chart | Sawal jiska jawab | Data |
+|---|---|---|
+| **Plan vs Actual by category** (paired/diverging bars + conformance %) | "Study kitna plan, kitna hua?" (donut ye nahi batata) | `byGroup` |
+| **Drift curve** (line, ±min vs plan) | "Din kab peeche gaya, kab recover?" | slot `Δstart` |
+| **Swap matrix / Sankey** (planned → actual) | "Mera study time kisne khaya?" (Talk 120, Meals 90, Waste 80…) | minute grid |
+| **Day Story cards** (deterministic) | "Aaj ki 3 baatein" | flags + causes |
+| **Week heatmap** (din × 24h, color = on-plan ratio) | "Main kab slip karta hu?" | per-day reconcile |
+| **Reason bars** (7/30 din) | "Sabse zyada plan kyun tootta hai?" | `reasonTag` |
+| **Estimation accuracy** (category-wise `actual÷planned` trend) | "Plan realistic hai?" | 14d |
+| **Streaks** (on-time start, no-waste-before-noon) | motivation (gentle) | flags |
+
+**Day Story (template, AI nahi):**
+> *Aaj plan ka 41% follow hua. Study 90/429 min (21%). Wajah: 02:00 ki neend +2h overrun → Ready, Class 9–10, 10:00 Study khisak gaye. Shaam 18–21 ki study poori replace: waste+coffee 1h, khana 1h (dinner 2h pehle), Rishi call 1h (21:30 ki thi, 20:00 par hui). Abhi 22:00 se 79 min ka log nahi.*
+
+### 5.8 Donut ko kya karna hai
+"Where the time went" ko `Plan vs Actual` bars se *replace ya neeche rakho*; donut me center = Pulse (47) + "22h of 23.3h elapsed"; % ka toggle (logged / 24h).
+
+---
+
+## 6. Hover bug — exact fix
+
+**Step 1 — confirm (1 min):** ribbon wale `Card` par `style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}` do. Tooltip ab cursor ke paas aayega ⇒ cause confirm.
+
+**Step 2 — permanent fix: portal.** `src/components/ui/HoverCard.jsx`:
+
+```jsx
+import { createPortal } from 'react-dom'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+
+/** point = {x,y} in viewport px (clientX/Y). Portal ⇒ backdrop-filter/transform ancestors ka asar nahi. */
+export default function HoverCard({ point, children, interactive = false, onDismiss }) {
+  const ref = useRef(null)
+  const [pos, setPos] = useState({ left: -9999, top: -9999 })
+  useLayoutEffect(() => {
+    if (!point || !ref.current) return
+    const { width: w, height: h } = ref.current.getBoundingClientRect()
+    const vw = window.innerWidth, vh = window.innerHeight, pad = 8, gap = 14
+    let left = point.x + gap, top = point.y - h - gap
+    if (left + w > vw - pad) left = point.x - w - gap       // right edge: flip left
+    if (left < pad) left = pad
+    if (top < pad) top = point.y + gap                        // top edge: flip below
+    if (top + h > vh - pad) top = vh - h - pad
+    setPos({ left, top })
+  }, [point?.x, point?.y, children])
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onDismiss?.()
+    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
+  }, [onDismiss])
+  if (!point) return null
+  return createPortal(
+    <div ref={ref} role="tooltip" style={{ position: 'fixed', ...pos, zIndex: 10000, pointerEvents: interactive ? 'auto' : 'none',
+      background: 'rgba(15,23,42,.97)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, padding: '10px 12px',
+      boxShadow: '0 12px 32px rgba(0,0,0,.5)', color: '#F8FAFC', fontSize: 12, maxWidth: 280 }}>{children}</div>,
+    document.body)
+}
+```
+
+**Step 3 — use karo:** `TimeCharts.jsx` ke dono inline `position: 'fixed'` tooltip blocks hata kar:
+```jsx
+<HoverCard point={hover.visible ? { x: hover.x, y: hover.y } : null}><TipBody entry={hover.entry} model={model}/></HoverCard>
+```
+
+**Step 4 — (optional, better) Floating UI:** `npm i @floating-ui/react` → `useFloating({ middleware:[offset(12), flip(), shift({padding:8})] })` + `useClientPoint` (cursor follow) + `useHover/useFocus/useDismiss/useRole('tooltip')` + `<FloatingPortal>`. Ye flip/shift/focus/Esc sab de deta hai.
+
+**Step 5 — Playwright test (repo me already hai):** ribbon block par `hover()` → tooltip `boundingBox` pointer se ≤ 40px door ho; scroll ke baad bhi.
+
+---
+
+## 7. Implementation roadmap — exact steps
+
+> Har phase ko apne coding agent (Claude Code/Cursor) ko ek-ek karke do. Phase ke baad §9 ke tests green hone chahiye.
+
+### Phase 0 — Quick wins (2–3 h, zero risk)
+1. `HoverCard` portal (§6) + dono tooltips replace.
+2. `TimeFlow.jsx`: duplicate "Tap a block…" line hatao (ya `DayRibbon` ko `hint={false}` prop).
+3. `PlanVsActual`: `isSel` ko sirf `selected.id === item.id`; deviations ke stable ids.
+4. `getSmartEndTime`: minutes math, max `24:00`; time input se `00:00` end ko `24:00` treat karo (jab start>0).
+5. `nowMinute(tz)` helper (`Intl.DateTimeFormat` parts, `profile.timezone`).
+6. `unlogged` ko `pastGap` + `remaining` me todo; header: "1h19m log nahi · 41m baaki".
+7. `DayPlanner` status: `IN_PROGRESS` add (`start ≤ now < end`) — "Upcoming" nahi.
+8. Week avg sirf logged days par `÷ n`; Best/Most-waste empty days skip.
+9. `WASTE_CATEGORIES` ek jagah (`planning.js`), `TimeFlow.jsx` se import.
+10. `summarizeTime`: `ghost`/`planOutcome==='missed'` entries skip.
+
+### Phase 1 — Engine (1 din)
+1. Naya `src/utils/timeModel.js` ← **Appendix A** copy karo; `normalizeDay()` me `summarizeDay` ka overnight-split logic shift karo.
+2. `src/utils/timeModel.test.js` ← Appendix B fixture (vitest: `npm i -D vitest`; script `"test": "vitest run"`).
+3. `summarizeTime/summarizeDay/planComparison` ko `timeModel` ke upar thin wrappers banao (purane callers toot na jaayein), phir `TimeFlow.jsx` ke stats + week + donut sab `reconcile()` se.
+4. Category objects + migration (string → `{name,group,kind,level}`); Settings → Time Categories table: *Group*, *Kind* dropdown; naam me "waste" ho to auto-suggest.
+5. "Waste in Lab 🤬" jaisi category save par prompt: *"Kya ye waste hai?"*.
+
+### Phase 2 — Data model fixes (½–1 din)
+1. Missed ⇒ slot-level `review` (entry nahi); one-time migration jo purane `Missed/Other` entries ko `ghost:true` kare aur unse bane `plan-study-*` sessions delete kare (backup export pehle).
+2. Many-to-many: `entries.find(planSlotId)` hatao; link sirf *hint*; `saveCheck` me sibling entries delete mat karo.
+3. Plan snapshot + revisions: pehli save par `snapshotAt`; baad ke edit `revisions.push({at, diff})`; adherence snapshot par.
+4. Overnight: `parentId` continuation + normalize.
+5. Check-in modal: outcome dropdown hatao → *reason chips* (Overslept / Call aa gaya / Energy low / Travel / Class late / Phone / Plan zyada tha / Other) + optional note. Outcome auto.
+6. Entry save par `durationMinutes` store mat karo (derive).
+
+### Phase 3 — Graph (2 din)
+1. `TimeFlowProvider` (reconcile + hover/pin/filter context).
+2. `PlanActualTimeline` (lanes, delta glyphs, now line, future hatch, planned-window brackets, crosshair scrub, hit-area, brush).
+3. `HoverCard` bodies (§5.3), pinned side-panel/bottom-sheet (§5.4-5), keyboard + aria.
+4. Ribbon ko compact mode se replace; week ribbons me plan ghost overlay.
+5. Linked highlight (id-based) — ribbon ↔ timeline ↔ plan card ↔ legend.
+6. Drag-to-log + edge-resize (5-min snap, conflict guard).
+
+### Phase 4 — Insights (1–2 din)
+`DayStory`, `CategoryPlanVsActual`, `DriftChart`, `SwapMatrix`, week heatmap, reason bars, estimation accuracy, `Plan realism` warning jab plan banate waqt focus minutes > 1.3× history. **"Replan from now"** button: bacha hua din + owed Study minutes se naya suggested plan (snapshot nahi badlega, `revision` banega).
+
+### Phase 5 — Gemini (½ din)
+§8 ke hisaab se `draftActualLogs` ko extractor banao + coach message template.
+
+### Phase 6 — QA (½ din)
+§9.
+
+---
+
+## 8. Gemini changes (draftActualLogs)
+
+**Abhi:** AI = extractor + matcher + judge + scolder. **Naya:**
+1. Prompt sirf ye return kare: `{ segments:[{start,end,name,category,confidence,quote}], questions:[...] }` — **outcome, planSlotId, scolding nahi**. Temperature 0.1 theek.
+2. Code: `validate` (times, overlap, future) → `reconcile` → flags/causes.
+3. Coach text **code** banaye (strict/neutral/gentle toggle). Example (strict, Hinglish):
+   `Tune ${root.name} me ${overrun}m extra liya, isliye ${victims.join(', ')} khisak gaye. ${substitute.min}m ${substitute.name} ne ${slot.name} kha liya.`
+4. `confidence < 0.6` / `Unclear` ⇒ review screen (accept / edit / drop) save se pehle.
+5. Study session sync sirf *final reconciled* `Study` minutes se, missed/ghost se kabhi nahi.
+
+---
+
+## 9. Test plan
+
+| Test | Expected (tere fixture par, `nowMin = 23:19`) |
+|---|---|
+| adherence | **41** |
+| completionFocus | **31** |
+| pulse | **47** |
+| gaps | `[{22:00, 23:19, 79}]` |
+| conflictMins | **120** (00:00–02:00) |
+| P2 | `SUBSTITUTED`, cause `DELAY_CASCADE ← P1` |
+| P3 | `LATE_START + OVERRAN`, fidelity **63** |
+| P5 | `SUBSTITUTED` by *Soya*, cause `← P3` (check-in nahi chahiye) |
+| P6 | `SHIFTED` (run 12:30–13:30) |
+| P13 | `SUBSTITUTED` 180m; causes `PULLED_FORWARD ← P14, P15` |
+| P16 | `IN_PROGRESS + UNLOGGED` |
+| empty plans | `adherence === null` |
+| past day, no logs | adherence `null` (§4.9 rule implement karna hai — reference code abhi 0 deta hai) |
+| Playwright | hover tooltip pointer se ≤ 40px; Esc se band; pinned card me button click |
+| Regression | "Waste in Lab" waste me gina jaye; Missed se study session na bane |
+
+---
+
+## 10. Sources (research)
+
+- Schedule adherence / conformance formulas + 5-min tolerance: callcentrehelper.com (*How do I calculate schedule adherence*), gladly.ai glossary, ServiceNow *Analyze adherence and conformance* (conformance >100% example).
+- `backdrop-filter` → containing block for fixed descendants: WebKit Bugzilla #215256 ("expected behaviour"), W3C fxtf-drafts #402 thread.
+- Tooltip rules: W3C WCAG 2.2 *Understanding 1.4.13 Content on Hover or Focus* (dismissible / hoverable / persistent).
+- Positioning/portal/flip/shift/useClientPoint: floating-ui.com/docs/tooltip.
+- Productivity score weighting: RescueTime help *How is my Productivity Pulse calculated?* (`(vd·0+d·1+n·2+p·3+vp·4)/(total·4)·100`).
+- Planned-vs-actual UX demand (plan snapshot vs end-of-day actual, estimation accuracy over time): Sunsama public roadmap threads; Toggl *calendar planner* (planned vs tracked on same block).
+- Interaction design: Shneiderman, *The Eyes Have It* — overview first, zoom & filter, details on demand; brushing & linking.
+
+---
+
+## Appendix A — Reference engine (`src/utils/timeModel.js`) — **tested on your day**
+
+> Pure functions, React nahi. Assumption: `entries` pehle `normalizeDay()` se overnight-split ho chuke hon. `groups/kinds` ko Settings ke category objects se build karo.
+>
+> **Implemented:** minute-grid resolve, 3-pass matching, flags, causes, adherence, completion, pulse, gaps, conflict minutes. **Tu add karega (spec §4.5/§4.9):** `minLogCoverage` (adherence `null`), `lateEntryHours`/`confidence`, planned-`Unclear` rule, priority weights, plan snapshot.
+
+```js
+// reconcile.mjs — reference implementation (pure functions, no React)
+const tm = (v) => (v === '24:00' ? 1440 : (([h, m]) => h * 60 + m)(v.split(':').map(Number)))
+export const hhmm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+
+// ── 1. category → group (what counts as "the same activity") and kind (how it is scored)
+export const DEFAULT_GROUP = { 'Morning Routine': 'selfcare', 'Self-Care': 'selfcare', 'Waste Time': 'waste', 'Social Media': 'waste', 'Entertainment': 'waste', 'Waste in Lab': 'waste' }
+export const DEFAULT_KIND = {  // level 0..4 like RescueTime's pulse
+  Study: { kind: 'focus', level: 4 }, 'Deep Work': { kind: 'focus', level: 4 }, Class: { kind: 'focus', level: 4 },
+  Exercise: { kind: 'productive', level: 3 }, 'Talk with Dost': { kind: 'social', level: 2 },
+  Sleep: { kind: 'rest', level: null }, Meals: { kind: 'maintenance', level: null },
+  'Self-Care': { kind: 'maintenance', level: null }, 'Morning Routine': { kind: 'maintenance', level: null },
+  'Waste Time': { kind: 'waste', level: 0 }, 'Waste in Lab': { kind: 'waste', level: 0 },
+  'Social Media': { kind: 'waste', level: 0 }, Entertainment: { kind: 'waste', level: 0 },
+}
+export const groupOf = (c, map = DEFAULT_GROUP) => map[c] || c
+export const kindOf = (c, map = DEFAULT_KIND) => map[c] || (/waste|time\s?pass|scroll/i.test(c || '') ? { kind: 'waste', level: 0 } : { kind: 'neutral', level: 2 })
+
+// ── 2. one minute-by-minute truth (latest edited wins, conflicts remembered)
+export function resolveMinutes(entries) {
+  const mins = new Array(1440).fill(null), conflict = new Array(1440).fill(false)
+  const sorted = [...entries].sort((a, b) => String(a.updatedAt || a.createdAt || '').localeCompare(String(b.updatedAt || b.createdAt || '')))
+  for (const e of sorted) { const s = tm(e.start), en = tm(e.end); if (!(en > s)) continue; for (let i = s; i < en; i++) { if (mins[i]) conflict[i] = true; mins[i] = e } }
+  return { mins, conflict }
+}
+export const runsOf = (mins, pred) => { const out = []; let cur = null
+  for (let i = 0; i < 1440; i++) { const hit = mins[i] && pred(mins[i]); if (hit && !cur) cur = { start: i, end: i + 1 }; else if (hit) cur.end = i + 1; else if (cur) { out.push(cur); cur = null } }
+  if (cur) out.push(cur); return out }
+
+// ── 3. reconcile plan vs actual
+export function reconcile({ plans, entries, nowMin = 1440, grace = 5, maxShift = 480, kinds = DEFAULT_KIND, groups = DEFAULT_GROUP }) {
+  const { mins, conflict } = resolveMinutes(entries)
+  const G = (c) => groupOf(c, groups)
+  const sortedPlans = [...plans].sort((a, b) => tm(a.start) - tm(b.start))
+  const ov = (r, s, e) => Math.max(0, Math.min(e, r.end) - Math.max(s, r.start))
+
+  // PASS 1 — which actual run "belongs" to which plan slot (overlap first, then the user's own link)
+  const runsByGroup = {}; const owner = new Map()            // run.start+group -> slot id
+  const runsFor = (g) => (runsByGroup[g] ||= runsOf(mins, (a) => G(a.category) === g))
+  const pick = new Map()                                      // slot id -> run
+  const claim = (slot, run, g) => { pick.set(slot.id, run); const k = g + run.start; const prev = owner.get(k); if (!prev || ov(run, tm(slot.start), tm(slot.end)) > ov(run, tm(prev.start), tm(prev.end))) owner.set(k, slot) }
+  sortedPlans.forEach((p) => {
+    const g = G(p.category), s = tm(p.start), e = tm(p.end), runs = runsFor(g)
+    const best = [...runs].sort((x, y) => ov(y, s, e) - ov(x, s, e))[0]
+    if (best && ov(best, s, e) > 0) return claim(p, best, g)
+    const i = mins.findIndex((a) => a && a.planSlotId === p.id && G(a.category) === g)
+    const lr = i >= 0 && runs.find((r) => i >= r.start && i < r.end)
+    if (lr) claim(p, lr, g)
+  })
+  // PASS 2 — slots still without a run may take the nearest UNCLAIMED run of the same activity (= "done at another time")
+  sortedPlans.forEach((p) => {
+    if (pick.has(p.id)) return
+    const g = G(p.category), s = tm(p.start)
+    const free = runsFor(g).filter((r) => !owner.has(g + r.start) && Math.abs(r.start - s) <= maxShift)
+      .sort((x, y) => Math.abs(x.start - s) - Math.abs(y.start - s))[0]
+    if (free) claim(p, free, g)
+  })
+
+  // PASS 3 — minute accounting + flags per slot
+  const slots = sortedPlans.map((p) => {
+    const s = tm(p.start), e = tm(p.end), L = e - s, g = G(p.category), run = pick.get(p.id) || null
+    let on = 0, unl = 0, fut = 0; const subs = new Map()
+    for (let i = s; i < e; i++) {
+      const a = mins[i]
+      if (!a) { i >= nowMin ? fut++ : unl++; continue }
+      if (G(a.category) === g) on++
+      else { const k = subs.get(a.id) || { id: a.id, name: a.name, category: a.category, min: 0 }; k.min++; subs.set(a.id, k) }
+    }
+    const pastL = L - fut, runLen = run ? run.end - run.start : 0, sd = run ? run.start - s : null, ed = run ? run.end - e : null
+    const subMin = [...subs.values()].reduce((a, b) => a + b.min, 0), kind = kindOf(p.category, kinds).kind, flags = []
+    if (pastL <= 0) flags.push('UPCOMING')
+    else {
+      if (s <= nowMin && e > nowMin) flags.push('IN_PROGRESS')
+      if (on === 0 && run) flags.push('SHIFTED')                      // done, but in another window
+      if (on > 0 && sd > grace) flags.push('LATE_START')
+      if (on > 0 && sd < -grace) flags.push('EARLY_START')
+      if (on > 0 && ed > grace) flags.push('OVERRAN')
+      if (on > 0 && ed < -grace && run.end < nowMin) flags.push('CUT_SHORT')
+      if (subMin >= pastL * 0.5) flags.push('SUBSTITUTED')
+      if (unl >= pastL * 0.5) flags.push('UNLOGGED')
+      if (!flags.some((f) => f !== 'IN_PROGRESS')) flags.push('ON_TIME')
+    }
+    const fidelity = pastL <= 0 ? null : on > 0 ? Math.round((on / (L + (runLen - on))) * 100) : 0
+    return { id: p.id, name: p.name, category: p.category, start: p.start, end: p.end, kind, minutes: L, lived: pastL, on, unl, fut,
+      subs: [...subs.values()].sort((a, b) => b.min - a.min), run: run && { start: hhmm(run.start), end: hhmm(run.end) },
+      startDelta: sd, endDelta: ed, fidelity, flags, countsInAdherence: kind !== 'waste' && pastL > 0, causes: [] }
+  })
+  // WHY: who stole my slot? (intruder run belongs to an earlier slot ⇒ overrun/delay cascade; to a later slot ⇒ pulled forward)
+  const byId = Object.fromEntries(slots.map((x) => [x.id, x]))
+  slots.forEach((x) => x.subs.forEach((sb) => {
+    const idx = mins.findIndex((a) => a && a.id === sb.id); const run = runsFor(G(sb.category)).find((r) => idx >= r.start && idx < r.end)
+    const o = run && owner.get(G(sb.category) + run.start)
+    if (o && o.id !== x.id) x.causes.push({ slotId: o.id, name: o.name, min: sb.min, type: tm(o.start) < tm(x.start) ? 'DELAY_CASCADE' : 'PULLED_FORWARD' })
+  }))
+  const rootOf = (id, seen = new Set()) => { const c = byId[id]?.causes.filter((k) => k.type === 'DELAY_CASCADE').sort((a, b) => b.min - a.min)[0]; return c && !seen.has(c.slotId) ? rootOf(c.slotId, seen.add(id)) : id }
+  slots.forEach((x) => { x.root = x.causes.some((k) => k.type === 'DELAY_CASCADE') ? rootOf(x.id) : null })
+
+  const counted = slots.filter((x) => x.countsInAdherence)
+  const lived = counted.reduce((a, x) => a + x.lived, 0), onSum = counted.reduce((a, x) => a + x.on, 0)
+  const byGroup = {}
+  slots.forEach((x) => { (byGroup[G(x.category)] ||= { planned: 0, actual: 0 }).planned += x.lived })
+  mins.forEach((a, i) => { if (a && i < nowMin) (byGroup[G(a.category)] ||= { planned: 0, actual: 0 }).actual++ })
+  const focus = Object.entries(byGroup).filter(([g]) => kindOf(g, kinds).kind === 'focus')
+  const fp = focus.reduce((a, [, v]) => a + v.planned, 0), fd = focus.reduce((a, [, v]) => a + Math.min(v.planned, v.actual), 0)
+  let pm = 0, pw = 0; mins.forEach((a, i) => { if (!a || i >= nowMin) return; const lv = kindOf(a.category, kinds).level; if (lv == null) return; pm++; pw += lv })
+  const gaps = runsOf(mins.map((a, i) => (a ? null : { i })), () => true).filter((r) => r.start < nowMin).map((r) => ({ start: hhmm(r.start), end: hhmm(Math.min(r.end, nowMin)), min: Math.min(r.end, nowMin) - r.start }))
+  return { slots, byGroup, gaps, conflictMins: conflict.filter(Boolean).length,
+    adherence: lived ? Math.round((onSum / lived) * 100) : null, completionFocus: fp ? Math.round((fd / fp) * 100) : null,
+    pulse: pm ? Math.round((pw / (4 * pm)) * 100) : null, discretionaryMin: pm }
+}
+```
+
+## Appendix B — Fixture + real output
+
+```js
+import { reconcile } from './reconcile.mjs'
+const P = [["P1","Rishi se baat","Talk with Dost","00:00","01:00"],["P2","ML Padhai","Study","01:00","02:00"],["P3","Sleep","Sleep","02:00","08:00"],["P4","Ready + Breakfast","Morning Routine","08:00","09:00"],["P5","Class (ESO=213)","Class","09:00","10:00"],["P6","ML Padhai","Study","10:00","10:50"],["P7","Class","Class","10:50","13:00"],["P8","Lunch","Meals","13:00","13:30"],["P9","ML Padhai","Study","13:30","14:00"],["P10","Jal (Unclear)","Waste Time","14:00","16:00"],["P11","ML Padhai","Study","16:00","16:30"],["P12","Class","Class","16:30","18:00"],["P13","ML Padhai","Study","18:00","21:00"],["P14","Dinner","Meals","21:00","21:30"],["P15","Rishi","Talk with Dost","21:30","22:00"],["P16","ML Padhai","Study","22:00","24:00"]].map(([id,name,category,start,end])=>({id,name,category,start,end}))
+const A = [["A1","Rishi se baat","Talk with Dost","00:00","01:00","P1","1"],["A3","Rishi se baat","Waste Time","01:00","02:00","P2","2"],["A2","Rishi se baat","Talk with Dost","00:00","02:00",null,"3"],["A4","Phone chalaya","Waste Time","02:00","03:00",null,"4"],["A5","Soya","Sleep","03:00","10:00","P3","5"],["A6","Nahaya","Self-Care","10:00","11:00","P4","6"],["A7","Class","Class","11:00","12:00","P7","7"],["A8","Coffee","Waste Time","12:00","12:30",null,"8"],["A9","Padhai","Study","12:30","13:30","P6","9"],["A10","Lunch","Meals","13:30","14:30","P8","a"],["A11","Lab","Waste in Lab","14:30","16:00","P10","b"],["A12","Waste","Waste Time","16:00","16:20",null,"c"],["A13","Padhai","Study","16:20","16:50","P11","d"],["A14","Class","Class","16:50","18:00","P12","e"],["A15","Waste, coffee","Waste Time","18:00","19:00",null,"f"],["A16","Lunch","Meals","19:00","20:00","P14","g"],["A17","Rishi se baat","Talk with Dost","20:00","22:00","P15","h"]].map(([id,name,category,start,end,planSlotId,u])=>({id,name,category,start,end,planSlotId,updatedAt:u}))
+const r = reconcile({ plans: P, entries: A, nowMin: 23*60+19 })
+for (const s of r.slots) console.log(s.id.padEnd(4), `${s.start}-${s.end}`.padEnd(12), s.category.padEnd(15), 'lived',String(s.lived).padStart(3),'on',String(s.on).padStart(3),'sd',String(s.startDelta).padStart(5),'ed',String(s.endDelta).padStart(5),'fid',String(s.fidelity).padStart(4), s.flags.join('+'), s.subs.map(x=>`${x.name}:${x.min}`).join(','), s.causes.map(c=>c.type[0]+':'+c.slotId+'('+c.min+')').join(' ')+(s.root?' root='+s.root:''))
+console.log({adherence:r.adherence, completionFocus:r.completionFocus, pulse:r.pulse, discretionaryMin:r.discretionaryMin, gaps:r.gaps, conflictMins:r.conflictMins})
+console.log(r.byGroup)
+```
+
+Output (Node 22, `nowMin = 23:19`):
+
+```
+P1   00:00-01:00  Talk with Dost  lived  60 on  60 sd     0 ed    60 fid   50 OVERRAN  
+P2   01:00-02:00  Study           lived  60 on   0 sd  null ed  null fid    0 SUBSTITUTED Rishi se baat:60 D:P1(60) root=P1
+P3   02:00-08:00  Sleep           lived 360 on 300 sd    60 ed   120 fid   63 LATE_START+OVERRAN Phone chalaya:60 
+P4   08:00-09:00  Morning Routine lived  60 on   0 sd   120 ed   120 fid    0 SHIFTED+SUBSTITUTED Soya:60 D:P3(60) root=P3
+P5   09:00-10:00  Class           lived  60 on   0 sd  null ed  null fid    0 SUBSTITUTED Soya:60 D:P3(60) root=P3
+P6   10:00-10:50  Study           lived  50 on   0 sd   150 ed   160 fid    0 SHIFTED+SUBSTITUTED Nahaya:50 D:P4(50) root=P3
+P7   10:50-13:00  Class           lived 130 on  60 sd    10 ed   -60 fid   46 LATE_START+CUT_SHORT+SUBSTITUTED Coffee:30,Padhai:30,Nahaya:10 D:P6(30) D:P4(10) root=P3
+P8   13:00-13:30  Meals           lived  30 on   0 sd    30 ed    60 fid    0 SHIFTED+SUBSTITUTED Padhai:30 D:P6(30) root=P3
+P9   13:30-14:00  Study           lived  30 on   0 sd  null ed  null fid    0 SUBSTITUTED Lunch:30 D:P8(30) root=P3
+P10  14:00-16:00  Waste Time      lived 120 on  90 sd    30 ed    20 fid   64 LATE_START+OVERRAN Lunch:30 D:P8(30) root=P3
+P11  16:00-16:30  Study           lived  30 on  10 sd    20 ed    20 fid   20 LATE_START+OVERRAN+SUBSTITUTED Waste:20 D:P10(20) root=P3
+P12  16:30-18:00  Class           lived  90 on  70 sd    20 ed     0 fid   78 LATE_START Padhai:20 D:P11(20) root=P3
+P13  18:00-21:00  Study           lived 180 on   0 sd  null ed  null fid    0 SUBSTITUTED Waste, coffee:60,Lunch:60,Rishi se baat:60 P:P14(60) P:P15(60)
+P14  21:00-21:30  Meals           lived  30 on   0 sd  -120 ed   -90 fid    0 SHIFTED+SUBSTITUTED Rishi se baat:30 P:P15(30)
+P15  21:30-22:00  Talk with Dost  lived  30 on  30 sd   -90 ed     0 fid   25 EARLY_START  
+P16  22:00-24:00  Study           lived  79 on   0 sd  null ed  null fid    0 IN_PROGRESS+UNLOGGED  
+{
+  adherence: 41,
+  completionFocus: 31,
+  pulse: 47,
+  discretionaryMin: 720,
+  gaps: [ { start: '22:00', end: '23:19', min: 79 } ],
+  conflictMins: 120
+}
+```
+
+do all these implementation in detail and give me final code 
+
+like do all of these in one go 
+
+and also 
+recheck it that all the implementatiion are done or not 
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T23:57:29+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+recheck that done or not all the implementation 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T23:57:40+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+recheck that done or not all the implementation 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T23:57:43+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+again recheck that done or not all the implementation 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T23:57:48+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+and last time render images and check is everything done according to expectations 
+render check render check do this in loop 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-05T23:58:12+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+yr wo agar me usme beech me mera schedule tentative edit krta hu to wo sync bhi nhhi hota h and new timeline bhi nhi add hoti h yrr 
+like agar me new ya beech day me edit kr rha hu to purana wala hat jana chiye and new wala add ho jana chiye 
+like google calendar me purana delete hoke ye new ho jana chiye and same app me bhi hona chiye na bro 
+ye krke de tu shai mujhe 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-06T11:00:32+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+not only sync the app itself not able to show if I edit them in between yr
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-06T11:03:49+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+getting this while check in 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-06T11:12:48+05:30.
+
+The user has uploaded 1 image(s):
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791265359998.png
+You can embed this image in an artifact if you need the USER to review it.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+the save check in is not working 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-06T11:17:38+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+sun ek to jab me day plan kr rha hu to agar me usme waste flag kr rha hu to tujhe bhi usko waste me dalna h
+like jese mene daala 
+jese mene likha 
+00 to 200 rishi se baat , waste 
+2 00 to 9 :30 soya waste 
+9 :30 to 10 :30 nahaya and all waste 
+
+so isko tu ese kr ki 
+ek to normal category h wo kr hi classify jese talk with dost and all and all 
+sath hi tu 2 category alag se bana and uska bhi graph de end me waste and padhai bas (taki mujhe pata lage mene padhai kitni ki h )
+then ek aur chiz kar 
+tentative me bana rha hu plan to uska bhi kitne time kaha jaa rha h wo bhi show kr jese tu actual ka karta h wese taki mujhe phle hi pata ho ki kaha time kitna chala jaye ga 
+
+so ye 2 chize krke de 
+and final code de 
+and please cross verify krna image load krke ki sab shi hua h na and all 
+
+ 
+
+please do it and verify it 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-08T11:59:00+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+12:17:04.504 
+Require stack:
+12:17:04.504 
+- /vercel/path0/postcss.config.js
+12:17:04.504 
+12:17:04.504 
+(@/vercel/path0/postcss.config.js)
+12:17:04.504 
+    ... collapsed 30 duplicate lines matching above 15 lines 2 times...
+12:17:04.504 
+    at load (file:///vercel/path0/node_modules/vite/dist/node/chunks/node.js:6912:10)
+12:17:04.504 
+    at async Promise.all (index 1)
+12:17:04.504 
+    at async plugins (file:///vercel/path0/node_modules/vite/dist/node/chunks/node.js:6934:11)
+12:17:04.504 
+    at async processResult (file:///vercel/path0/node_modules/vite/dist/node/chunks/node.js:6972:13)
+12:17:04.504 
+    at aggregateBindingErrorsIntoJsError (file:///vercel/path0/node_modules/rolldown/dist/shared/error-Bj1xBdEY.mjs:49:18)
+12:17:04.504 
+    at plugin (file:///vercel/path0/node_modules/rolldown/dist/shared/bindingify-input-options-DCTviPFW.mjs:1638:60)
+12:17:04.504 
+    at file:///vercel/path0/node_modules/rolldown/dist/shared/bindingify-input-options-DCTviPFW.mjs:2118:21
+12:17:04.504 
+    at plugin.<computed> (file:///vercel/path0/node_modules/rolldown/dist/shared/bindingify-input-options-DCTviPFW.mjs:2316:18)
+12:17:04.504 
+    at aggregateBindingErrorsIntoJsError (file:///vercel/path0/node_modules/rolldown/dist/shared/error-Bj1xBdEY.mjs:49:18)
+12:17:04.504 
+    at unwrapBindingResult (file:///vercel/path0/node_modules/rolldown/dist/shared/error-Bj1xBdEY.mjs:19:128)
+12:17:04.505 
+    at #build (file:///vercel/path0/node_modules/rolldown/dist/shared/rolldown-jmAeXo_f.mjs:133:34)
+12:17:04.505 
+    at async buildEnvironment (file:///vercel/path0/node_modules/vite/dist/node/chunks/node.js:34490:66)
+12:17:04.505 
+    at async Object.build (file:///vercel/path0/node_modules/vite/dist/node/chunks/node.js:34911:19)
+12:17:04.505 
+    at async Object.buildApp (file:///vercel/path0/node_modules/vite/dist/node/chunks/node.js:34908:153)
+12:17:04.505 
+    at async CAC.<anonymous> (file:///vercel/path0/node_modules/vite/dist/node/cli.js:780:3) {
+12:17:04.505 
+  errors: [Getter/Setter]
+12:17:04.505 
+}
+12:17:04.566 
+Error: Command "npm run build" exited with 1
+
+why this errror yrr 
+you have fixed things or what !
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-08T12:18:06+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+are mene vercel me deploy kiya h 
+github pe kya update krna h wo bata na bhai ti 
+taki sab shi chale 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-08T12:20:36+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+to tu ye change krde na folder me fir me push kr diuag usko 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-08T12:21:07+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+sun ek to jab me day plan kr rha hu to agar me usme waste flag kr rha hu to tujhe bhi usko waste me dalna h
+like jese mene daala 
+jese mene likha 
+00 to 200 rishi se baat , waste 
+2 00 to 9 :30 soya waste 
+9 :30 to 10 :30 nahaya and all waste 
+
+so isko tu ese kr ki 
+ek to normal category h wo kr hi classify jese talk with dost and all and all 
+sath hi tu 2 category alag se bana and uska bhi graph de end me waste and padhai bas (taki mujhe pata lage mene padhai kitni ki h )
+then ek aur chiz kar 
+tentative me bana rha hu plan to uska bhi kitne time kaha jaa rha h wo bhi show kr jese tu actual ka karta h wese taki mujhe phle hi pata ho ki kaha time kitna chala jaye ga 
+
+so ye 2 chize krke de 
+and final code de 
+and please cross verify krna image load krke ki sab shi hua h na and all 
+
+ 
+
+please do it and verify it 
+
+
+and also
+suppose mene plan me kiya ki me 2 se 5 padhai karu ga 
+and then jab chekin kr rha hu to mene actually kuch aur kiya 
+jese 2 se 3 mene luch kiya and then fir 3 to 6 mene padhai ki to jo ab 5-6 scheduled the usme bhi changes hoge 
+to yr isko kese handle kar skte h 
+thoda soch ke bata har ek angle se soch 
+aur phle bata kya kya changes kare ga 
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-08T17:06:23+05:30.
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Gemini 3.1 Pro (High) to Claude Opus 4.6 (Thinking). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+
+====================
+
+<USER_REQUEST>
+so do it 
+and also wo jo h waste wala 
+wo thik se kaam nhi kr rha h 
+Like mene tujhe kaha tha ki ek alag se category bana de na plan and actual dono me 
+apart from actual category 
+a new category for waste and padhai only 
+in which everything that is soya and all are waste and padhai is only goes into padhai OK 
+so do it and do the work 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-08T17:50:35+05:30.
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Claude Opus 4.6 (Thinking) to Gemini 3.1 Pro (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+
+====================
+
+<USER_REQUEST>
+yr dekh me batata hu actually ok 
+sun dekh scheduled tha ki 14 se 14 30 lunch But mujhe time lag gaya 14 50 ho gaya 
+and then fir 16 30 tak padhai ki 
+and then fir yrr 
+16 30 se 17 tk ka time log hi nhi kar paya me !!!!
+and then fir mene 17 se 17 30 tak padhai ki and then fir 17 30 se 18 tak coffee break liya 
+and then fir 18 se 21 tk padhai ki yr ye sab kese handle kare think kar and baata and wo implement krde tu please 
+taki acche se bina kisi dikkhat bhasad ke ho jaye 
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-08T18:03:45+05:30.
+
+The user has uploaded 1 image(s):
+- C:/Users/mayan/.gemini/antigravity/brain/9436d56a-ba9a-4d0a-958d-ad3d7ca621d9/.user_uploaded/media_1791462710242_8d91b413.png
+You can embed this image in an artifact if you need the USER to review it.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+⏱️ Time Flow
+🌆
+Good Evening
+06:25
+28
+PM
+2.0h
+Productive
+15.5h
+Waste
+6.5h
+Past Gap
+0.0h
+Remaining
+
+10/08/2026
+
+✦
+Daily plan · tentative vs actual
+13 slots · 24h
+83% on plan
+5h 35m to check in
+Diary photo or typed notes → editable plan → Calendar reminders → actual check-ins.
+
+Plan
+Actual
+Deviated
+00:0003:0006:0009:0012:0015:0018:0021:0000:00
+Planned
+Actually done
+Changed / missed
+1440m planned
+· 930m followed on time
+· 175m changed
+· 335m awaiting check-in
+83% adherence (reviewed time)
+Followed
+Changed
+Pending
+Calendar up to date · reminders at start and your selected lead time · Asia/Kolkata
+
+00:00
+02:00
+Talk with Dost
+Talk with Dost · 120m
+Done
+Actual: 00:00�02:00 · Talk with Dost (followed)
+02:00
+09:30
+Sleep
+Sleep · 450m
+Done
+Actual: 02:00�09:30 · Sleep (followed)
+09:30
+10:30
+Chores
+Other · 60m
+Done
+Actual: 09:30�10:30 · Chores (followed)
+10:30
+11:30
+Morning Routine and Travel
+Morning Routine · 60m
+Done
+Actual: 10:30�11:30 · Morning Routine and Travel (followed)
+11:30
+12:30
+Waste in Lab
+Waste in Lab 🤬 · 60m
+Done
+Actual: 11:30�12:30 · Waste in Lab (followed)
+12:30
+14:00
+Study
+Study · 90m
+Done
+Actual: 12:30�14:00 · Study (followed)
+14:00
+14:30
+Lunch
+Meals · 30m
+Done
+Actual: 14:00�14:50 · Lunch (followed)
+14:30
+17:00
+Study
+Study · 150m
+Changed
+Actual: 14:50�16:30 · ID-Card Banwaya (changed)
+edit
+Actual: 16:30�17:00 · Study (changed)
+edit
+Why: Sirf 30 minute padha, baaki time kya kar raha tha? Focus badha apna!
+17:00
+17:30
+Coffee Break
+Waste Time · 30m
+Done
+Actual: 17:00�17:30 · Coffee Break (followed)
+17:30
+21:00
+Study
+Study · 210m
+In Progress
+Actual: awaiting your confirmation
+21:00
+21:30
+Dinner
+Meals · 30m
+Upcoming
+Actual: awaiting your confirmation
+21:30
+22:00
+Talk with Dost
+Talk with Dost · 30m
+Upcoming
+Actual: awaiting your confirmation
+22:00
+24:00
+Study
+Study · 120m
+Upcoming
+Actual: awaiting your confirmation
+Adherence = minutes of the same activity inside its planned slot ÷ reviewed planned minutes. Pending slots are excluded. 0 unlinked actual entries in the timeline below.
+
+Day View
+Week View
+Productive
+2.0h
+Waste Time
+15.5h
+Sleep
+0.0h
+Logged
+18 entries
+Your day at a glance
+17h 30m logged · 6h 30m gap · 0m remaining
+
+Talk with Dost
+
+Missed
+
+Sleep
+
+Missed
+
+Missed
+
+00:0006:0012:0018:0024h
+Tap a block for details · striped = waste time · empty = not logged
+Tap a block for details · striped = waste time · empty = not logged
+Actual timeline — Today
+Tap an activity to expand
+00:00
+02:00
+
+Talk with Dost
+Talk with Dost
+00:00–02:00
+2h
+00:00
+02:00
+
+Missed
+Other
+00:00–02:00
+2h
+02:00
+09:30
+
+Sleep
+Sleep
+02:00–09:30
+7h 30m
+02:00
+09:30
+
+Missed
+Other
+02:00–09:30
+7h 30m
+09:30
+10:30
+
+Chores
+Other
+09:30–10:30
+1h
+09:30
+10:30
+
+Missed
+Other
+09:30–10:30
+1h
+10:30
+11:30
+
+Morning Routine and Travel
+Morning Routine
+10:30–11:30
+1h
+10:30
+11:30
+
+Missed
+Other
+10:30–11:30
+1h
+11:30
+12:30
+
+Waste in Lab
+Waste in Lab 🤬
+11:30–12:30
+1h
+11:30
+12:30
+
+Missed
+Other
+11:30–12:30
+1h
+12:30
+14:00
+
+Study
+Study
+12:30–14:00
+1h 30m
+12:30
+14:00
+
+Missed
+Other
+12:30–14:00
+1h 30m
+14:00
+14:50
+
+Lunch
+Meals
+14:00–14:50
+50m
+14:00
+14:30
+
+Missed
+Other
+14:00–14:30
+30m
+14:30
+17:00
+
+Missed
+Other
+14:30–17:00
+2h 30m
+14:50
+16:30
+
+ID-Card Banwaya
+Waste Time
+14:50–16:30
+⚠️ waste
+1h 40m
+16:30
+17:00
+
+Study
+Study
+16:30–17:00
+30m
+17:00
+17:30
+
+Coffee Break
+Waste Time
+17:00–17:30
+⚠️ waste
+30m
+Where the time went
+17.5h
+logged
+Sleep
+7h 30m
+43%
+waste
+2h 10m
+12%
+Talk with Dost
+2h
+11%
+Study
+2h
+11%
+Other
+1h
+6%
+selfcare
+1h
+6%
+Waste in Lab 🤬
+1h
+6%
+Meals
+50m
+5%
+Padhai (Productive) · 2h
+Waste · 15h 30m
+
+
+Bhai ek baar isko dekh 
+aur tu khud bata tune ye kya khichdi pakai h aur isko sahi kr 
+ab me tujhe aur kuch nhi bolu ga 
+khud ke pas dimag h na to sab chiz soch kar final fix dede yr please 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-08T18:26:10+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+Code nahi dunga, sirf suggestions. Maine zip abhi khola nahi hai, to neeche ki wajah screen ke numbers se nikali hai. Code me confirm baad me kar lunga.
+
+## 1. Screen par jo galat hai
+
+1. **Header galat hai.** "Past Gap 6.5h, Remaining 0.0h" dikha raha hai, jabki abhi 18:25 hai. Sahi hota: gap lagbhag 55m (17:30 se ab tak ka unlogged time) aur remaining 5h 35m, jo plan card khud bol raha hai. 17h30 + 0h55 + 5h35 = 24h, to hisab bhi match hota hai. Abhi gap ko poore 24h se nikal raha hai, current time se nahi.
+2. **"Sleep 0.0h" galat hai.** Donut me Sleep 7h30 hai. Waste flag category ko overwrite kar raha hai, isliye "waste" aur "category" ek hi chiz ban gaye hain.
+3. **Ghost "Missed / Other" entries.** Har asli entry ke saath ek duplicate "Missed" entry hai. Isliye "18 entries" dikh raha hai, jabki asli sirf 10 hain. Lagta hai plan banate waqt placeholder ban jate hain aur check-in par delete nahi hote. Day bar me bhi "Missed" blocks wahi hain.
+4. **"Waste" ke teen alag matlab hain.** (a) Category "Waste Time" = 2h10m (ID card + coffee), (b) Waste bucket = 15h30m, (c) activity "Waste in Lab". Isi se confusion hai.
+5. **Category me activity ka naam aa gaya hai.** "Talk with Dost" aur "Waste in Lab 🤬" categories ban gaye hain. Category ek fixed list honi chahiye, activity free text.
+6. **Lunch ka overrun chhup gaya.** Plan 14:00–14:30 tha, actual 14:00–14:50 hua, par "followed" dikha. Wo 20m Study slot se gaye, ye kahin nahi dikhta.
+7. **Chhota bug:** `00:00�02:00` me dash ka encoding toot raha hai.
+
+## 2. Do alag cheezein, plan aur actual dono me
+
+Har block par do alag fields hon, jo ek-dusre ko overwrite na karein:
+
+- **Category (normal):** Study, Sleep, Meals, Selfcare, Social (Dost), Chores, Travel, Timepass. Isse donut aur week breakdown banega.
+- **Bucket (sirf 2 values):** **Padhai** ya **Waste**.
+  - Rule simple rakho: Category = Study to Padhai, baaki sab (sleep, nahana, dost, khana) Waste.
+  - Diary me tu "waste" likhe to bhi Waste, aur wo bucket field me save ho.
+  - Bucket block par save ho, display ke time compute na ho.
+
+Isse ek jagah se sab kuch chalega: header cards, day bar, donuts, week view, sab ek hi function se bucket padhenge. Sleep card category se, Waste card bucket se aayega, to wo 0.0h wali problem khatam.
+
+Naam alag karo: purani category "Waste Time" ko **"Timepass"** bana do (ID card, coffee). Phir "Waste" ka matlab sirf bucket hoga.
+
+**End me graph:** ek simple Padhai vs Waste bar (plan ke liye bhi, actual ke liye bhi). Optional: ek chhoti line "Sleep + khana nikaal ke real waste = X", kyunki 15.5h waste dekh ke demotivate hona easy hai. Ye optional hai, asli numbers wahi rahenge.
+
+## 3. Tentative plan ka time breakdown
+
+Plan banate waqt (edit karte hue live) ye dikhe:
+
+- Category donut, actual jaisa. Aaj ke plan me Study 9h30, Sleep 7h30, Dost 2h30, Meals 1h, Chores 1h, Morning 1h, Lab 1h, Timepass 30m. Total 24h.
+- Padhai vs Waste bar. Aaj: **Padhai 9h30, Waste 14h30**.
+- Check: total 24h se kam ya zyada ho to warning.
+- Optional daily padhai goal (jaise 8h), plan usse kam ho to turant dikhe.
+- Actual ke saath comparison. **Abhi tak (18:25)** plan ke hisaab se padhai 4h55 honi chahiye thi, hui 2h, yani **2h55 peeche**. Poore din ke plan se compare mat karo, "ab tak kitna hona chahiye tha" se karo.
+
+## 4. Plan alag, reality alag: kaise handle karein
+
+**Mool niyam**
+
+1. **Original plan freeze rahe.** Reality alag ho to plan overwrite mat karo, warna adherence hamesha 100% dikhegi.
+2. **Teen layers rakho:** Original plan (frozen), Current plan (sirf bacha hua future editable), Actual (sach). Adherence original se naapo, "ab kya karna hai" current se.
+3. **Actual hamesha time ke hisaab se jeetta hai.** Beeta hua time kabhi "pending" nahi hota, ya to actual hai ya "unlogged gap".
+4. **Match category/bucket se ho,** exact naam se nahi. "Physics padha" bhi "Study" slot ko match kare. ±10 min tolerance ho.
+5. **Fixed vs flexible tag.** Sleep, meals, class fixed anchors hain. Reflow me sirf flexible slots khiskein.
+6. **Ek hi entry point.** Saare check-ins ek hi function se jaayein: actual likho, overlapped plan slots reconcile karo, reflow suggest karo. Isse ghost "Missed" duplicates band honge.
+
+**Tera example:** plan 2–5 Study, 5–6 kuch (maan le gym). Actual: 2–3 lunch, 3–6 padhai.
+
+- 2–3 lunch: changed. Study slot ka 1h gaya.
+- 3–5 padhai: followed.
+- 5–6 padhai: bonus study. Wahan gym tha, wo **displaced** ho gaya.
+- Gym slot delete mat karo. "Displaced" tray me jaaye, aur ek tap me option mile: aaj kisi khali slot me daalo / kal ke liye / drop.
+- Result: planned padhai 3h, actual 3h. Adherence kam dikhegi par outcome poora. Isliye **dono metrics alag dikhao:** Adherence (plan follow kiya?) aur Padhai outcome (kitni padhai hui?). Tujhe asli me outcome jaanna hai.
+
+**Baaki cases**
+
+| Case | Kya ho |
+|---|---|
+| Actual plan jaisa | Followed |
+| Actual alag par slot ke andar | Changed, original minutes plan me rahein, farak ledger me |
+| Actual slot se aage nikal gaya (lunch +20m) | Agle slot ka start trim ho, "20m lunch overrun se gaye" dikhe |
+| Actual ne poora future slot kha liya | Slot displaced, tray me |
+| Actual jaldi khatam hua | Gap bane, "agla slot pehle kheench lo?" suggest kare, auto nahi |
+| Kuch log nahi hua | "Unlogged gap", din ke end me "ye 55 min kya tha?" quick prompt |
+| Sleep midnight cross kare | 00:00 par split ho, har din ka total 24h rahe |
+
+**Ye bhi dhyan me rakho**
+
+- **Abhi chal raha slot:** 17:30 se ab tak ka 55m abhi "changed" gina ja raha hai. Isse adherence tab tak punish hoti hai jab tak tu confirm na kare. Bhale hi "kya kiya?" ka nudge aaye, par wo hissa **pending** rahe.
+- **Overlapping actuals:** nayi entry purani se takrai to confirm karke trim karo, chupchap overwrite nahi.
+- **Calendar reminders:** reflow ke baad purane reminders update/delete hon, warna galat time par ping aayega. Har slot ke saath event id store ho, aur sirf current plan calendar me jaaye.
+- **Reflow suggestion ho, auto nahi.** Preview dikhe, Apply aur Undo ho.
+- **Event log (append-only):** plan_created, actual_logged, slot_displaced, replanned. Sab screens isi se derive hon, to khichdi debug karna aasaan.
+- **Study debt:** jo padhai plan thi par nahi hui, wo "kal ke liye add karein?" ke roop me suggest ho. Auto add nahi.
+
+## 5. Order of changes (jab tu bole)
+
+1. Ghost "Missed" entries band karna aur purani saaf karna, ek hi check-in function.
+2. Data model: har block par `category` + `bucket`. Purane data ko migrate karna (study → Padhai, baaki → Waste).
+3. Header: gap aur remaining current time se, Sleep card category se.
+4. Plan-time breakdown (donut + Padhai/Waste bar) plan editor me, aur plan vs actual comparison.
+5. Overlap/overrun reconcile, displaced tray, fixed/flexible tag, calendar sync fix.
+6. Padhai vs Waste final graph, "Timepass" rename, dash encoding fix.
+
+**Verification:** jab implement karunga to render karke is hi din ke data par check karunga ki ye numbers aayein:
+
+- Entries = 10 (18 nahi)
+- Padhai 2h, Waste 15h30, Sleep 7h30
+- Gap ≈ 55m, Remaining 5h35m
+- Plan: Padhai 9h30, Waste 14h30
+- Lunch par "+20m overrun" dikhe
+- Study planned-so-far 4h55 vs actual 2h
+
+Abhi is image/screen se main ye numbers khud verify nahi kar sakta, kyunki code bana hi nahi. Bol de ye plan sahi lag raha hai to step 1 se shuru karu.
+
+ek baar ye dekh aur krde isko and final dede
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-08T18:39:55+05:30.
+</ADDITIONAL_METADATA>
+
+====================
+
+<USER_REQUEST>
+sub abhi tak mene tujhe jitne bhi prompts diye h improvements ke liye tu wo collect krke yaha de ki mujhe kya chiye tha actually detail me 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-08T18:52:44+05:30.
+</ADDITIONAL_METADATA>

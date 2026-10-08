@@ -1,5 +1,5 @@
 // timeModel.js — reference implementation (pure functions, no React)
-export const tm = (v) => (v === '24:00' ? 1440 : (([h, m]) => h * 60 + m)(v.split(':').map(Number)))
+export const tm = (v) => v === '24:00' ? 1440 : /^([01]\d|2[0-3]):[0-5]\d$/.test(v || '') ? Number(v.slice(0, 2)) * 60 + Number(v.slice(3)) : NaN
 export const hhmm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 
 // 1. category → group (what counts as "the same activity") and kind (how it is scored)
@@ -20,7 +20,7 @@ export function resolveMinutes(entries) {
   const mins = new Array(1440).fill(null), conflict = new Array(1440).fill(false)
   const sorted = [...entries].sort((a, b) => String(a.updatedAt || a.createdAt || '').localeCompare(String(b.updatedAt || b.createdAt || '')))
   for (const e of sorted) { 
-    if (e.ghost || e.planOutcome === 'missed') continue // Skip AI ghost entries
+    if (!e || e.ghost || e.planOutcome === 'missed') continue // Skip AI ghost entries
     const s = tm(e.start), en = tm(e.end); 
     if (!(en > s)) continue; 
     for (let i = s; i < en; i++) { 

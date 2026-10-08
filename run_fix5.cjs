@@ -2,9 +2,12 @@ const fs = require('fs');
 const path = 'src/components/ui/DayPlanner.jsx';
 let content = fs.readFileSync(path, 'utf8');
 
-const regex = /async function generateActuals\(\) \{[\s\S]*?showToast\('Actuals logged!', 'success'\)\s*\} catch \(e\) \{ setError\(e\.message\) \} finally \{ setBusy\(false\) \}\s*\}/;
+const startIdx = content.indexOf('async function generateActuals() {');
+const endIdx = content.indexOf('  function updateSlot', startIdx);
 
-const repl = `async function generateActuals() {
+if (startIdx !== -1 && endIdx !== -1) {
+    const original = content.substring(startIdx, endIdx);
+    const repl = `async function generateActuals() {
     setBusy(true); setError('')
     try {
       const result = await draftActualLogs({ text, image: photo, date: draftDate, categories, tentativePlans: plans })
@@ -99,12 +102,12 @@ const repl = `async function generateActuals() {
         setPhoto(null)
         showToast('Actuals saved!', 'success')
      } catch (e) { setError(e.message) } finally { setBusy(false) }
-  }`;
+  }
 
-if (regex.test(content)) {
-    content = content.replace(regex, repl);
+`;
+    content = content.replace(original, repl);
     fs.writeFileSync(path, content);
-    console.log('Fix 5 applied via regex');
+    console.log('Fix 5 applied completely');
 } else {
-    console.log('Fix 5 regex failed');
+    console.log('Fix 5 bounds not found');
 }

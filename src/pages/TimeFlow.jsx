@@ -1,12 +1,13 @@
+import { dayCutoff, normalizeDay } from '../utils/planning'
 import { getGeminiBaseUrl } from '../services/geminiService'
 import DayPlanner from '../components/ui/DayPlanner'
-import { summarizeDay, durationMinutes as slotDuration, timeMinutes } from '../utils/planning'
+import { summarizeDay, planComparison, durationMinutes as slotDuration, timeMinutes, resolveMinutes } from '../utils/planning'
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { subDays } from 'date-fns'
 import { v4 as uuid } from 'uuid'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts'
 import { Plus, Pencil, Mic, MicOff, Send, Zap, Target, Sparkles, TrendingUp, Camera, ImageIcon, Copy, Upload, ChevronDown } from 'lucide-react'
 import { DayRibbon, ChartTooltip } from '../components/ui/TimeCharts'
 import { categoryColor, formatMinutes } from '../utils/timeColors'
@@ -324,20 +325,59 @@ export default function TimeFlow() {
 
   const allTags = useMemo(() => [...new Set(allEntries.flatMap(e => e.tags || []))], [allEntries])
   const dayEntries = useMemo(
-    () => allEntries
-      .filter(e => e.date === selectedDate && !e.ghost && e.planOutcome !== 'missed')
+    () => normalizeDay(allEntries, selectedDate)
+      .filter(e => !e.ghost && e.planOutcome !== 'missed')
       .sort((a, b) => (a.start || '').localeCompare(b.start || '')),
     [allEntries, selectedDate]
   )
 
   // ── Calculations ──────────────────────────────────────────
+  const [, setClockTick] = useState(0)
+  useEffect(() => { const timer = setInterval(() => setClockTick(n => n + 1), 30000); return () => clearInterval(timer) }, [])
   const nowDate = new Date()
-  const tzTime = new Intl.DateTimeFormat('en-US', { timeZone: state.settings?.profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone, hour: 'numeric', minute: 'numeric', hour12: false }).format(nowDate)
+  const tzTime = new Intl.DateTimeFormat('en-US', { timeZone: state.settings?.profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(nowDate)
   const nowMinute = parseInt(tzTime.split(':')[0]) * 60 + parseInt(tzTime.split(':')[1])
-  const timeSummary = useMemo(() => summarizeDay(allEntries, selectedDate, 1440, allPlans), [allEntries, selectedDate, allPlans])
-  const { productiveMins, wasteMins, sleepMins, unloggedMins } = timeSummary
+  const cutoff = dayCutoff(selectedDate, today, nowMinute)
+  const timeSummary = useMemo(() => summarizeDay(allEntries, selectedDate, cutoff, allPlans), [allEntries, selectedDate, cutoff, allPlans])
+  const { productiveMins, wasteMins, sleepMins } = timeSummary
+    const comparisonEntries = useMemo(() => normalizeDay(allEntries, selectedDate), [allEntries, selectedDate])
+    const comparison = useMemo(() => planComparison(allPlans.filter(p => p.date === selectedDate), comparisonEntries, cutoff), [allPlans, comparisonEntries, cutoff, selectedDate])
   const donutData = Object.entries(timeSummary.categories).map(([name, value]) => ({ name, value }))
   const donutSorted = [...donutData].sort((a, b) => b.value - a.value).map(d => ({ ...d, fill: CATEGORY_COLORS[d.name] || categoryColor(d.name) }))
+  
+    const cumulativeData = useMemo(() => {
+    let pt = 0, at = 0;
+    const dataMap = new Map();
+    dataMap.set('00:00', { time: '00:00', planned: 0, actual: 0 });
+    
+    const baseline = (state.timeflow?.planBaselines || []).find(b => b.date === selectedDate);
+    const datePlans = allPlans.filter(p => p.date === selectedDate);
+    const referencePlans = (state.timeflow?.comparisonMode === 'original' && baseline) ? baseline.slots : datePlans;
+    const planMins = resolveMinutes(referencePlans).mins;
+    const actualMins = resolveMinutes(normalizeDay(allEntries, selectedDate)).mins;
+
+    for (let i = 0; i < 1440; i++) {
+       if (planMins[i] && planMins[i].category === 'Study' && !planMins[i].isWaste) pt++;
+       if (actualMins[i] && actualMins[i].category === 'Study' && !actualMins[i].isWaste) at++;
+       
+       const t = i + 1; // boundary after processing minute i
+       
+       if (t % 15 === 0 || t === 1440 || (selectedDate === today && t === nowMinute)) {
+         const h = Math.floor(t / 60).toString().padStart(2, '0');
+         const m = (t % 60).toString().padStart(2, '0');
+         const timeKey = t === 1440 ? '24:00' : `${h}:${m}`;
+         
+         if (!dataMap.has(timeKey)) {
+             dataMap.set(timeKey, {
+               time: timeKey,
+               planned: pt,
+               actual: (selectedDate < today || (selectedDate === today && t <= nowMinute)) ? at : null
+             });
+         }
+       }
+    }
+    return Array.from(dataMap.values());
+}, [selectedDate, today, nowMinute, allPlans, allEntries, state.timeflow?.planBaselines, state.timeflow?.comparisonMode]);
   const donutTotal = donutSorted.reduce((a, d) => a + d.value, 0)
 
   // Weekly data: 7 days ending on the selected date (browse back in time with the date picker)
@@ -345,16 +385,17 @@ export default function TimeFlow() {
     const base = new Date(`${selectedDate}T00:00:00Z`)
     base.setUTCDate(base.getUTCDate() - (6 - i))
     const d = Number.isFinite(base.getTime()) ? base.toISOString().slice(0, 10) : toDateKey(subDays(new Date(), 6 - i), timezone)
-    const s = summarizeDay(allEntries, d, 1440, allPlans)
-    const meals = Math.max(0, s.loggedMins - s.productiveMins - s.wasteMins - s.sleepMins)
-    const h = (m) => +(m / 60).toFixed(1)
+    const s = summarizeDay(allEntries, d, dayCutoff(d, today, nowMinute), allPlans)
+    const sleep = s.unflaggedSleepMins
+    const meals = s.otherMins - sleep
+    const h = (m) => m / 60
     return {
       date: d,
       day: formatDateKey(d, timezone, { weekday: 'short' }),
-      productive: h(s.productiveMins), waste: h(s.wasteMins), sleep: h(s.sleepMins), meals: h(meals), unlogged: h(s.unloggedMins),
-      entries: allEntries.filter(e => e.date === d),
+      productive: h(s.productiveMins), waste: h(s.wasteMins), sleep: h(sleep), meals: h(meals), unlogged: h(s.unloggedMins),
+      entries: normalizeDay(allEntries, d).filter(e => !e.ghost && e.planOutcome !== 'missed'),
     }
-  }), [allEntries, timezone, selectedDate])
+  }), [allEntries, allPlans, timezone, selectedDate, today, nowMinute])
 
   // ── Smart Time Auto-fill ────────────────────────────────
   function getSmartStartTime() {
@@ -502,6 +543,66 @@ export default function TimeFlow() {
     }
 
     closeModal()
+  }
+
+  const dispatchDecision = (sourceSlotId, status) => {
+    setModule('timeflow', current => ({
+      ...current,
+      displacedDecisions: [...(current.displacedDecisions || []), { id: uuid(), sourceSlotId, status, date: new Date().toISOString() }]
+    }))
+  }
+
+  const moveTomorrow = (d) => {
+    const slot = allPlans.find(p => p.id === d.sourceSlotId)
+    if (!slot) return
+    const tomorrow = new Date(`${selectedDate}T00:00:00Z`)
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10)
+    const newSlotId = uuid()
+    const newActivityId = uuid()
+    const affectedMins = d.affectedMinutes || slotDuration(slot.start, slot.end)
+    const startMin = timeMinutes(slot.start)
+    const endMin = startMin + affectedMins
+    const adjustedEnd = `${Math.floor(endMin / 60).toString().padStart(2, '0')}:${(endMin % 60).toString().padStart(2, '0')}`
+
+    // Check for overlaps at destination
+    const destPlans = (state.timeflow?.plans || []).filter(p => p.date === tomorrowStr)
+    const destConflict = destPlans.some(p => Math.max(timeMinutes(p.start), timeMinutes(slot.start)) < Math.min(timeMinutes(p.end), timeMinutes(adjustedEnd)))
+    if (destConflict) {
+      showToast('Time slot conflicts with tomorrow\'s plan. Please reschedule manually.', 'error')
+      return
+    }
+
+    const updatedAt = new Date().toISOString()
+    setModule('timeflow', current => {
+        const destPlans = (current.plans || []).filter(p => p.date === tomorrowStr)
+        const baselines = current.planBaselines || []
+        let newBaselines = [...baselines]
+        if (!baselines.find(b => b.date === tomorrowStr)) {
+           const isFirstSave = destPlans.length === 0;
+           const newTomorrowSlot = { ...slot, id: newSlotId, activityId: newActivityId, date: tomorrowStr, end: adjustedEnd, calendarEventKey: newSlotId, createdAt: updatedAt, updatedAt };
+           const baselineSlots = isFirstSave ? [newTomorrowSlot] : structuredClone(destPlans);
+           newBaselines.push({ id: uuid(), date: tomorrowStr, timezone: slot.timezone || 'Asia/Kolkata', capturedAt: updatedAt, origin: isFirstSave ? 'first-save' : 'existing-plan-snapshot', slots: baselineSlots })
+        }
+        
+        const revisions = current.planRevisions || []
+        const newRevision = {
+          id: uuid(),
+          date: tomorrowStr,
+          parentRevisionId: [...revisions].filter(r => r.date === tomorrowStr).pop()?.id || null,
+          createdAt: updatedAt,
+          reason: 'Displaced activity moved from ' + selectedDate,
+          slots: [...destPlans, { ...slot, id: newSlotId, activityId: newActivityId, date: tomorrowStr, end: adjustedEnd, calendarEventKey: newSlotId, createdAt: updatedAt, updatedAt }].map(s => structuredClone(s))
+        }
+        return {
+          ...current,
+          planBaselines: newBaselines,
+          plans: [...(current.plans || []), { ...slot, id: newSlotId, activityId: newActivityId, date: tomorrowStr, end: adjustedEnd, calendarEventKey: newSlotId, createdAt: updatedAt, updatedAt }],
+          planRevisions: [...revisions, newRevision],
+          displacedDecisions: [...(current.displacedDecisions || []), { id: uuid(), sourceSlotId: d.sourceSlotId, status: 'moved', affectedMinutes: affectedMins, destinationDate: tomorrowStr, destinationSlotId: newSlotId, date: updatedAt }]
+        }
+      })
+    showToast(`Moved "${slot.name}" to ${tomorrowStr}`, 'success')
   }
 
   function deleteEntry(id) {
@@ -1488,7 +1589,7 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
           productiveMins={selectedDate === today ? productiveMins : 0}
           wasteMins={selectedDate === today ? wasteMins : 0}
           pastUnloggedMins={selectedDate === today ? timeSummary.pastUnloggedMins : 0}
-          remainingMins={selectedDate === today ? (timeSummary.unloggedMins - timeSummary.pastUnloggedMins) : 0}
+          remainingMins={selectedDate === today ? timeSummary.remainingMins : 0}
         />
       </div>
 
@@ -1521,22 +1622,51 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
           {/* Stats row */}
           <div className="tf-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
             <StatCard label="Productive" value={`${(productiveMins/60).toFixed(1)}h`} color="#10B981" />
-            <StatCard label="Timepass" value={`${(wasteMins/60).toFixed(1)}h`} color="#EF4444" />
+            <StatCard label="Waste flagged" value={`${(wasteMins/60).toFixed(1)}h`} color="#EF4444" />
             <StatCard label="Sleep" value={`${(sleepMins/60).toFixed(1)}h`} color="#8B5CF6" />
             <StatCard label="Logged" value={`${dayEntries.length} entries`} color="#3B82F6" />
           </div>
 
-          {/* Day at a glance — 24h ribbon */}
+          {comparison.displaced && comparison.displaced.length > 0 && (
+              <Card>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                  <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', margin: 0, color: '#F59E0B' }}>Displaced Activities Tray</h3>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Overrun tasks that need rescheduling</span>
+                </div>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {comparison.displaced.filter(d => !(state.timeflow?.displacedDecisions || []).some(dec => dec.sourceSlotId === d.sourceSlotId)).map(d => (
+                    <div key={d.id} style={{ padding: 12, background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{d.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>{d.affectedMinutes} minutes were occupied by something else.</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button style={{ padding: '6px 10px', fontSize: 11, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6 }} onClick={() => dispatchDecision(d.sourceSlotId, 'keep')}>Keep schedule</button>
+                        <button style={{ padding: '6px 10px', fontSize: 11, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6 }} onClick={() => moveTomorrow(d)}>Move to tomorrow</button>
+                        <button style={{ padding: '6px 10px', fontSize: 11, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6 }} onClick={() => {
+                            setModule('timeflow', current => ({ ...current, pendingRescheduleSlotId: d.sourceSlotId }))
+                            const editBtn = Array.from(document.querySelectorAll('[data-edit-action]')).find(b => b.textContent.includes('Edit plan'))
+                            if(editBtn) editBtn.click()
+                            window.scrollTo({ top: 0, behavior: 'smooth' })
+                          }}>Reschedule today</button>
+                        <button style={{ padding: '6px 10px', fontSize: 11, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6 }} onClick={() => dispatchDecision(d.sourceSlotId, 'skip')}>Skip</button>
+                      </div>
+                    </div>
+                  ))}
+                  {comparison.displaced.filter(d => !(state.timeflow?.displacedDecisions || []).some(dec => dec.sourceSlotId === d.sourceSlotId)).length === 0 && <div style={{fontSize: 12, color: 'var(--text-muted)'}}>All clear!</div>}
+                </div>
+              </Card>
+            )}
+            
+            {/* Day at a glance — 24h ribbon */}
           <Card>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
               <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', margin: 0 }}>Your day at a glance</h3>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                {formatMinutes(timeSummary.loggedMins)} logged · {selectedDate === today ? `${formatMinutes(timeSummary.pastUnloggedMins)} gap · ${formatMinutes(timeSummary.unloggedMins - timeSummary.pastUnloggedMins)} remaining` : `${formatMinutes(timeSummary.unloggedMins)} unlogged`}
+                {formatMinutes(timeSummary.loggedMins)} logged · {selectedDate === today ? `${formatMinutes(timeSummary.pastUnloggedMins)} gap · ${formatMinutes(timeSummary.remainingMins)} remaining` : `${formatMinutes(timeSummary.unloggedMins)} unlogged`}
               </span>
             </div>
             <DayRibbon entries={dayEntries} height={40} nowMinute={selectedDate === today ? nowMinute : null} />
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-              {dayEntries.length ? 'Tap a block for details · striped = waste time · empty = not logged' : 'Nothing logged yet — logged activities appear here on a 24-hour line.'}
+              {!dayEntries.length && 'Nothing logged yet — logged activities appear here on a 24-hour line.'}
             </div>
           </Card>
 
@@ -1628,12 +1758,25 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
                   <span style={{ color: '#EF4444' }}>Waste &middot; {formatMinutes(wasteMins)}</span>
                 </div>
                 <div style={{ display: 'flex', height: 16, borderRadius: 8, overflow: 'hidden', background: 'rgba(255,255,255,0.05)' }}>
-                  {productiveMins > 0 && <div style={{ width: `${(productiveMins / (productiveMins + wasteMins || 1)) * 100}%`, background: '#10B981' }} />}
-                  {wasteMins > 0 && <div style={{ width: `${(wasteMins / (productiveMins + wasteMins || 1)) * 100}%`, background: '#EF4444' }} />}
+                  {productiveMins > 0 && <div style={{ width: `${(productiveMins / (timeSummary.loggedMins || 1)) * 100}%`, background: '#10B981' }} />}
+                  {wasteMins > 0 && <div style={{ width: `${(wasteMins / (timeSummary.loggedMins || 1)) * 100}%`, background: '#EF4444' }} />}
                 </div>
-                {sleepMins > 0 && <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>+ {formatMinutes(sleepMins)} Sleep</div>}
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>Other / unflagged: {formatMinutes(timeSummary.otherMins)} · Sleep category: {formatMinutes(sleepMins)} (included above)</div>
+                <div style={{ marginTop: 8, fontSize: 12 }}>Padhai planned by now: {formatMinutes(timeSummary.plannedProductiveMins)} · Logged: {formatMinutes(productiveMins)} · Difference: {productiveMins >= timeSummary.plannedProductiveMins ? '+' : '−'}{formatMinutes(Math.abs(productiveMins - timeSummary.plannedProductiveMins))}</div>
               </div>
-            </Card>
+              <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+                     <h4 style={{ fontSize: 13, marginBottom: 12 }}>Cumulative Study Progress (24h)</h4>
+                     <ResponsiveContainer width="100%" height={160}>
+                       <LineChart data={cumulativeData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
+                         <XAxis dataKey="time" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} interval="preserveStartEnd" minTickGap={30} stroke="var(--border)" />
+                         <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickFormatter={v => Math.round(v/60) + 'h'} stroke="var(--border)" />
+                         <Tooltip contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8 }} itemStyle={{ fontSize: 12 }} labelStyle={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }} />
+                         <Line type="monotone" dataKey="planned" name="Planned Study (m)" stroke="#10B981" strokeWidth={2} dot={false} opacity={0.4} />
+                         <Line type="monotone" dataKey="actual" name="Logged Study (m)" stroke="#10B981" strokeWidth={2} dot={false} />
+                       </LineChart>
+                     </ResponsiveContainer>
+                  </div>
+                </Card>
 
           )}
         </>}
@@ -1663,14 +1806,14 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
                 <YAxis domain={[0, 24]} ticks={[0, 6, 12, 18, 24]} unit="h" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
                 <Tooltip content={<ChartTooltip unit="h" labelFormatter={(l) => { const d = weeklyData.find(x => x.day === l); return d ? `${l} · ${d.date}` : l }} />} cursor={{ fill: 'rgba(148,163,184,0.06)' }} />
                 <Bar dataKey="productive" name="Productive" stackId="day" fill="#10B981" cursor="pointer" />
-                <Bar dataKey="sleep" name="Sleep" stackId="day" fill="#8B5CF6" cursor="pointer" />
-                <Bar dataKey="meals" name="Meals" stackId="day" fill="#F97316" cursor="pointer" />
+                <Bar dataKey="sleep" name="Sleep (unflagged)" stackId="day" fill="#8B5CF6" cursor="pointer" />
+                <Bar dataKey="meals" name="Other (unflagged)" stackId="day" fill="#F97316" cursor="pointer" />
                 <Bar dataKey="waste" name="Waste" stackId="day" fill="#EF4444" cursor="pointer" />
                 <Bar dataKey="unlogged" name="Unlogged" stackId="day" fill="rgba(148,163,184,0.16)" radius={[6, 6, 0, 0]} cursor="pointer" />
               </BarChart>
             </ResponsiveContainer>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '8px' }}>
-              {[['Productive', '#10B981'], ['Sleep', '#8B5CF6'], ['Meals', '#F97316'], ['Waste', '#EF4444'], ['Unlogged', 'rgba(148,163,184,0.35)']].map(([label, color]) => (
+              {[['Productive', '#10B981'], ['Sleep (unflagged)', '#8B5CF6'], ['Other (unflagged)', '#F97316'], ['Waste', '#EF4444'], ['Unlogged', 'rgba(148,163,184,0.35)']].map(([label, color]) => (
                 <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
                   <div style={{ width: '10px', height: '10px', background: color, borderRadius: '3px' }} /> {label}
                 </div>
@@ -1694,7 +1837,7 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <DayRibbon entries={d.entries} height={18} compact showAxis={i === weeklyData.length - 1} />
                   </span>
-                  <span style={{ width: 44, flexShrink: 0, textAlign: 'right', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#10B981', alignSelf: 'flex-start', paddingTop: 2 }}>{d.productive}h</span>
+                  <span style={{ width: 44, flexShrink: 0, textAlign: 'right', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#10B981', alignSelf: 'flex-start', paddingTop: 2 }}>{d.productive.toFixed(1)}h</span>
                 </button>
               ))}
             </div>
