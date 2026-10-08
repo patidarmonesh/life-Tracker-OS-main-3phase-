@@ -5,7 +5,7 @@ import { useAppActions, useAppState } from '../../context/appHooks'
 import { useToast } from '../../context/toastContextCore'
 import { draftDayPlan, draftActualLogs } from '../../services/geminiService'
 import { slotFingerprint } from '../../services/calendarService'
-import { durationMinutes, planComparison, timeMinutes, validateSlots, WASTE_CATEGORIES } from '../../utils/planning'
+import { durationMinutes, planComparison, timeMinutes, validateSlots, WASTE_CATEGORIES, summarizeDay } from '../../utils/planning'
 import { normalizeTimezone, getTodayDateKey } from '../../utils/dateTime'
 import Card from './Card'
 import Button from './Button'
@@ -141,7 +141,7 @@ export default function DayPlanner({ date, categories }) {
 
       setModule('timeflow', current => ({
         ...current,
-        entries: [...(current.entries || []), ...newEntries],
+        entries: [...(current.entries || []).filter(e => !(e.date === draftDate && e.source === 'auto-diary')), ...newEntries],
         subjects: current.subjects || [],
         studySessions: [...(current.studySessions || []), ...sessions]
       }))
@@ -386,7 +386,7 @@ export default function DayPlanner({ date, categories }) {
                                <div style={{ flex: 1, minWidth: 0 }}>
                                  {actual.planOutcome === 'missed' ? 
                                     <span><strong style={{ color: 'var(--text-primary)' }}>Actual:</strong> Missed completely</span> : 
-                                    <span><strong style={{ color: 'var(--text-primary)' }}>Actual:</strong> {actual.start}�{actual.end} &middot; {actual.name} <span style={{ color: actual.planOutcome === 'followed' ? '#34D399' : '#FB7185' }}>({actual.planOutcome})</span></span>
+                                    <span><strong style={{ color: 'var(--text-primary)' }}>Actual:</strong> {actual.start}A{actual.end} &middot; {actual.name} <span style={{ color: actual.planOutcome === 'followed' ? '#34D399' : '#FB7185' }}>({actual.planOutcome})</span></span>
                                  }
                                </div>
                                {slotActuals.length > 1 && (
@@ -479,7 +479,25 @@ export default function DayPlanner({ date, categories }) {
           <div style={{ ...row, marginTop: 6 }}><select aria-label={`Category ${i + 1}`} style={{ ...input, width: 'auto', flex: 1 }} value={slot.category} onChange={e => updateSlot(slot.id, 'category', e.target.value)}>{[...new Set([...categories, slot.category])].map(c => <option key={c}>{c}</option>)}</select><button disabled={busy} onClick={() => setDraft(items => items.filter(s => s.id !== slot.id))}>Remove</button></div>
         </div>)}
       </div>
-      <Button variant="secondary" onClick={() => setDraft(items => [...items, blank()])} disabled={busy} style={{ marginTop: 10 }}>+ Add activity</Button>
+              <Button variant="secondary" onClick={() => setDraft(items => [...items, blank()])} disabled={busy} style={{ marginTop: 10 }}>+ Add activity</Button>
+        {(() => {
+          const ds = summarizeDay(draft.map(s => ({...s, planOutcome: 'followed', date: draftDate})), draftDate, 1440, []);
+          return (
+            <div style={{ marginTop: 16, padding: 12, borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+                <span style={{ color: '#10B981' }}>Padhai (Productive) &middot; {formatMinutes(ds.productiveMins)}</span>
+                <span style={{ color: '#EF4444' }}>Waste &middot; {formatMinutes(ds.wasteMins)}</span>
+              </div>
+              <div style={{ display: 'flex', height: 16, borderRadius: 8, overflow: 'hidden', background: 'rgba(255,255,255,0.05)' }}>
+                {ds.productiveMins > 0 && <div style={{ width: `${(ds.productiveMins / (ds.productiveMins + ds.wasteMins || 1)) * 100}%`, background: '#10B981' }} />}
+                {ds.wasteMins > 0 && <div style={{ width: `${(ds.wasteMins / (ds.productiveMins + ds.wasteMins || 1)) * 100}%`, background: '#EF4444' }} />}
+              </div>
+              <div style={{ fontSize: 12, color: ds.loggedMins !== 1440 ? '#FBBF24' : 'var(--text-muted)', marginTop: 8 }}>
+                Total planned: {formatMinutes(ds.loggedMins)} {ds.loggedMins !== 1440 ? '(Warning: must equal 24h)' : ''}
+              </div>
+            </div>
+          )
+        })()}
       <div style={{ marginTop: 14 }}><label><input type="checkbox" checked={calendarEnabled} onChange={e => setCalendarEnabled(e.target.checked)} /> Automatically sync to Google Calendar</label></div>
       <label style={{ display: 'block', marginTop: 8, fontSize: 12 }}>Reminder before start <select style={{ ...input, width: 'auto', display: 'inline-block', marginLeft: 8 }} value={reminder} onChange={e => setReminder(Number(e.target.value))}>{[0, 5, 10, 15, 30].map(n => <option key={n} value={n}>{n} minutes</option>)}</select></label>
       {error && <p role="alert" style={{ color: '#F87171' }}>{error}</p>}

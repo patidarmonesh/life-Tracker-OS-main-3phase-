@@ -1,4 +1,4 @@
-export const WASTE_CATEGORIES = ['Social Media', 'Waste Time', 'Entertainment']
+export const WASTE_CATEGORIES = ['Social Media', 'Timepass', 'Entertainment']
 
 export function timeMinutes(value) {
   if (value === '24:00') return 1440
@@ -39,9 +39,10 @@ export function summarizeTime(entries = [], nowMin = 1440, plans = []) {
     plannedMins += v.planned
   })
 
-  const isP = (c, name, isWaste) => !isWaste && (c === 'Study' || /study|padhai|class/i.test(c) || /study|padhai|class/i.test(name || ''))
-  const isW = (c, name, isWaste) => !isP(c, name, isWaste)
-  const isS = (c) => false
+  const isP = (c, name, isWaste) => c === 'Study' || /study|padhai|class/i.test(c) || /study|padhai|class/i.test(name || '')
+  const isS = (c) => c === 'Sleep'
+  // Waste is bucketed later in TimeFlow, here we just track actual waste categories
+  const isW = (c, name, isWaste) => isWaste || c === 'Timepass' || c === 'Timepass'
 
   let wasteMins = 0; let sleepMins = 0; let productiveMins = 0;
   entries.forEach(e => {

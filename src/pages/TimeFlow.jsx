@@ -31,11 +31,11 @@ const CATEGORY_COLORS = {
   'Entertainment': '#EC4899',
   'Travel': '#06B6D4',
   'Self-Care': '#84CC16',
-  'Waste Time': '#DC2626',
+  'Timepass': '#DC2626',
   'Other': '#6B7280',
 }
 
-const WASTE_CATEGORIES = ['Social Media', 'Waste Time', 'Entertainment']
+const WASTE_CATEGORIES = ['Social Media', 'Timepass', 'Entertainment']
 const EMPTY_ARRAY = []
 
 // ── Time-of-Day Theme ─────────────────────────────────────
@@ -325,20 +325,20 @@ export default function TimeFlow() {
   const allTags = useMemo(() => [...new Set(allEntries.flatMap(e => e.tags || []))], [allEntries])
   const dayEntries = useMemo(
     () => allEntries
-      .filter(e => e.date === selectedDate)
+      .filter(e => e.date === selectedDate && !e.ghost && e.planOutcome !== 'missed')
       .sort((a, b) => (a.start || '').localeCompare(b.start || '')),
     [allEntries, selectedDate]
   )
 
   // ── Calculations ──────────────────────────────────────────
+  const nowDate = new Date()
+  const tzTime = new Intl.DateTimeFormat('en-US', { timeZone: state.settings?.profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone, hour: 'numeric', minute: 'numeric', hour12: false }).format(nowDate)
+  const nowMinute = parseInt(tzTime.split(':')[0]) * 60 + parseInt(tzTime.split(':')[1])
   const timeSummary = useMemo(() => summarizeDay(allEntries, selectedDate, 1440, allPlans), [allEntries, selectedDate, allPlans])
   const { productiveMins, wasteMins, sleepMins, unloggedMins } = timeSummary
   const donutData = Object.entries(timeSummary.categories).map(([name, value]) => ({ name, value }))
   const donutSorted = [...donutData].sort((a, b) => b.value - a.value).map(d => ({ ...d, fill: CATEGORY_COLORS[d.name] || categoryColor(d.name) }))
   const donutTotal = donutSorted.reduce((a, d) => a + d.value, 0)
-  const nowDate = new Date()
-  const tzTime = new Intl.DateTimeFormat('en-US', { timeZone: state.settings?.profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone, hour: 'numeric', minute: 'numeric', hour12: false }).format(nowDate)
-  const nowMinute = parseInt(tzTime.split(':')[0]) * 60 + parseInt(tzTime.split(':')[1])
 
   // Weekly data: 7 days ending on the selected date (browse back in time with the date picker)
   const weeklyData = useMemo(() => Array.from({ length: 7 }, (_, i) => {
@@ -924,7 +924,7 @@ DIARY FORMAT RULES:
 - "(Waste)" or "[Waste]" flag next to activity → isWaste: true
 - "Wait in lab" = Other category, isWaste: false (unavoidable)
 - "Lunch" / "Khana" = Meals category
-- "Rishi ki Baat" / any socializing with "(Waste)" → Waste Time category, isWaste: true
+- "Rishi ki Baat" / any socializing with "(Waste)" → Timepass category, isWaste: true
 - "fever" / "beemar" / illness → Other category, isWaste: false, notes: medical reason
 - If "Waste due to" appears → isWaste: true, preserve the reason in notes
 - Combined entries like "Lunch + Rishi ki Baat (Waste)" → Split into 2 if possible, or mark the combined entry as waste if (Waste) flag is present
@@ -946,7 +946,7 @@ CATEGORY MAPPING:
 - Travel/Commute → "Travel"
 - Morning Routine → "Morning Routine"
 - Anything with (Waste) flag → respective category BUT isWaste: true
-- General waste/time pass → "Waste Time" (isWaste: true)
+- General waste/time pass → "Timepass" (isWaste: true)
 
 Available categories: ${categoryList}
 
@@ -1521,7 +1521,7 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
           {/* Stats row */}
           <div className="tf-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
             <StatCard label="Productive" value={`${(productiveMins/60).toFixed(1)}h`} color="#10B981" />
-            <StatCard label="Waste Time" value={`${(wasteMins/60).toFixed(1)}h`} color="#EF4444" />
+            <StatCard label="Timepass" value={`${(wasteMins/60).toFixed(1)}h`} color="#EF4444" />
             <StatCard label="Sleep" value={`${(sleepMins/60).toFixed(1)}h`} color="#8B5CF6" />
             <StatCard label="Logged" value={`${dayEntries.length} entries`} color="#3B82F6" />
           </div>
@@ -2201,7 +2201,7 @@ Write a detailed 2-4 sentence note describing what likely happened during this t
               {/* Waste Breakdown */}
               {aiResult.wasteBreakdown?.length > 0 && (
                 <div style={{ padding: '12px', background: 'var(--bg-secondary)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#EF4444', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>🗑️ Waste Time Analysis</div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#EF4444', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>🗑️ Timepass analysis</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {aiResult.wasteBreakdown.map((item, i) => (
                       <div key={i} style={{ padding: '8px', background: 'rgba(239,68,68,0.05)', borderRadius: '8px' }}>
