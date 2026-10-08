@@ -8,41 +8,81 @@ import { useToast } from '../context/toastContextCore'
 import { playSuccessSound, playSubtleClick, playWarningBeep } from '../hooks/useAudio'
 import { hapticSuccess, hapticLight } from '../hooks/useHaptic'
 import { Wind, Play, Square, Calendar } from 'lucide-react'
-import { ownerDate } from '../domain/planning/index.js'
 
 export default function Meditation() {
   const state = useAppState()
-  const { setModule, updateModules } = useAppActions()
+  const { setModule } = useAppActions()
   const { showToast } = useToast()
 
   const sessions = state.meditations?.sessions || []
 
-  // The persisted start instant is authoritative; ticks refresh only the display.
-  const timer = state.meditations?.activeTimer || null
-  const [now, setNow] = useState(Date.now)
-  const [durationSecs, setDurationSecs] = useState(300)
-  const [guidedDraft, setGuidedDraft] = useState(true)
-  const savedRef = useRef(null)
-  const guidedMode = timer?.guided ?? guidedDraft
-  const elapsedSecs = timer ? Math.max(0, Math.floor(((timer.stoppedAt ? Date.parse(timer.stoppedAt) : now) - Date.parse(timer.startedAt)) / 1000)) : 0
-  const timeLeft = timer ? Math.max(0, timer.durationSecs - elapsedSecs) : durationSecs
-  const reviewing = Boolean(timer && (timer.stoppedAt || timeLeft === 0))
-  const isActive = Boolean(timer && !reviewing)
-  const trackedSeconds = timer ? Math.min(elapsedSecs, timer.durationSecs) : 0
-  const reviewMinutes = timer?.reviewMinutes ?? (trackedSeconds / 60).toFixed(2)
-  const breathPosition = elapsedSecs % 19
-  const breathPhase = breathPosition < 4 ? 'In' : breathPosition < 11 ? 'Hold' : 'Out'
-  const phaseSeconds = breathPosition < 4 ? 4 - breathPosition : breathPosition < 11 ? 11 - breathPosition : 19 - breathPosition
+  // Timer states
+  const [isActive, setIsActive] = useState(false)
+  const [durationSecs, setDurationSecs] = useState(300) // Default 5 minutes
+  const [timeLeft, setTimeLeft] = useState(300)
 
+  // Guided breathing states (4-7-8 method)
+  const [guidedMode, setGuidedMode] = useState(true)
+  const [breathPhase, setBreathPhase] = useState('In') // In, Hold, Out
+  const [phaseSeconds, setPhaseSeconds] = useState(4)
+
+  const timerRef = useRef(null)
+  const breathRef = useRef(null)
+
+  // Streak calculations
   const streak = calculateStreak(sessions)
-  const formatTime = secs => `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`
 
+  // Format MM:SS
+  const formatTime = (secs) => {
+    const m = Math.floor(secs / 60)
+    const s = secs % 60
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
+
+  // Timer loop
   useEffect(() => {
-    if (!timer || timer.stoppedAt || reviewing) return
-    const id = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(id)
-  }, [timer, reviewing])
+    if (isActive && timeLeft > 0) {
+      timerRef.current = setInterval(() => {
+        setTimeLeft(t => {
+          if (t <= 1) {
+            handleComplete()
+            return 0
+          }
+          return t - 1
+        })
+      }, 1000)
+    } else {
+      clearInterval(timerRef.current)
+    }
+    return () => clearInterval(timerRef.current)
+  }, [isActive, timeLeft, handleComplete])
 
+  // Guided breath loop
+  useEffect(() => {
+    if (isActive && guidedMode) {
+      breathRef.current = setInterval(() => {
+        setPhaseSeconds(p => {
+          if (p <= 1) {
+            // Transition phases
+            if (breathPhase === 'In') {
+              setBreathPhase('Hold')
+              return 7
+            } else if (breathPhase === 'Hold') {
+              setBreathPhase('Out')
+              return 8
+            } else {
+              setBreathPhase('In')
+              return 4
+            }
+          }
+          return p - 1
+        })
+      }, 1000)
+    } else {
+      clearInterval(breathRef.current)
+    }
+    return () => clearInterval(breathRef.current)
+  }, [isActive, guidedMode, breathPhase])
 
   function calculateStreak(logs) {
     if (!logs.length) return 0
@@ -70,69 +110,55 @@ export default function Meditation() {
   }
 
   function handleStart() {
-    const startedAt = new Date().toISOString()
-    savedRef.current = null
-    setModule('meditations', current => ({ ...current, activeTimer: { id: uuid(), startedAt, durationSecs, guided: guidedDraft } }))
-    setNow(Date.now())
     playSubtleClick()
     hapticLight()
+    setIsActive(true)
+    setBreathPhase('In')
+    setPhaseSeconds(4)
   }
 
   function handleStop() {
-    setModule('meditations', current => ({ ...current, activeTimer: null }))
+    playWarningBeep()
     hapticLight()
-  }
-
-  function handleReview() {
-    if (!timer) return
-    const stoppedAt = new Date().toISOString()
-    setModule('meditations', current => ({ ...current, activeTimer: { ...current.activeTimer, stoppedAt } }))
-    setNow(Date.now())
+    setIsActive(false)
+    setTimeLeft(durationSecs)
   }
 
   function handleComplete() {
-    if (!timer || savedRef.current === timer.id) return
-    const minutes = Number(reviewMinutes)
-    if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 1440) {
-      showToast('Confirm a duration greater than zero and no longer than one day.', 'warning')
-      return
+    setIsActive(false)
+    playSuccessSound()
+    hapticSuccess()
+
+    const minutes = Math.round(durationSecs / 60)
+    const newSession = {
+      id: uuid(),
+      minutes,
+      guided: guidedMode,
+      createdAt: new Date().toISOString(),
     }
-    const activityId = `meditation_${timer.id}`
-    const date = ownerDate(timer.startedAt, state.settings?.profile?.timezone || 'Asia/Kolkata')
-    const newSession = { id: timer.id, activityId, minutes, durationMinutes: minutes, date, guided: timer.guided, createdAt: new Date().toISOString(), source: 'user-confirmed', certainty: 'user-estimated', timerEvidence: timer }
-    savedRef.current = timer.id
-    try {
-      // Confirmation records reported duration. No exact interval is inferred from a countdown.
-      updateModules({
-        meditations: current => ({ ...current, activeTimer: null, sessions: [newSession, ...(current.sessions || []).filter(session => session.id !== timer.id)] }),
-        timeflow: current => ({ ...current, entries: [...(current.entries || []).filter(activity => activity.id !== activityId), { id: activityId, canonicalId: activityId, date, category: 'Meditation', durationMinutes: minutes, description: 'Confirmed meditation session', source: 'user-confirmed', certainty: 'user-estimated', meditationSessionId: timer.id }] }),
-      })
-      playSuccessSound()
-      hapticSuccess()
-      showToast(`Confirmed ${minutes} minutes. Timing remains reported, not an invented interval.`, 'success')
-    } catch (error) {
-      savedRef.current = null
-      showToast(error.message || 'Saving failed. Your timer is retained for review.', 'error')
-    }
+
+    setModule('meditations', {
+      ...state.meditations,
+      sessions: [newSession, ...sessions],
+    })
+
+    showToast(`🧘 Meditation Session Complete! You logged ${minutes} mins.`, 'success')
+    setTimeLeft(durationSecs)
   }
 
-
   function handleDelete(id) {
-    const removed = sessions.find(session => session.id === id)
-    const activities = (state.timeflow?.entries || []).filter(activity => activity.meditationSessionId === id || activity.id === removed?.activityId)
-    updateModules({
-      meditations: current => ({ ...current, sessions: (current.sessions || []).filter(session => session.id !== id) }),
-      timeflow: current => ({ ...current, entries: (current.entries || []).filter(activity => !activities.some(removedActivity => removedActivity.id === activity.id)) }),
+    const prev = sessions
+    setModule('meditations', {
+      ...state.meditations,
+      sessions: sessions.filter(s => s.id !== id),
     })
     showToast('Session removed', 'warning', {
-      undo: () => updateModules({
-        meditations: current => ({ ...current, sessions: removed && !(current.sessions || []).some(session => session.id === id) ? [removed, ...(current.sessions || [])] : current.sessions }),
-        timeflow: current => ({ ...current, entries: [...(current.entries || []), ...activities.filter(activity => !(current.entries || []).some(existing => existing.id === activity.id))] }),
-      }),
+      undo: () => setModule('meditations', { ...state.meditations, sessions: prev }),
     })
     playWarningBeep()
     hapticLight()
   }
+
   // Circle sizes based on breathing phase
   const getCircleSize = () => {
     if (!isActive || !guidedMode) return '160px'
@@ -150,7 +176,7 @@ export default function Meditation() {
   const totalMinutes = sessions.reduce((acc, s) => acc + (s.minutes || 0), 0)
 
   return (
-    <div className="legacy-area" style={{ maxWidth: '840px', margin: '0 auto', paddingBottom: '48px' }}>
+    <div style={{ maxWidth: '840px', margin: '0 auto', paddingBottom: '48px' }}>
       {/* Header */}
       <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -163,7 +189,7 @@ export default function Meditation() {
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Stats Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
           <Card style={{ padding: '12px', textAlign: 'center' }}>
             <div style={{ fontSize: '20px' }}>🧘</div>
             <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--accent-indigo)', marginTop: '4px' }}>{sessions.length} Sessions</div>
@@ -216,7 +242,7 @@ export default function Meditation() {
           </div>
 
           {/* Time Remaining Counter */}
-          <div role="timer" aria-label="Meditation time remaining" style={{ fontSize: '42px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-primary)', marginBottom: '8px' }}>
+          <div style={{ fontSize: '42px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-primary)', marginBottom: '8px' }}>
             {formatTime(timeLeft)}
           </div>
 
@@ -225,13 +251,13 @@ export default function Meditation() {
           </div>
 
           {/* Controls Panels */}
-          {!timer ? (
+          {!isActive ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', width: '100%', maxWidth: '360px', justifyContent: 'center' }}>
               <div style={{ display: 'flex', gap: '6px', width: '100%', justifyContent: 'center', marginBottom: '8px' }}>
                 {[60, 180, 300, 600].map(secs => (
                   <button
                     key={secs}
-                    onClick={() => { playSubtleClick(); setDurationSecs(secs); }}
+                    onClick={() => { playSubtleClick(); setDurationSecs(secs); setTimeLeft(secs); }}
                     style={{
                       padding: '6px 12px',
                       borderRadius: '8px',
@@ -254,7 +280,7 @@ export default function Meditation() {
                   id="guidedMode"
                   checked={guidedMode}
                   style={{ accentColor: 'var(--accent-indigo)' }}
-                  onChange={e => { playSubtleClick(); setGuidedDraft(e.target.checked); }}
+                  onChange={e => { playSubtleClick(); setGuidedMode(e.target.checked); }}
                 />
                 <label htmlFor="guidedMode" style={{ fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                   Enable guided 4-7-8 visual expanders
@@ -265,21 +291,13 @@ export default function Meditation() {
                 <Play size={16} /> Begin Meditation
               </Button>
             </div>
-          ) : reviewing ? (
-            <div className="page-stack" style={{ width: '100%', maxWidth: '360px' }}>
-              <p className="notice" role="status">Your timer has stopped. Nothing is logged until you confirm what you practiced.</p>
-              <label className="field">Minutes to confirm<input aria-label="Meditation minutes to confirm" type="number" min="0.01" max="1440" step="0.01" value={reviewMinutes} onChange={event => setModule('meditations', current => ({ ...current, activeTimer: { ...current.activeTimer, reviewMinutes: event.target.value } }))}/></label>
-              <p className="caption">Adjust this duration if you were interrupted. It is saved as reported duration; exact timing stays unknown.</p>
-              <Button onClick={handleComplete}>Confirm meditation session</Button>
-              <Button variant="ghost" onClick={handleStop}>Discard timer</Button>
-            </div>
           ) : (
             <div style={{ display: 'flex', gap: '10px', width: '100%', maxWidth: '320px' }}>
               <Button variant="secondary" style={{ flex: 1, padding: '10px' }} onClick={handleStop}>
-                <Square size={14} /> Discard timer
+                <Square size={14} /> Stop & Reset
               </Button>
-              <Button style={{ flex: 1, padding: '10px' }} onClick={handleReview}>
-                Finish & review
+              <Button style={{ flex: 1, padding: '10px' }} onClick={handleComplete}>
+                Log Complete
               </Button>
             </div>
           )}

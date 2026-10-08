@@ -1,3 +1,4 @@
+import { dailyBudgetFor } from '../utils/financeMath'
 import { useState, useMemo } from 'react'
 import { useAppState, useAppActions } from '../context/appHooks'
 import Card from '../components/ui/Card'
@@ -100,7 +101,7 @@ export default function RPG() {
     const stepsToday = todayBodyLog.steps || 0
     const todayExpenses = (state.finance?.expenses || []).filter(e => e.date === today)
     const todaySpend = todayExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
-    const dailyBudget = Math.round((preferences.monthlyBudget || 15000) / 30)
+    const dailyBudget = dailyBudgetFor(preferences.monthlyBudget ?? 8000, today)
     const todayJournalEntry = (state.journal?.entries || []).some(j => j.date === today)
 
     return [

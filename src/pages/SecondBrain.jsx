@@ -101,7 +101,7 @@ export default function SecondBrain() {
     hapticLight()
   }
 
-  const _labelStyle = {
+  const labelStyle = {
     fontSize: '11px',
     color: 'var(--text-muted)',
     fontWeight: '700',
@@ -124,7 +124,7 @@ export default function SecondBrain() {
   }
 
   return (
-    <div className="legacy-area" style={{ maxWidth: '960px', margin: '0 auto', paddingBottom: '48px' }}>
+    <div style={{ maxWidth: '960px', margin: '0 auto', paddingBottom: '48px' }}>
       {/* Header */}
       <div style={{ padding: '20px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -135,7 +135,7 @@ export default function SecondBrain() {
         </div>
       </div>
 
-      <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '20px' }}>
+      <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: '1.2fr 2fr', gap: '20px' }}>
         {/* Left column: Create and List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Quick Create Note */}
@@ -150,13 +150,28 @@ export default function SecondBrain() {
                 value={form.title}
                 onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
               />
-              <textarea
-                style={{ ...inputStyle, padding: '8px 10px', fontSize: '13px', minHeight: '60px', resize: 'vertical' }}
-                placeholder="Content..."
-                value={form.content}
-                onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
-              />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: '8px' }}>
+              <div style={{ position: 'relative' }}>
+                <textarea
+                  style={{ ...inputStyle, padding: '8px 10px', fontSize: '13px', minHeight: '60px', resize: 'vertical', paddingRight: '40px' }}
+                  placeholder="Content..."
+                  value={form.content}
+                  onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText()
+                      if (text) setForm(f => ({ ...f, content: f.content + (f.content ? ' ' : '') + text }))
+                    } catch (err) {}
+                  }}
+                  style={{ position: 'absolute', right: '8px', top: '8px', background: 'rgba(99,102,241,0.1)', border: 'none', color: 'var(--accent-indigo)', fontSize: '11px', fontWeight: '700', cursor: 'pointer', padding: '4px 6px', borderRadius: '6px' }}
+                  title="Paste"
+                >
+                  📋
+                </button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' }}>
                 <input
                   style={{ ...inputStyle, padding: '8px 10px', fontSize: '12px' }}
                   placeholder="Tags (tag1, tag2)"
@@ -330,26 +345,53 @@ function NoteEditor({ note, onSave }) {
         ))}
       </div>
 
-      <textarea
-        style={{
-          width: '100%',
-          flex: 1,
-          minHeight: '280px',
-          padding: '12px',
-          borderRadius: '10px',
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          color: 'var(--text-primary)',
-          fontSize: '14px',
-          outline: 'none',
-          fontFamily: 'JetBrains Mono, monospace',
-          lineHeight: '1.6',
-          resize: 'vertical',
-        }}
-        placeholder="Write note details or markdown content here..."
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-      />
+      <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <textarea
+          style={{
+            width: '100%',
+            flex: 1,
+            minHeight: '280px',
+            padding: '12px',
+            paddingRight: '40px',
+            borderRadius: '10px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-primary)',
+            fontSize: '14px',
+            outline: 'none',
+            fontFamily: 'JetBrains Mono, monospace',
+            lineHeight: '1.6',
+            resize: 'vertical',
+          }}
+          placeholder="Write note details or markdown content here..."
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+        />
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              const text = await navigator.clipboard.readText()
+              if (text) setDraft(prev => prev + (prev ? ' ' : '') + text)
+            } catch (err) {}
+          }}
+          style={{
+            position: 'absolute',
+            right: '12px',
+            top: '12px',
+            background: 'rgba(99,102,241,0.1)',
+            border: 'none',
+            color: 'var(--accent-indigo)',
+            fontSize: '14px',
+            cursor: 'pointer',
+            padding: '6px',
+            borderRadius: '6px'
+          }}
+          title="Paste"
+        >
+          📋
+        </button>
+      </div>
     </Card>
   )
 }

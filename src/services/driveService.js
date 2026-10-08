@@ -1,4 +1,4 @@
-import { getAccessToken } from './authService'
+import { refreshAccessToken } from './authService'
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3/files'
 const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3/files'
@@ -82,7 +82,7 @@ function getHeaders(token, extra = {}) {
 }
 
 async function driveFetch(url, options = {}) {
-  const token = getAccessToken()
+  const token = await refreshAccessToken()
   if (!token) throw new Error('Drive auth expired')
 
   let res
@@ -100,8 +100,10 @@ async function driveFetch(url, options = {}) {
   }
 
   if (res.status === 401) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Drive auth expired${text ? `: ${text}` : ''}`)
+    const refreshed = await refreshAccessToken(true)
+    if (!refreshed) throw new Error('Drive auth expired')
+    res = await fetch(url, { ...options, headers: { ...(options.headers || {}), ...getHeaders(refreshed) } })
+    if (res.status === 401) throw new Error('Drive auth expired')
   }
 
   if (!res.ok) {

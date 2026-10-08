@@ -26,34 +26,47 @@ export function validateSlots(slots) {
 import { reconcile } from './timeModel'
 
 // Allocate each minute once.
-export function summarizeTime(entries = [], nowMin = 1440) {
-  const result = reconcile({ plans: [], entries, nowMin })
+export function summarizeTime(entries = [], nowMin = 1440, plans = []) {
+  const result = reconcile({ plans, entries, nowMin })
   
-  const categories = {}
-  let loggedMins = 0
-  let wasteMins = 0
-  let sleepMins = 0
-  let productiveMins = 0
+  const categories = {}; const plannedCategories = {}
+  let loggedMins = 0; let plannedMins = 0
 
   Object.entries(result.byGroup).forEach(([g, v]) => {
     categories[g] = v.actual
     loggedMins += v.actual
-    if (g === 'Waste Time' || g === 'waste' || WASTE_CATEGORIES.includes(g) || /waste/i.test(g)) wasteMins += v.actual
-    else if (g === 'Sleep') sleepMins += v.actual
-    else if (g !== 'Meals' && g !== 'maintenance') productiveMins += v.actual
+    plannedCategories[g] = v.planned
+    plannedMins += v.planned
+  })
+
+  const isW = (c, name, isWaste) => isWaste || c === 'Waste Time' || c === 'waste' || WASTE_CATEGORIES.includes(c) || /waste/i.test(c) || /waste/i.test(name || '')
+  const isS = (c) => c === 'Sleep'
+  const isP = (c, name, isWaste) => !isW(c, name, isWaste) && !isS(c) && c !== 'Meals' && c !== 'maintenance'
+
+  let wasteMins = 0; let sleepMins = 0; let productiveMins = 0;
+  entries.forEach(e => {
+    if (!e || timeMinutes(e.start) >= nowMin || e.ghost || e.planOutcome === 'missed') return
+    const d = durationMinutes(e.start, e.end)
+    if (isW(e.category, e.name, e.isWaste)) wasteMins += d
+    else if (isS(e.category)) sleepMins += d
+    else if (isP(e.category, e.name, e.isWaste)) productiveMins += d
+  })
+
+  let plannedWasteMins = 0; let plannedSleepMins = 0; let plannedProductiveMins = 0;
+  result.slots.forEach(p => {
+    const d = p.lived
+    if (d <= 0) return
+    if (isW(p.category, p.name, p.flags.includes('PLANNED_WASTE') || p.isWaste)) plannedWasteMins += d
+    else if (isS(p.category)) plannedSleepMins += d
+    else if (isP(p.category, p.name, p.flags.includes('PLANNED_WASTE') || p.isWaste)) plannedProductiveMins += d
   })
 
   const pastUnloggedMins = result.gaps.reduce((a, g) => a + g.min, 0)
 
   return { 
-    productiveMins, 
-    wasteMins, 
-    sleepMins, 
-    loggedMins, 
-    unloggedMins: 1440 - loggedMins, 
-    pastUnloggedMins,
-    overlapMins: result.conflictMins, 
-    categories 
+    productiveMins, wasteMins, sleepMins, loggedMins, unloggedMins: 1440 - loggedMins, pastUnloggedMins,
+    plannedProductiveMins, plannedWasteMins, plannedSleepMins, plannedMins,
+    overlapMins: result.conflictMins, categories, plannedCategories
   }
 }
 
@@ -74,8 +87,8 @@ export function normalizeDay(entries = [], date) {
   return dayEntries
 }
 
-export function summarizeDay(entries = [], date, nowMin = 1440) {
-  return summarizeTime(normalizeDay(entries, date), nowMin)
+export function summarizeDay(entries = [], date, nowMin = 1440, plans = []) {
+  return summarizeTime(normalizeDay(entries, date), nowMin, normalizeDay(plans, date))
 }
 
 export function planComparison(slots = [], entries = [], nowMin = 1440) {

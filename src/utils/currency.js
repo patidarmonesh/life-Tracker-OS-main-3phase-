@@ -6,11 +6,6 @@ const SYMBOL_TO_CODE = {
   '€': 'EUR',
 }
 
-/**
- * normalizeCurrency function
- * @param {any} currency
- * @returns {any}
- */
 export function normalizeCurrency(currency) {
   if (!currency) return FALLBACK_CURRENCY
   const fromSymbol = SYMBOL_TO_CODE[currency]
@@ -18,11 +13,6 @@ export function normalizeCurrency(currency) {
   return String(currency).toUpperCase()
 }
 
-/**
- * getCurrencySymbol function
- * @param {any} currency
- * @returns {any}
- */
 export function getCurrencySymbol(currency) {
   const code = normalizeCurrency(currency)
   try {
@@ -38,11 +28,6 @@ export function getCurrencySymbol(currency) {
   }
 }
 
-/**
- * formatCurrencyAmount function
- * @param {any} amount, currency, options = {}
- * @returns {any}
- */
 export function formatCurrencyAmount(amount, currency, options = {}) {
   const code = normalizeCurrency(currency)
   const value = Number(amount) || 0
@@ -57,5 +42,3 @@ export function formatCurrencyAmount(amount, currency, options = {}) {
     return `${getCurrencySymbol(code)}${value.toLocaleString('en-IN')}`
   }
 }
-
-

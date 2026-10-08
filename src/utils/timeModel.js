@@ -96,7 +96,7 @@ export function reconcile({ plans = [], entries = [], nowMin = 1440, grace = 5, 
       if (subMin >= pastL * 0.5) flags.push('SUBSTITUTED')
       if (unl >= pastL * 0.5) flags.push('UNLOGGED')
       if (!flags.some((f) => f !== 'IN_PROGRESS')) flags.push('ON_TIME')
-      if (kind === 'waste' || /unclear/i.test(p.name)) flags.push('PLANNED_WASTE')
+      if (kind === 'waste' || p.isWaste || /unclear|waste/i.test(p.name)) flags.push('PLANNED_WASTE')
     }
     const fidelity = pastL <= 0 ? null : on > 0 ? Math.round((on / (L + (runLen - on))) * 100) : 0
     return { id: p.id, name: p.name, category: p.category, start: p.start, end: p.end, kind, minutes: L, lived: pastL, on, unl, fut,

@@ -1,66 +1,39 @@
-# LifeOS 2
+# LifeOS
 
-A local-first personal planner with Today, Calendar, Diary plan, Capture, Insights and Me. Implemented in the supplied React/Vite project with an optional Node backend and Supabase Postgres migrations.
+Personal life tracker built with React and Vite, deployed on Vercel.
 
-Deployment and the new Drive/Calendar workflow: **[FINAL_SETUP](docs/FINAL_SETUP.md)**.
+## Daily planning and Google sync
 
-## Run locally
+Time Flow now supports diary photos, camera capture and typed plans, an editable tentative timeline, actual activity check-ins and plan adherence charts. Google Calendar reminders and automatic Drive token refresh use the Vercel backend.
 
-Use Node 22.12+ (tested with Node 24.16) and npm:
+**Deployment configuration:** [GOOGLE_SYNC_SETUP.md](GOOGLE_SYNC_SETUP.md). The backend needs server environment variables and a Google OAuth redirect URI before lasting Google sync will work. Configure your Gemini key in the existing app Settings for AI features.
 
 ```sh
 npm ci
-npm run server
-```
-
-In a second terminal:
-
-```sh
 npm run dev
-```
-
-Open the printed localhost address and choose **Continue on this device**. No credentials are needed for local planning, timers, reviewed capture, metrics, backups or restore. Use HTTPS or localhost and a browser supporting Web Locks. One tab per account may write at a time; close the active tab and retry in another.
-
-## Included
-
-- Day/week/month calendar, optional old Google Drive JSON import with preview and recovery copies, and finance/planning charts.
-- Hindi/English/Hinglish time ranges and optional Gemini diary drafts; ten-minute Google Calendar reminders with check-in links.
-- Editable plans, deterministic scheduling, versioned approval, replanning, check-ins and evening review.
-- Durable timers, offline capture, reviewed Indian-format transaction messages and CSV statements.
-- Shared Time Flow, Study, Sleep, Money and Routines metrics with timezone/DST handling, gaps, overlap correction and historical goals.
-- Account storage/outbox/conflicts, original-data migration backups and checksum-verified restore.
-- Server sessions, encrypted Google offline credentials, approved Calendar export, expiring/revocable static shares, AI gateway and push scheduler.
-- Confirmed coaching memories, weekly experiments, guarded patterns and private-data exclusions.
-- Mobile navigation, dark/light themes, locally hosted Inter fonts, keyboard dialogs and opt-in PWA updates.
-
-## Verify
-
-```sh
-npm run check
+npm run build
+npm test
 npx playwright install chromium
 npm run test:browser
-node tests/backend-device-cache.mjs
-node tests/benchmark-metrics.mjs
 ```
 
-Browser tests start dedicated frontend/API servers on ports 5183/8788 so they always test this checkout. They use isolated browser contexts and fixture records. This JavaScript project has no pretend TypeScript check.
+The browser tests use isolated local sample data and mocked Google/Gemini responses. They do not modify a real account. New records stay in the existing Time Flow module and use the existing local/Drive persistence.
 
-## Cloud setup and status
+---
 
-Copy `.env.example` to `.env` and follow [INTEGRATIONS](docs/INTEGRATIONS.md), including both SQL migrations, exact OAuth origin/callback, secrets and scheduler setup. Never use `VITE_` for secrets. No hosted repository or deployment was created.
+Original framework notes:
 
-**Working source delivery; production release gates remain open.** Real Google refresh/export, deployed Postgres ownership, two-device cloud sync and closed-app push require verification. Live shares/PINs, automatic Calendar busy-time import, native SMS/watch adapters, automatic OCR and AI action execution are unavailable. Photos support manual transcription. See [DELIVERY](docs/DELIVERY.md).
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-The audit reports five high-severity development dependency findings in Tailwind 3's glob chain. The proposed fix requires a Tailwind 4 migration; do not expose the development server publicly.
+Currently, two official plugins are available:
 
-## Documentation
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-- [Original specification](docs/PLAN.md)
-- [Metric definitions](docs/METRICS.md)
-- [Migration and recovery](docs/DATA_MIGRATION.md)
-- [Integrations and deployment](docs/INTEGRATIONS.md)
-- [Coaching context](docs/COACHING.md)
-- [Delivery evidence and limitations](docs/DELIVERY.md)
-- [Desktop fixture performance](docs/performance.json)
+## React Compiler
 
-Source: `src/`; domain: `src/domain/`; backend: `server/`; deployment: `api/`, `vercel.json`; screenshots: `docs/screenshots/`.
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.

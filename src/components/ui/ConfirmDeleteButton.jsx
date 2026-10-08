@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
+import { useReadOnly } from '../../context/readOnlyContext'
 
-export default function ConfirmDeleteButton({ onConfirm, size = 14, label = 'Delete entry' }) {
+export default function ConfirmDeleteButton(props) {
+  if (useReadOnly()) return null
+  return <ConfirmDeleteButtonInner {...props} />
+}
+
+function ConfirmDeleteButtonInner({ onConfirm, size = 14, label = 'Delete entry' }) {
   const [confirming, setConfirming] = useState(false)
   const timerRef = useRef(null)
 

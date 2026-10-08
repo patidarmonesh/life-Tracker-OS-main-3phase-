@@ -5,12 +5,12 @@ import { useAppActions, useAppState } from '../../context/appHooks'
 import { useToast } from '../../context/toastContextCore'
 import { draftDayPlan, draftActualLogs } from '../../services/geminiService'
 import { slotFingerprint } from '../../services/calendarService'
-import { durationMinutes, planComparison, timeMinutes, validateSlots, WASTE_CATEGORIES } from '../../utils/planning'
+import { durationMinutes, planComparison, timeMinutes, validateSlots, WASTE_CATEGORIES, summarizeDay } from '../../utils/planning'
 import { normalizeTimezone, getTodayDateKey } from '../../utils/dateTime'
 import Card from './Card'
 import Button from './Button'
 import Modal from './Modal'
-import { PlanVsActual } from './TimeCharts'
+import { PlanVsActual, DayRibbon } from './TimeCharts'
 import { categoryColor, formatMinutes } from '../../utils/timeColors'
 import { reconcile } from '../../utils/timeModel'
 
@@ -357,6 +357,21 @@ export default function DayPlanner({ date, categories }) {
       }} disabled={busy}>Paste image</Button><Button onClick={generate} disabled={busy || (!text.trim() && !photo)}>{busy ? 'Reading plan…' : 'Generate timeline'}</Button></div>
       {photo && <div style={row}><img src={photo.preview} alt="Selected diary page" style={{ maxHeight: 130, maxWidth: '100%', borderRadius: 8 }} /><button onClick={() => setPhoto(null)}>Remove photo</button></div>}
       {notes.length > 0 && <ul style={{ fontSize: 12 }}>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
+      {(() => {
+        if (!draft.length) return null;
+        const ds = summarizeDay([], draftDate, 1440, draft);
+        return (
+          <div style={{ margin: '16px 0', padding: 12, background: 'var(--bg-secondary)', borderRadius: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
+              <div style={{ fontSize: 12 }}><strong>Productive</strong><br/><span style={{color: '#10B981'}}>{(ds.plannedProductiveMins / 60).toFixed(1)}h</span></div>
+              <div style={{ fontSize: 12 }}><strong>Waste</strong><br/><span style={{color: '#EF4444'}}>{(ds.plannedWasteMins / 60).toFixed(1)}h</span></div>
+              <div style={{ fontSize: 12 }}><strong>Sleep</strong><br/><span style={{color: '#8B5CF6'}}>{(ds.plannedSleepMins / 60).toFixed(1)}h</span></div>
+            </div>
+            <h3 style={{ fontSize: 12, marginBottom: 8, color: 'var(--text-muted)' }}>Tentative Timeline</h3>
+            <DayRibbon entries={draft} height={30} showAxis={false} />
+          </div>
+        );
+      })()}
       <p style={{ fontSize: 12 }}>You can also build the schedule manually. Use 24:00 for midnight at the end of this day.</p>
       <div style={{ display: 'grid', gap: 12 }}>
         {draft.map((slot, i) => <div key={slot.id} style={{ padding: 10, border: '1px solid var(--border)', borderRadius: 10 }}>
