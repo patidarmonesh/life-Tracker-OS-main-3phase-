@@ -39,9 +39,9 @@ export function summarizeTime(entries = [], nowMin = 1440, plans = []) {
     plannedMins += v.planned
   })
 
-  const isW = (c, name, isWaste) => isWaste || c === 'Waste Time' || c === 'waste' || WASTE_CATEGORIES.includes(c) || /waste/i.test(c) || /waste/i.test(name || '')
-  const isS = (c) => c === 'Sleep'
-  const isP = (c, name, isWaste) => !isW(c, name, isWaste) && !isS(c) && c !== 'Meals' && c !== 'maintenance'
+  const isP = (c, name, isWaste) => !isWaste && (c === 'Study' || /study|padhai|class/i.test(c) || /study|padhai|class/i.test(name || ''))
+  const isW = (c, name, isWaste) => !isP(c, name, isWaste)
+  const isS = (c) => false
 
   let wasteMins = 0; let sleepMins = 0; let productiveMins = 0;
   entries.forEach(e => {

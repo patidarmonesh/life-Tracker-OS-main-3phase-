@@ -214,7 +214,45 @@ export default function DayPlanner({ date, categories }) {
         }
         actual.studySessionId = (!isMissed && category === 'Study') ? existing?.studySessionId || `plan-study-${actual.id}` : null
         savedActual = actual; previousActual = existing
-        return { ...current, entries: [...(current.entries || []).filter(e => e.id !== actual.id && e.planSlotId !== slot.id), actual] }
+        const newEntries = [...(current.entries || []).filter(e => e.id !== actual.id && e.planSlotId !== slot.id), actual];
+        
+        if (!isMissed) {
+          const actualStart = timeMinutes(start);
+          const actualEnd = timeMinutes(end);
+          const dayPlans = (current.plans || []).filter(p => p.date === slot.date && p.id !== slot.id);
+          for (const p of dayPlans) {
+            const pStart = timeMinutes(p.start);
+            const pEnd = timeMinutes(p.end);
+            const pDur = pEnd - pStart;
+            const oStart = Math.max(actualStart, pStart);
+            const oEnd = Math.min(actualEnd, pEnd);
+            const overlap = oEnd - oStart;
+            if (overlap > 0 && overlap >= pDur * 0.5) {
+              const alreadyCheckedIn = newEntries.some(e => e.planSlotId === p.id);
+              if (!alreadyCheckedIn) {
+                newEntries.push({
+                  id: uuid(),
+                  date: slot.date,
+                  start: p.start,
+                  end: p.end,
+                  name: 'Missed',
+                  category: 'Other',
+                  durationMinutes: pDur,
+                  planSlotId: p.id,
+                  planOutcome: 'missed',
+                  deviationReason: `Auto-replaced by ${name.trim()}`,
+                  isWaste: true,
+                  productivityScore: 0,
+                  source: 'plan-check-in-cascade',
+                  ghost: true,
+                  createdAt: updatedAt,
+                  updatedAt
+                });
+              }
+            }
+          }
+        }
+        return { ...current, entries: newEntries }
       })
       if (savedActual.studySessionId || previousActual?.studySessionId) setModule('study', current => {
         const sessions = (current.sessions || []).filter(s => s.id !== savedActual.studySessionId && s.id !== previousActual?.studySessionId)
