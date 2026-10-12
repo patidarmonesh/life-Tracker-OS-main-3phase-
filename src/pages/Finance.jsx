@@ -1,10 +1,13 @@
+import { useReadOnly } from '../context/readOnlyContext'
+import { expenseForBill, saveReceiptExpense } from '../utils/financeBills'
+import './Finance.css'
 import { budgetPercent, dailyBudgetFor, finiteAmount } from '../utils/financeMath'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAppActions, useAppState } from '../context/appHooks'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, subMonths, addMonths, getDay, isToday as isDateToday } from 'date-fns'
 import { v4 as uuid } from 'uuid'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { Plus, Pencil, ChevronLeft, ChevronRight, X, Brain, RefreshCw } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -23,7 +26,7 @@ import {
   fetchDriveFileAsObjectUrl,
 } from '../services/driveService'
 import { formatCurrencyAmount, getCurrencySymbol, normalizeCurrency } from '../utils/currency'
-import { getTodayDateKey } from '../utils/dateTime'
+import { getTodayDateKey, toDateKey } from '../utils/dateTime'
 
 const CATEGORY_COLORS = {
   'Food & Drinks': '#F97316',
@@ -125,6 +128,7 @@ async function createImageThumbnail(file, maxSize = 640) {
 
 export default function Finance() {
   const state = useAppState()
+  const readOnly = useReadOnly()
   const { setModule } = useAppActions()
   const { showToast } = useToast()
   const location = useLocation()
@@ -137,13 +141,16 @@ export default function Finance() {
   const redirectDate = location.state?.selectedDate
   const [selectedDate, setSelectedDate] = useState(redirectDate || today)
 
-  const [activeTab, setActiveTab] = useState('today')
+  const [activeTab, setActiveTab] = useState(readOnly ? 'month' : 'today')
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEntry, setEditingEntry] = useState(null)
   const [selectedBill, setSelectedBill] = useState(null)
   const [pendingBillForExpense, setPendingBillForExpense] = useState(null)
   const [uploadingBill, setUploadingBill] = useState(false)
   const [accountFilter, setAccountFilter] = useState('all')
+  const [billFilter, setBillFilter] = useState('pending')
+  const [billSearch, setBillSearch] = useState('')
+  const saveLock = useRef(false)
   const [billRemoved, setBillRemoved] = useState(false)
   const fileInputRef = useRef(null)
   const modalFileInputRef = useRef(null)
@@ -292,6 +299,12 @@ export default function Finance() {
   const expenses = state.finance?.expenses || EMPTY_ARRAY
   const bills = state.finance?.bills || EMPTY_ARRAY
 
+  const pendingBills = bills.filter(b => !expenseForBill(b, expenses))
+  const addedBills = bills.filter(b => expenseForBill(b, expenses))
+  const visibleBills = (billFilter === 'pending' ? pendingBills : addedBills).filter(b =>
+    `${b.fileName || ''} ${b.suggestedDescription || ''} ${b.suggestedCategory || ''}`.toLowerCase().includes(billSearch.toLowerCase().trim()))
+  const filteredExpenses = useMemo(() => (state.finance?.expenses || EMPTY_ARRAY).filter(e => accountFilter === 'all' || (e.account || 'Unassigned') === accountFilter), [state.finance?.expenses, accountFilter])
+
   const allTags = useMemo(() => [...new Set((state.finance?.expenses || []).flatMap(e => e.tags || []))], [state.finance?.expenses])
 
   const monthlyBudget = Math.max(0, finiteAmount(state.settings?.preferences?.monthlyBudget ?? 8000))
@@ -329,7 +342,7 @@ export default function Finance() {
     let todaysTotal = 0
     let currentMonthTotal = 0
 
-    expenses.forEach(expense => {
+    filteredExpenses.forEach(expense => {
       const amount = finiteAmount(expense.amount)
       const date = expense.date || ''
 
@@ -372,7 +385,7 @@ export default function Finance() {
           .map(([name, value]) => ({ name, value }))
           .sort((a, b) => b.value - a.value),
     }
-  }, [expenses, selectedDate])
+  }, [filteredExpenses, selectedDate])
 
   const pct = budgetPercent(todayTotal, dailyBudget)
   const monthPct = budgetPercent(monthTotal, monthlyBudget)
@@ -395,7 +408,7 @@ export default function Finance() {
     const vmExpenses = []
     let vmTotal = 0
 
-    expenses.forEach(expense => {
+    filteredExpenses.forEach(expense => {
       const amount = finiteAmount(expense.amount)
       const date = expense.date || ''
       if (date >= vmStart && date <= vmEnd) {
@@ -425,7 +438,7 @@ export default function Finance() {
         .sort((a, b) => b.value - a.value),
       viewMonthBudgetPct: budgetPercent(vmTotal, monthlyBudget),
     }
-  }, [expenses, viewMonth, monthlyBudget])
+  }, [filteredExpenses, viewMonth, monthlyBudget])
 
   // Full year data for yearly tab
   const yearlyFullData = useMemo(() => {
@@ -436,7 +449,7 @@ export default function Finance() {
     })
     const monthMap = new Map(months.map(m => [m.key, m]))
 
-    expenses.forEach(expense => {
+    filteredExpenses.forEach(expense => {
       const monthKey = (expense.date || '').slice(0, 7)
       const bucket = monthMap.get(monthKey)
       if (bucket) {
@@ -446,19 +459,20 @@ export default function Finance() {
     })
 
     return months
-  }, [expenses, viewYear])
+  }, [filteredExpenses, viewYear])
 
   // Calendar date totals
   const calendarDateTotals = useMemo(() => {
     const totals = new Map()
-    expenses.forEach(e => {
+    filteredExpenses.forEach(e => {
       const date = e.date || ''
       totals.set(date, (totals.get(date) || 0) + Number(e.amount || 0))
     })
     return totals
-  }, [expenses])
+  }, [filteredExpenses])
 
   function resetForm() {
+    saveLock.current = false
     setBillRemoved(false)
     setPendingBillForExpense(null)
     setForm({
@@ -476,11 +490,20 @@ export default function Finance() {
   }
 
   function saveBills(newBills) {
-    setModule('finance', {
-      ...state.finance,
-      expenses,
-      bills: newBills,
-    })
+    setModule('finance', current => ({ ...current, bills: typeof newBills === 'function' ? newBills(current.bills || []) : newBills }))
+  }
+
+  function openReceipt(bill) {
+    if (readOnly) return
+    const existing = expenseForBill(bill, expenses)
+    if (existing) { setSelectedBill(null); startEdit(existing); return }
+    saveLock.current = false
+    resetForm()
+    setEditingEntry(null)
+    setSelectedBill(null)
+    setPendingBillForExpense(bill)
+    setForm(f => ({ ...f, amount: String(bill.suggestedAmount || ''), category: bill.suggestedCategory || categories[0], description: bill.suggestedDescription || bill.fileName || '' }))
+    setShowAddModal(true)
   }
 
   function closeExpenseModal() {
@@ -492,7 +515,7 @@ export default function Finance() {
   }
 
   function handleViewBill(expense) {
-    const matchedBill = bills.find(b => b.driveFileId === expense.billDriveFileId || b.linkedExpenseId === expense.id)
+    const matchedBill = bills.find(b => expenseForBill(b, [expense]))
     const targetBill = matchedBill || {
       id: expense.id,
       fileName: expense.description || 'Attached Bill',
@@ -510,6 +533,7 @@ export default function Finance() {
   }
 
   function startEdit(expense) {
+    saveLock.current = false
     setBillRemoved(false)
     setPendingBillForExpense(null)
     setEditingEntry(expense)
@@ -528,121 +552,58 @@ export default function Finance() {
     setShowAddModal(true)
   }
 
-  function handleSave() {
+  function handleSave(andNext = false) {
+    if (readOnly || saveLock.current) return
     if (!Number.isFinite(Number(form.amount)) || Number(form.amount) <= 0) return showToast('Enter a positive, finite expense amount.', 'warning')
-
-    const linkedBill = pendingBillForExpense || null
-    const billDriveFileId = billRemoved ? null : (linkedBill?.driveFileId || editingEntry?.billDriveFileId || null)
-    const billOCRText = billRemoved ? null : (linkedBill?.extractedText || editingEntry?.billOCRText || null)
-
-    if (editingEntry) {
-      const updatedExpense = {
-        ...editingEntry,
-        amount: finiteAmount(form.amount),
-        category: form.category,
-        subcategory: form.subcategory,
-        description: form.description || linkedBill?.fileName || '',
-        date: form.date,
-        time: form.time,
-        paymentMethod: form.paymentMethod,
-        isImpulsive: form.isImpulsive,
-        account: form.account,
-        tags: form.tags,
-        billDriveFileId,
-        billOCRText,
-        updatedAt: new Date().toISOString(),
-      }
-
-      let updatedBills = bills
-      if (linkedBill) {
-        updatedBills = bills.map(b => {
-          if (b.id === linkedBill.id) return { ...b, linkedExpenseId: editingEntry.id }
-          if (b.linkedExpenseId === editingEntry.id) return { ...b, linkedExpenseId: null }
-          return b
-        })
-      } else if (billRemoved) {
-        updatedBills = bills.map(b =>
-          b.linkedExpenseId === editingEntry.id ? { ...b, linkedExpenseId: null } : b
-        )
-      }
-
-      setModule('finance', {
-        ...state.finance,
-        expenses: expenses.map(e => (e.id === editingEntry.id ? updatedExpense : e)),
-        bills: updatedBills,
-      })
-      showToast('Expense updated ✓', 'success')
-      playSuccessSound()
-      hapticSuccess()
-      closeExpenseModal()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.date)) return showToast('Choose an expense date.', 'warning')
+    const bill = billRemoved ? null : pendingBillForExpense
+    const now = new Date().toISOString()
+    const expense = {
+      ...(editingEntry || { id: uuid(), currency: currencyCode, isRecurring: false, createdAt: now }),
+      ...form, amount: finiteAmount(form.amount),
+      description: form.description || bill?.fileName || '',
+      billId: billRemoved ? null : bill?.id || editingEntry?.billId || null,
+      billDriveFileId: billRemoved ? null : (bill ? bill.driveFileId || null : editingEntry?.billDriveFileId || null),
+      billOCRText: billRemoved ? null : (bill ? bill.extractedText || null : editingEntry?.billOCRText || null),
+      updatedAt: now,
+    }
+    saveLock.current = true
+    try {
+      setModule('finance', current => saveReceiptExpense(current, expense, bill, billRemoved))
+    } catch (error) {
+      saveLock.current = false
+      showToast(error.message, 'warning')
       return
     }
-
-    const newExpenseId = uuid()
-    const newExpense = {
-      id: newExpenseId,
-      amount: finiteAmount(form.amount),
-      currency: currencyCode,
-      category: form.category,
-      subcategory: form.subcategory,
-      description: form.description || linkedBill?.fileName || '',
-      date: form.date,
-      time: form.time,
-      paymentMethod: form.paymentMethod,
-      isImpulsive: form.isImpulsive,
-      account: form.account,
-      isRecurring: false,
-      tags: form.tags,
-      billDriveFileId,
-      billOCRText,
-      createdAt: new Date().toISOString(),
-    }
-
-    const updatedExpenses = [newExpense, ...expenses]
-    let updatedBills = bills
-
-    if (linkedBill) {
-      updatedBills = bills.map(b =>
-        b.id === linkedBill.id ? { ...b, linkedExpenseId: newExpenseId } : b
-      )
-    }
-
-    setModule('finance', {
-      ...state.finance,
-      expenses: updatedExpenses,
-      bills: updatedBills,
-    })
-
-    showToast('Expense saved ✓', 'success')
+    const next = pendingBills.find(b => b.id !== bill?.id)
+    showToast(bill ? 'Expense saved · receipt moved to Added' : 'Expense saved ✓', 'success')
     playSuccessSound()
     hapticSuccess()
     closeExpenseModal()
+    setSelectedBill(null)
+    if (andNext && next) openReceipt(next)
   }
 
   function handleDelete(id) {
     const removed = expenses.find(e => e.id === id)
     if (!removed) return
 
-    const prevExpenses = expenses
-    const prevBills = bills
-    const updatedBills = bills.map(b =>
-      b.linkedExpenseId === id ? { ...b, linkedExpenseId: null } : b
-    )
-
-    setModule('finance', {
-      ...state.finance,
-      expenses: expenses.filter(e => e.id !== id),
-      bills: updatedBills,
-    })
-
-    showToast('Expense deleted', 'warning', {
-      undo: () => {
-        setModule('finance', {
-          ...state.finance,
-          expenses: prevExpenses,
-          bills: prevBills,
-        })
-      },
+    const removedLinks = bills.filter(b => expenseForBill(b, [removed]))
+    const time = new Date().toISOString()
+    setModule('finance', current => ({ ...current,
+      expenses: (current.expenses || []).filter(e => e.id !== id),
+      bills: (current.bills || []).map(b => removedLinks.some(link => link.id === b.id) ? { ...b, linkedExpenseId: null, updatedAt: time } : b),
+    }))
+    showToast('Expense deleted · receipt returned to inbox', 'warning', {
+      undo: () => setModule('finance', current => {
+        // Do not steal a receipt that was reassigned after this deletion.
+        const conflict = removedLinks.some(b => expenseForBill(b, current.expenses || []))
+        const restored = { ...removed, updatedAt: new Date().toISOString(), ...(conflict ? { billId: null, billDriveFileId: null, billOCRText: null } : {}) }
+        return { ...current,
+          expenses: (current.expenses || []).some(e => e.id === id) ? current.expenses : [restored, ...(current.expenses || [])],
+          bills: (current.bills || []).map(b => !conflict && removedLinks.some(link => link.id === b.id) ? { ...b, linkedExpenseId: id, updatedAt: restored.updatedAt } : b),
+        }
+      }),
     })
     playWarningBeep()
     hapticLight()
@@ -747,26 +708,16 @@ export default function Finance() {
 
   async function handleBillUpload(e) {
     const files = Array.from(e.target.files || [])
-    if (files.length === 0) return
+    if (readOnly || uploadingBill || files.length === 0) return
 
     if (files.length === 1) {
-      // Single file - existing behavior
+      // Single-file review uses the same persistent inbox.
+      setUploadQueue([])
       setUploadingBill(true)
       try {
         const result = await processOneBill(files[0])
-        const updatedBills = [result.bill, ...bills]
-        saveBills(updatedBills)
-        setSelectedBill(result.bill)
-        if (result.bill.suggestedAmount) {
-          setPendingBillForExpense(result.bill)
-          setForm(f => ({
-            ...f,
-            amount: String(result.bill.suggestedAmount),
-            category: result.bill.suggestedCategory,
-            description: result.bill.suggestedDescription || '',
-          }))
-          setShowAddModal(true)
-        }
+        saveBills(current => [result.bill, ...current])
+        openReceipt(result.bill)
       } catch (err) {
         console.error('Bill upload failed:', err)
         showToast('Could not upload this bill.', 'error')
@@ -793,13 +744,13 @@ export default function Finance() {
         const result = await processOneBill(queue[i].file)
         updatedQueue[i] = { ...updatedQueue[i], status: 'done', bill: result.bill }
         newBills.push(result.bill)
+        saveBills(current => [result.bill, ...current])
       } catch {
         updatedQueue[i] = { ...updatedQueue[i], status: 'failed' }
       }
       setUploadQueue([...updatedQueue])
     }
     if (newBills.length > 0) {
-      saveBills([...newBills, ...bills])
       showToast(`${newBills.length} bills uploaded! Click each to add expenses.`, 'success')
       playSuccessSound()
       hapticSuccess()
@@ -817,9 +768,8 @@ export default function Finance() {
 
     try {
       const result = await processOneBill(file)
-      const newBill = { ...result.bill, linkedExpenseId: editingEntry?.id || null }
-      const updatedBills = [newBill, ...bills]
-      saveBills(updatedBills)
+      const newBill = result.bill
+      saveBills(current => [newBill, ...current])
       setPendingBillForExpense(newBill)
       setBillRemoved(false)
 
@@ -865,7 +815,7 @@ export default function Finance() {
 
   // Clipboard paste handler
   useEffect(() => {
-    if (activeTab !== 'bills') return
+    if (readOnly || activeTab !== 'bills') return
     function handlePaste(e) {
       const items = Array.from(e.clipboardData?.items || [])
       const imageItems = items.filter(item => item.type.startsWith('image/'))
@@ -879,7 +829,7 @@ export default function Finance() {
     }
     document.addEventListener('paste', handlePaste)
     return () => document.removeEventListener('paste', handlePaste)
-  }, [activeTab, bills, categories, geminiApiKey])
+  }, [activeTab, bills, categories, geminiApiKey, readOnly])
 
   // AI Financial Insights
   async function fetchAIInsights() {
@@ -937,6 +887,8 @@ export default function Finance() {
     fontSize: '14px',
     fontFamily: 'DM Sans, sans-serif',
     transition: 'all 0.2s',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
   })
 
   return (
@@ -944,9 +896,9 @@ export default function Finance() {
       <div style={{ padding: '32px 24px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '800', fontSize: '2rem', margin: '0 0 4px', color: 'var(--text-primary)' }}>Finance</h1>
-          <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>Manage your wealth and track expenses</p>
+          <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>{readOnly ? 'Shared spending overview · explore months and accounts' : 'Track spending. Clear receipts. Know what remains.'}</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        {!readOnly && <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <Button
             variant="secondary"
             onClick={() => { playSubtleClick(); hapticLight(); setShowSMSModal(true); }}
@@ -965,7 +917,7 @@ export default function Finance() {
           >
             <Plus size={18} style={{ marginRight: 6 }} /> Add Expense
           </Button>
-        </div>
+        </div>}
       </div>
 
       <div style={{ display: 'flex', gap: '8px', padding: '0 24px 24px', overflowX: 'auto', scrollbarWidth: 'none' }}>
@@ -973,10 +925,10 @@ export default function Finance() {
           { key: 'today', label: 'Today' },
           { key: 'month', label: 'This Month' },
           { key: 'yearly', label: 'Yearly' },
-          { key: 'bills', label: '🧾 Bills' },
+          { key: 'bills', label: `🧾 Bills${pendingBills.length ? ` (${pendingBills.length})` : ''}` },
           { key: 'savings', label: '💰 Savings' },
           { key: 'recurring', label: '💳 Subscriptions & Debt' },
-        ].map(({ key, label }) => (
+        ].filter(({ key }) => !readOnly || ['today', 'month', 'yearly'].includes(key)).map(({ key, label }) => (
           <button key={key} onClick={() => setActiveTab(key)} style={tabStyle(activeTab === key)}>
             {label}
           </button>
@@ -1004,7 +956,7 @@ export default function Finance() {
         >
           All
         </button>
-        {accounts.map(acct => (
+        {[...new Set([...accounts, ...expenses.map(e => e.account || 'Unassigned')])].map(acct => (
           <button
             key={acct}
             onClick={() => setAccountFilter(acct)}
@@ -1159,16 +1111,16 @@ export default function Finance() {
                   <div style={{ fontSize: '36px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color: todayTotal > dailyBudget ? '#F43F5E' : '#10B981' }}>
                     {formatCurrencyAmount(todayTotal, currencyCode)}
                   </div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>spent today</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{selectedDate === today ? 'spent today' : `spent on ${selectedDate}`}</div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
+                {!readOnly && <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: '16px', fontWeight: '700', color: todayTotal > dailyBudget ? '#F43F5E' : 'var(--text-primary)' }}>
                     {formatCurrencyAmount(Math.max(0, dailyBudget - todayTotal), currencyCode)} left
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>of {formatCurrencyAmount(dailyBudget, currencyCode)} daily budget</div>
-                </div>
+                </div>}
               </div>
-              <div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden' }}>
+              {!readOnly && <><div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden' }}>
                 <div
                   style={{
                     height: '100%',
@@ -1184,11 +1136,12 @@ export default function Finance() {
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{Math.round(pct)}% of daily budget</span>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{formatCurrencyAmount(dailyBudget, currencyCode)}</span>
               </div>
+              </>}
             </Card>
 
             <Card>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px' }}>Today's Transactions</h3>
+                <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px' }}>{selectedDate === today ? "Today's Transactions" : `Transactions · ${selectedDate}`}</h3>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{todayExpenses.length} items</span>
               </div>
               {(() => {
@@ -1252,15 +1205,19 @@ export default function Finance() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-              {[
+              {(readOnly ? [
+                { label: 'Total Spent', value: formatCurrencyAmount(viewMonthTotal, currencyCode), color: '#F43F5E' },
+                { label: 'Transactions', value: viewMonthExpenses.length, color: '#818CF8' },
+                { label: 'Per transaction', value: formatCurrencyAmount(viewMonthExpenses.length ? viewMonthTotal / viewMonthExpenses.length : 0, currencyCode), color: '#10B981' },
+              ] : [
                 { label: 'Total Spent', value: formatCurrencyAmount(viewMonthTotal, currencyCode), color: '#F43F5E' },
                 { label: 'Monthly Budget', value: formatCurrencyAmount(monthlyBudget, currencyCode), color: '#3B82F6' },
                 {
-                  label: viewMonthTotal <= monthlyBudget ? '✅ Saved' : '⚠️ Overspent',
+                  label: viewMonthTotal <= monthlyBudget ? 'Budget remaining' : 'Over budget',
                   value: formatCurrencyAmount(Math.abs(monthlyBudget - viewMonthTotal), currencyCode),
                   color: viewMonthTotal <= monthlyBudget ? '#10B981' : '#F43F5E',
                 },
-              ].map(({ label, value, color }) => (
+              ]).map(({ label, value, color }) => (
                 <Card key={label} style={{ textAlign: 'center', padding: '16px' }}>
                   <div style={{ fontSize: '18px', fontWeight: '800', fontFamily: 'JetBrains Mono, monospace', color }}>{value}</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>{label}</div>
@@ -1293,7 +1250,7 @@ export default function Finance() {
               </Card>
             )}
 
-            <Card>
+            {!readOnly && <Card>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '13px', fontWeight: '600' }}>Monthly Budget Usage</span>
                 <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{Math.round(viewMonthBudgetPct)}%</span>
@@ -1309,37 +1266,19 @@ export default function Finance() {
                   }}
                 />
               </div>
-            </Card>
+            </Card>}
 
-            {viewMonthDonutData.length > 0 && (
-              <Card>
-                <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '16px' }}>Spending by Category</h3>
-                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' }}>
-                  <ResponsiveContainer width={180} height={180}>
-                    <PieChart>
-                      <Pie data={viewMonthDonutData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={2}>
-                        {viewMonthDonutData.map((entry, i) => (
-                          <Cell key={i} fill={CATEGORY_COLORS[entry.name] || '#6B7280'} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={v => formatCurrencyAmount(v, currencyCode)}
-                        contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px' }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div style={{ flex: 1, minWidth: '150px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {viewMonthDonutData.slice(0, 6).map(({ name, value }) => (
-                      <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: CATEGORY_COLORS[name] || '#6B7280', flexShrink: 0 }} />
-                        <span style={{ fontSize: '12px', flex: 1, color: 'var(--text-secondary)' }}>{name}</span>
-                        <span style={{ fontSize: '12px', fontFamily: 'JetBrains Mono, monospace' }}>{formatCurrencyAmount(value, currencyCode)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </Card>
-            )}
+            <Card>
+              <h3 style={{ margin: '0 0 8px' }}>Spending by Category</h3>
+              <p className="finance-chart-note">Largest categories first · {format(viewMonth, 'MMMM yyyy')}{accountFilter !== 'all' ? ` · ${accountFilter}` : ''}</p>
+              <div className="finance-category-bars">
+                {viewMonthDonutData.map(({ name, value }) => <div key={name}>
+                  <div className="finance-category-label"><span>{name}</span><strong>{formatCurrencyAmount(value, currencyCode)}</strong></div>
+                  <div className="finance-category-track"><div style={{ width: `${Math.min(100, Math.abs(value) / Math.max(1, ...viewMonthDonutData.map(d => Math.abs(d.value))) * 100)}%`, background: value < 0 ? '#F59E0B' : CATEGORY_COLORS[name] || '#818CF8' }} /></div>
+                </div>)}
+                {!viewMonthDonutData.length && <p className="finance-chart-note">No expenses recorded for this month and account.</p>}
+              </div>
+            </Card>
 
             <Card>
               <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', marginBottom: '16px' }}>Daily Spending</h3>
@@ -1357,7 +1296,7 @@ export default function Finance() {
             </Card>
 
             {/* AI Financial Insights */}
-            {geminiApiKey && (
+            {!readOnly && geminiApiKey && (
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                   <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1564,6 +1503,11 @@ export default function Finance() {
               onDrop={handleDrop}
             >
               <div
+                role="button"
+                tabIndex={0}
+                aria-label="Upload bills and receipts"
+                aria-disabled={uploadingBill}
+                onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && !uploadingBill) { e.preventDefault(); fileInputRef.current?.click() } }}
                 onClick={() => !uploadingBill && fileInputRef.current?.click()}
                 style={{
                   border: isDragging ? '2px solid var(--accent-indigo)' : '2px dashed var(--border-focus)',
@@ -1587,7 +1531,7 @@ export default function Finance() {
                     <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--accent-indigo)' }}>
                       {processingIndex >= 0 ? `Processing ${processingIndex + 1} of ${uploadQueue.length}...` : 'Extracting with AI...'}
                     </div>
-                    <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>Please wait</div>
+                    <div role="status" style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>{uploadQueue.filter(q => q.status === 'done').length} ready · {uploadQueue.filter(q => q.status === 'failed').length} failed. Completed receipts appear below.</div>
                   </>
                 ) : isDragging ? (
                   <>
@@ -1624,19 +1568,21 @@ export default function Finance() {
             </Card>
 
             {/* Batch Upload Queue */}
-            {uploadQueue.length > 0 && (
+            {uploadQueue.some(item => item.status !== 'done') && (
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <h3 style={{ fontFamily: 'Syne, sans-serif', fontWeight: '700', fontSize: '14px' }}>📋 Upload Queue</h3>
                   <button
+                    disabled={uploadingBill}
                     onClick={() => setUploadQueue([])}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '12px', fontWeight: '600' }}
                   >
                     Clear
                   </button>
                 </div>
+                {!uploadingBill && uploadQueue.some(item => item.status === 'failed') && <Button variant="secondary" onClick={() => handleBillUpload({ target: { files: uploadQueue.filter(item => item.status === 'failed').map(item => item.file) } })}>Retry failed uploads</Button>}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {uploadQueue.map((item) => (
+                  {uploadQueue.filter(item => item.status !== 'done').map((item) => (
                     <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
                       <div style={{ fontSize: '18px' }}>
                         {item.status === 'queued' ? '⏳' : item.status === 'processing' ? '🔄' : item.status === 'done' ? '✅' : '❌'}
@@ -1647,75 +1593,38 @@ export default function Finance() {
                           {item.status === 'queued' ? 'Waiting...' : item.status === 'processing' ? 'AI extracting...' : item.status === 'done' ? 'Ready — click to add expense' : 'Failed'}
                         </div>
                       </div>
-                      {item.status === 'done' && item.bill && (
-                        <button
-                          onClick={() => {
-                            setSelectedBill(item.bill)
-                            setPendingBillForExpense(item.bill)
-                            setForm(f => ({
-                              ...f,
-                              amount: String(item.bill.suggestedAmount || ''),
-                              category: item.bill.suggestedCategory || 'Miscellaneous',
-                              description: item.bill.suggestedDescription || item.bill.fileName || '',
-                            }))
-                            setShowAddModal(true)
-                          }}
-                          style={{ padding: '4px 10px', borderRadius: '6px', background: 'rgba(16,185,129,0.15)', border: 'none', color: '#10B981', fontSize: '11px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                        >
-                          + Add Entry
-                        </button>
-                      )}
+
                     </div>
                   ))}
                 </div>
               </Card>
             )}
 
-            {bills.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
-                <div style={{ fontSize: '48px', marginBottom: '12px' }}>📂</div>
-                <div style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-secondary)' }}>No bills uploaded yet</div>
-                <div style={{ fontSize: '13px', marginTop: '4px' }}>Upload receipts above to keep track</div>
+            <section className="receipt-inbox" aria-label="Receipt inbox">
+              <div className="finance-section-heading">
+                <div><h2>Receipt inbox</h2><p aria-live="polite">{pendingBills.length} remaining · {addedBills.length} added to expenses</p></div>
+                {pendingBills.length > 0 && <Button onClick={() => openReceipt(pendingBills[0])}>Review next receipt</Button>}
               </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
-                {bills.map(bill => (
-                  <Card key={bill.id} onClick={() => setSelectedBill(bill)} style={{ padding: '12px', cursor: 'pointer' }}>
-                    <BillPreview bill={bill} height={100} />
-                    <div style={{ fontSize: '12px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bill.fileName}</div>
-                    {bill.suggestedAmount ? (
-                      <div style={{ fontSize: '15px', fontWeight: '800', color: '#10B981', fontFamily: 'JetBrains Mono, monospace', marginTop: '4px' }}>
-                        {formatCurrencyAmount(bill.suggestedAmount, currencyCode)}
-                      </div>
-                    ) : null}
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{new Date(bill.uploadedAt).toLocaleDateString('en-IN')}</div>
-                    {bill.linkedExpenseId ? (
-                      <div style={{ fontSize: '11px', color: '#10B981', marginTop: '6px', fontWeight: '700' }}>Linked to expense</div>
-                    ) : (
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>Not linked yet</div>
-                    )}
-                    <button
-                      onClick={async e => {
-                        e.stopPropagation()
-                        if (window.confirm('Delete this bill?')) {
-                          try {
-                            await deleteDriveFile(bill.driveFileId)
-                          } catch (error) {
-                            console.error('Failed to delete bill from Drive:', error)
-                          }
-                          saveBills(bills.filter(b => b.id !== bill.id))
-                          if (selectedBill?.id === bill.id) setSelectedBill(null)
-                          if (pendingBillForExpense?.id === bill.id) setPendingBillForExpense(null)
-                        }
-                      }}
-                      style={{ marginTop: '8px', background: 'none', border: 'none', color: '#F43F5E', cursor: 'pointer', fontSize: '12px', padding: '0' }}
-                    >
-                      🗑 Delete
-                    </button>
-                  </Card>
-                ))}
+              <div className="receipt-toolbar">
+                <div className="receipt-tabs" role="group" aria-label="Receipt status">
+                  <button aria-pressed={billFilter === 'pending'} onClick={() => setBillFilter('pending')}>Needs expense ({pendingBills.length})</button>
+                  <button aria-pressed={billFilter === 'added'} onClick={() => setBillFilter('added')}>Added ({addedBills.length})</button>
+                </div>
+                <input aria-label="Search receipts" placeholder="Search receipts or merchants…" value={billSearch} onChange={e => setBillSearch(e.target.value)} />
               </div>
-            )}
+              <div className="receipt-list">
+                {visibleBills.map(bill => {
+                  const linked = expenseForBill(bill, expenses)
+                  return <article className="receipt-row" key={bill.id} data-testid="receipt-row">
+                    <button className="receipt-preview" aria-label={`Preview ${bill.fileName}`} onClick={() => setSelectedBill(bill)}><BillPreview bill={bill} height={60} /></button>
+                    <div className="receipt-info"><strong>{bill.suggestedDescription || bill.fileName}</strong><span>{bill.fileName}</span><span>{bill.suggestedCategory || 'Review category'}{bill.driveSyncStatus === 'failed' ? ' · Cloud upload failed' : ''}</span></div>
+                    <strong className="receipt-amount">{bill.suggestedAmount > 0 ? formatCurrencyAmount(bill.suggestedAmount, currencyCode) : 'Enter amount'}</strong>
+                    <Button variant={linked ? 'secondary' : 'primary'} onClick={() => openReceipt(bill)}>{linked ? 'Edit expense' : 'Add expense'}</Button>
+                  </article>
+                })}
+                {!visibleBills.length && <div className="receipt-empty"><strong>{billSearch ? 'No matching receipts' : billFilter === 'added' ? 'No receipts added yet' : bills.length ? 'You’re all caught up' : 'Your receipt inbox is empty'}</strong><p>{billSearch ? 'Try another merchant or file name.' : billFilter === 'added' ? 'Saved receipts will appear here with their expenses.' : bills.length ? 'Your receipts are safely attached. Find them under Added.' : 'Upload your bills above, then review them one by one.'}</p></div>}
+              </div>
+            </section>
           </>
         )}
 
@@ -1840,7 +1749,7 @@ export default function Finance() {
                     value={parsedSMSResult.account}
                     onChange={e => setParsedSMSResult(p => ({ ...p, account: e.target.value }))}
                   >
-                    {accounts.map(acct => (
+                    {[...new Set([...accounts, ...expenses.map(e => e.account || 'Unassigned')])].map(acct => (
                       <option key={acct} value={acct}>{acct}</option>
                     ))}
                     {!accounts.includes(parsedSMSResult.account) && (
@@ -1906,7 +1815,7 @@ export default function Finance() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {(() => {
-            const activeModalBill = pendingBillForExpense || (editingEntry && !billRemoved && bills.find(b => b.driveFileId === editingEntry.billDriveFileId || b.linkedExpenseId === editingEntry.id))
+            const activeModalBill = pendingBillForExpense || (editingEntry && !billRemoved && bills.find(b => expenseForBill(b, [editingEntry])))
             
             if (activeModalBill) {
               return (
@@ -2125,9 +2034,10 @@ export default function Finance() {
             />
           </div>
 
-          <Button onClick={handleSave} disabled={!form.amount}>
+          <Button onClick={() => handleSave()} disabled={!form.amount || uploadingBill}>
             {editingEntry ? 'Update Expense' : 'Save Expense'}
           </Button>
+          {!editingEntry && pendingBillForExpense && pendingBills.length > 1 && <Button variant="secondary" onClick={() => handleSave(true)} disabled={!form.amount || uploadingBill}>Save & next receipt</Button>}
         </div>
       </Modal>
 
@@ -2193,22 +2103,18 @@ export default function Finance() {
               </div>
             </div>
 
-            <Button
-              onClick={() => {
-                const bill = selectedBill
-                setPendingBillForExpense(bill)
-                setForm(f => ({
-                  ...f,
-                  amount: String(bill.suggestedAmount || ''),
-                  category: bill.suggestedCategory || 'Miscellaneous',
-                  description: bill.suggestedDescription || bill.fileName || '',
-                }))
+            <Button onClick={() => openReceipt(selectedBill)}>{expenseForBill(selectedBill, expenses) ? 'Edit expense' : '+ Add as Expense'}</Button>
+            {!expenseForBill(selectedBill, expenses) && <ConfirmDeleteButton label="Delete receipt" onConfirm={async () => {
+              const bill = selectedBill
+              try {
+                if (bill.driveFileId) await deleteDriveFile(bill.driveFileId)
+                saveBills(current => current.filter(b => b.id !== bill.id))
                 setSelectedBill(null)
-                setShowAddModal(true)
-              }}
-            >
-              + Add as Expense
-            </Button>
+                showToast('Receipt deleted', 'success')
+              } catch { showToast('Could not delete receipt. Please try again.', 'error') }
+            }} />}
+
+
           </div>
         ) : null}
       </Modal>
@@ -2217,8 +2123,9 @@ export default function Finance() {
 }
 
 function ExpenseRow({ expense: e, onDelete, onEdit, onViewBill, showDate = false, defaultCurrency = 'INR' }) {
+  const readOnly = useReadOnly()
   return (
-    <div
+    <div className="finance-expense-row"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -2272,7 +2179,7 @@ function ExpenseRow({ expense: e, onDelete, onEdit, onViewBill, showDate = false
               <span style={{ color: '#F43F5E' }}>impulse 🤦</span>
             </>
           ) : null}
-          {(e.billDriveFileId || e.billOCRText) ? (
+          {(!readOnly && (e.billId || e.billDriveFileId || e.billOCRText)) ? (
             <>
               <span>•</span>
               <button
@@ -2331,6 +2238,8 @@ function ExpenseRow({ expense: e, onDelete, onEdit, onViewBill, showDate = false
 
       <button
         type="button"
+        data-edit-action="true"
+        hidden={readOnly}
         onClick={() => onEdit?.(e)}
         aria-label="Edit expense"
         style={{
@@ -2353,7 +2262,7 @@ function ExpenseRow({ expense: e, onDelete, onEdit, onViewBill, showDate = false
         <Pencil size={14} />
       </button>
 
-      <ConfirmDeleteButton onConfirm={() => onDelete(e.id)} label="Delete expense" />
+      {!readOnly && <ConfirmDeleteButton onConfirm={() => onDelete(e.id)} label="Delete expense" />}
     </div>
   )
 }
@@ -2576,7 +2485,8 @@ function SavingsTabContent({ state, setModule, showToast, currencyCode, currency
       return {
         ...g,
         currentAmount: nextAmount,
-        contributions: [newTx, ...(g.contributions || [])]
+        contributions: [newTx, ...(g.contributions || [])],
+        updatedAt: new Date().toISOString()
       }
     })
 
@@ -2909,14 +2819,25 @@ function RecurringDebtTab({ state, setModule, showToast, currencySymbol, inputSt
       person: loanForm.person.trim(),
       amount: Number(loanForm.amount),
       type: loanForm.type,
-      dueDate: loanForm.dueDate || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      dueDate: loanForm.dueDate || toDateKey(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), state.settings?.profile?.timezone),
       notes: loanForm.notes.trim(),
       createdAt: new Date().toISOString()
     }
 
+    const expenseEntry = {
+      id: 'exp_' + Date.now(),
+      title: loanForm.type === 'Borrowed' ? `Borrowed from ${loanForm.person}` : `Lent to ${loanForm.person}`,
+      amount: loanForm.type === 'Borrowed' ? -Number(loanForm.amount) : Number(loanForm.amount),
+      category: 'Miscellaneous',
+      date: getTodayDateKey(state.settings?.profile?.timezone),
+      type: 'loan_disbursement',
+      linkedLoanId: newLoan.id
+    }
+
     setModule('finance', {
       ...state.finance,
-      loans: [...loans, newLoan]
+      loans: [...loans, newLoan],
+      expenses: [expenseEntry, ...(state.finance?.expenses || [])]
     })
     setLoanForm({ person: '', amount: '', type: 'Borrowed', dueDate: '', notes: '' })
     showToast('Debt ledger entry added! 🤝', 'success')
@@ -2938,7 +2859,7 @@ function RecurringDebtTab({ state, setModule, showToast, currencySymbol, inputSt
       title: `EMI: ${emi.name} (Installment)`,
       amount: emi.amount,
       category: 'Bills Utilities',
-      date: new Date().toISOString().slice(0, 10),
+      date: getTodayDateKey(state.settings?.profile?.timezone),
       paymentMethod: 'UPI',
       account: 'Primary',
       tags: ['EMI'],
@@ -2964,7 +2885,7 @@ function RecurringDebtTab({ state, setModule, showToast, currencySymbol, inputSt
       title: loan.type === 'Borrowed' ? `Settle Loan (Paid Back ${loan.person})` : `Settle Loan (Received from ${loan.person})`,
       amount: loan.type === 'Borrowed' ? loan.amount : -loan.amount,
       category: 'Miscellaneous',
-      date: new Date().toISOString().slice(0, 10),
+      date: getTodayDateKey(state.settings?.profile?.timezone),
       paymentMethod: 'UPI',
       account: 'Primary',
       tags: ['Settle Debt'],
