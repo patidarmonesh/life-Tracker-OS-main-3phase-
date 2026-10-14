@@ -10,7 +10,7 @@ export function getGeminiBaseUrl() {
   return `https://generativelanguage.googleapis.com/v1beta/models/${getGeminiModel()}:generateContent`
 }
 
-export const GEMINI_BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent` // Kept for backward compatibility if needed, but getGeminiBaseUrl() is preferred.
+export const GEMINI_BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent` // Kept for backward compatibility if needed, but getGeminiBaseUrl() is preferred.
 
 export async function fetchAvailableModels(apiKey) {
   if (!apiKey) throw new Error("Missing API Key")
