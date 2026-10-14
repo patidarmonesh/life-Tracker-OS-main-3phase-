@@ -2,7 +2,7 @@ import { getRecentDateKeys, getTodayDateKey } from '../utils/dateTime'
 
 export function getGeminiModel() {
   const stored = localStorage.getItem('lifeos_gemini_model')?.trim()
-  const rawModel = stored || import.meta.env.VITE_GEMINI_MODEL || 'gemini-1.5-flash'
+  const rawModel = stored || import.meta.env.VITE_GEMINI_MODEL || 'gemini-3.5-flash-lite'
   return rawModel.replace(/^models\//, '')
 }
 
