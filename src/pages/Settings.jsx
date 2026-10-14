@@ -44,7 +44,7 @@ export default function Settings() {
   const [googleClientId, setGoogleClientId] = useState(() => localStorage.getItem('lifeos_google_client_id') || '')
   const [isEditingGoogle, setIsEditingGoogle] = useState(false)
   const [isEditingGemini, setIsEditingGemini] = useState(false)
-  const [geminiModel, setGeminiModel] = useState(() => localStorage.getItem('lifeos_gemini_model')?.trim() || import.meta.env.VITE_GEMINI_MODEL?.trim() || 'gemini-1.5-flash')
+  const [geminiModel, setGeminiModel] = useState(() => localStorage.getItem('lifeos_gemini_model')?.trim() || import.meta.env.VITE_GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite')
   const [availableModels, setAvailableModels] = useState([])
   const [modelsLoading, setModelsLoading] = useState(false)
   const [showApiHelp, setShowApiHelp] = useState(false)
